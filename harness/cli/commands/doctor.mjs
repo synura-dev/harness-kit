@@ -75,6 +75,7 @@ const enabledGuardPlugin = (() => {
   for (const f of [path.join(HUB_ROOT, '.claude', 'settings.json'), path.join(HUB_ROOT, '.claude', 'settings.local.json'), path.join(os.homedir(), '.claude', 'settings.json')]) {
     try { const j = JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); if (Object.keys(j.enabledPlugins || {}).some((k) => /agent-guard-kit/.test(k) && j.enabledPlugins[k])) return true; } catch {}
   }
+  try { if (/agent-guard-kit/.test(fs.readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8'))) return true; } catch {}
   return false;
 })();
 const pluginSeen = pluginLoaded || enabledGuardPlugin;
@@ -135,10 +136,16 @@ try {
   const { syncAll } = await import(new URL('../../tools/sync.mjs', import.meta.url).href);
   const res = await syncAll({ root: HUB_ROOT, check: true });
   for (const r of res) {
+    // bang [dk] trong README suy ra tu hook trong settings; plugin mode khong co hook settings -> lech do thiet ke, chi canh bao
+    if (r.tool === 'adapters-readme' && pluginSeen && r.changes.length && !r.problems.length) { warn('adapters', 'README bang adapter lech [dk] vi hook den tu plugin (khong trong settings); bo qua'); continue; }
     for (const c of r.changes) line(false, `adapter ${r.tool} lech nguon`, c);
-    for (const p of r.problems) line(false, `adapter ${r.tool}`, p);
-    if (!r.changes.length && !r.problems.length) line(true, `adapter ${r.tool} khop nguon .agents/`);
-    else console.log('       -> chay: node harness/tools/sync.mjs');
+    // skill chua build (vd worktree moi, .agents/skills khong tracked) = chua sinh, khong phai hong: chi canh bao kem lenh build
+    const soft = r.tool === 'skills' ? r.problems.filter((p) => /^unbuilt:/.test(p)) : [];
+    if (soft.length) warn('adapters', `adapter skills chua build (${soft.length} muc, vd ${soft[0].replace(/ \(chay:.*$/, '')}) -> chay: node harness/build/skills/cli.mjs build --apply`);
+    const hard = r.problems.filter((p) => !soft.includes(p));
+    for (const p of hard) line(false, `adapter ${r.tool}`, p);
+    if (!r.changes.length && !hard.length && !soft.length) line(true, `adapter ${r.tool} khop nguon .agents/`);
+    else if (r.changes.length || hard.length) console.log('       -> chay: node harness/tools/sync.mjs');
   }
 } catch (e) { process.exitCode = 1; console.log('[LOI] khong chay duoc harness/tools/sync.mjs --check:', e.message); }
 // manifest: CHI CANH BAO, khong lam doctor fail
