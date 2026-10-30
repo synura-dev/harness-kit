@@ -1,0 +1,24 @@
+{
+  "id": "skills",
+  "kind": "cli",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "domain": "build",
+  "desc": "cong cai/bao tri harness: skills (build skill) | install | doctor | adapters (gop skills, install, doctor, adapters)",
+  "cmds": "skills build|check|prune [--apply] [--force] [--src D] [--target D] | install [--dry-run] [--skip-doctor] | doctor [--adapters] | adapters [--json --write-readme --write-arch]",
+  "default": "index",
+  "domains": {
+    "build": { "file": "build.mjs", "desc": "cong cai/bao tri harness: skills | install | doctor | adapters (gop skills, install, doctor, adapters)", "cmds": "skills build|check|prune [--apply] [--force] [--src D] [--target D] | install [--dry-run] [--skip-doctor] | doctor [--adapters] | adapters [--json --write-readme --write-arch]", "default": "index", "aliases": ["skills", "install", "doctor", "adapters"] }
+  },
+  "aliasMap": {
+    "skills": { "fallback": ["skills"], "onEmpty": ["skills"] },
+    "install": { "fallback": ["install"], "onEmpty": ["install"] },
+    "doctor": { "fallback": ["doctor"], "onEmpty": ["doctor"] },
+    "adapters": { "fallback": ["adapters"], "onEmpty": ["adapters"] }
+  },
+  "files": { "helpers": ["build.mjs", "skills.mjs"] },
+  "tests": ["skills.test.mjs", "build.test.mjs"],
+  "config": { "defaults": null, "schema": null },
+  "data": null,
+  "tier": "T1"
+}

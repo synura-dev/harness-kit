@@ -1,0 +1,11 @@
+[
+  { "id": "model-policy-fill-builder", "desc": "Agent builder thieu model -> dien sonnet (allow + updatedInput)", "run": { "kind": "hook", "entry": "harness/constrain/model-policy/hook.mjs" },
+    "stdin": { "hook_event_name": "PreToolUse", "session_id": "eval-sid", "tool_name": "Agent", "tool_input": { "prompt": "p", "description": "d", "subagent_type": "builder" }, "cwd": "{tmp}" },
+    "expect": { "exit": 0, "decision": "allow", "contains": ["updatedInput", "\"model\":\"sonnet\""] } },
+  { "id": "model-policy-opus-general-ask", "desc": "opus cho general-purpose -> hoi nguoi", "run": { "kind": "hook", "entry": "harness/constrain/model-policy/hook.mjs" },
+    "stdin": { "hook_event_name": "PreToolUse", "session_id": "eval-sid", "tool_name": "Agent", "tool_input": { "prompt": "p", "description": "d", "subagent_type": "general-purpose", "model": "opus" }, "cwd": "{tmp}" },
+    "expect": { "exit": 0, "decision": "ask", "reason": "general-purpose" } },
+  { "id": "model-policy-haiku-builder-none", "desc": "haiku cho builder (re hon chinh sach) -> khong can thiep", "run": { "kind": "hook", "entry": "harness/constrain/model-policy/hook.mjs" },
+    "stdin": { "hook_event_name": "PreToolUse", "session_id": "eval-sid", "tool_name": "Agent", "tool_input": { "prompt": "p", "description": "d", "subagent_type": "builder", "model": "haiku" }, "cwd": "{tmp}" },
+    "expect": { "exit": 0, "decision": "none" } }
+]

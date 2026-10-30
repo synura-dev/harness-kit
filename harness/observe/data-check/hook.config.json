@@ -1,0 +1,1 @@
+{ "enabled": true, "timeoutMs": 300, "scanTimeoutMs": 8000, "cacheMaxAgeHours": 24, "allowlist": [], "autoClean": { "enabled": true, "minIntervalHours": 24, "maxFiles": 500, "maxBytes": 200000000, "timeoutS": 20 } }

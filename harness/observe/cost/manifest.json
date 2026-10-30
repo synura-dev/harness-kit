@@ -1,0 +1,13 @@
+{
+  "id": "cost",
+  "kind": "lib",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "desc": "token/chi phi uoc tinh theo model, role, ngay, phien tu audit (chi doc; gia cap nhat tay, thieu gia thi cost=null)",
+  "cmds": "summary --since D --by model|role|day|session | top --limit N",
+  "files": { "helpers": ["cost.mjs"], "config": ["cost.config.json"] },
+  "tests": ["cost.test.mjs"],
+  "config": { "defaults": "cost.config.json", "schema": null },
+  "data": "audit",
+  "tier": "T1"
+}

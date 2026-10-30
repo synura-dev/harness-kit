@@ -1,0 +1,116 @@
+{
+  "_doc": "Muc data dung chung (khong chua du lieu du an). Khoa = ten thu muc vat ly cap 1 (hoac `path`). zone: system|knowledge|workspaces|external. class: log|cache|artifact|durable (mac dinh retention/caps theo class, xem core/registry/data-registry.mjs). retentionDays ghi de class. target = dich cuoi neu khac vi tri hien tai. Muc theo workspace o config/data/workspaces/<ws>.json.",
+  "enforce": "warn",
+  "entries": {
+    "audit": {
+      "zone": "system",
+      "class": "log",
+      "owner": "harness/observe/audit",
+      "retentionDays": 90,
+      "note": "events 30d do audit prune; digest 90d; gateway/ = log cong (logGateway)",
+      "tailPaths": {
+        "gateway": "gateway"
+      },
+      "target": "system/audit",
+      "path": "system/audit"
+    },
+    "runs": {
+      "zone": "system",
+      "class": "log",
+      "owner": "hub/dispatch/dispatch-worker.mjs",
+      "retentionDays": 14,
+      "target": "system/runs",
+      "path": "system/runs",
+      "legacy": "runs"
+    },
+    "play": {
+      "zone": "system",
+      "class": "log",
+      "owner": "hub/play",
+      "retentionDays": 14,
+      "target": "system/play",
+      "path": "system/play",
+      "legacy": "play"
+    },
+    "worktree": {
+      "zone": "system",
+      "class": "log",
+      "owner": "harness/constrain/worktree",
+      "retentionDays": 30,
+      "target": "system/worktree",
+      "path": "system/worktree",
+      "legacy": "worktree"
+    },
+    "watchdog": {
+      "zone": "system",
+      "class": "log",
+      "owner": "harness/cli/commands/proc-watch.mjs",
+      "retentionDays": 14,
+      "target": "system/watchdog",
+      "path": "system/watchdog",
+      "legacy": "watchdog"
+    },
+    "proc-orphans": {
+      "zone": "system",
+      "class": "log",
+      "owner": "harness/constrain/proc-orphans",
+      "retentionDays": 7,
+      "target": "system/proc-orphans",
+      "path": "system/proc-orphans",
+      "legacy": "proc-orphans"
+    },
+    "memory": {
+      "zone": "knowledge",
+      "class": "durable",
+      "owner": "harness/knowledge/vault",
+      "target": "knowledge/memory"
+    },
+    "evolve": {
+      "zone": "knowledge",
+      "class": "durable",
+      "owner": "harness/evolve/loop",
+      "target": "knowledge/evolve"
+    },
+    "eval": {
+      "zone": "knowledge",
+      "class": "artifact",
+      "owner": "harness/evolve/eval",
+      "target": "knowledge/eval"
+    },
+    "evals": {
+      "zone": "knowledge",
+      "class": "artifact",
+      "owner": "curator (skill eval cu, xem evolve/README)",
+      "target": "knowledge/evals",
+      "path": "knowledge/evals",
+      "legacy": "evals"
+    },
+    "tasks": {
+      "zone": "knowledge",
+      "class": "durable",
+      "owner": "hub/tasks",
+      "target": "knowledge/tasks",
+      "path": "knowledge/tasks",
+      "legacy": "tasks"
+    },
+    "agy-home": {
+      "zone": "external",
+      "class": "durable",
+      "owner": "hub/agy (app-state cua agy CLI)",
+      "retentionDays": null,
+      "caps": {
+        "maxFiles": 20000,
+        "maxDepth": 12
+      },
+      "note": "external: khong dung, khong clean, khong adopt",
+      "path": "external/agy-home",
+      "legacy": "agy-home"
+    }
+  },
+  "_externalRule": "Du lieu do ben ngoai harness sinh: data scan phat hien -> data adopt vao _inbox -> duyet: dang ky (zone external neu la app-state) hoac xoa; doctor canh bao.",
+  "reserved": [
+    "README.md",
+    "_inbox",
+    ".state"
+  ]
+}

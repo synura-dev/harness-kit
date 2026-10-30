@@ -1,0 +1,9 @@
+{
+  "enabled": true,
+  "events": ["UserPromptSubmit", "SessionStart"],
+  "timeoutMs": 2000,
+  "maxFacts": 5,
+  "maxChars": 1500,
+  "minScore": 2,
+  "sessionTags": ["pinned"]
+}

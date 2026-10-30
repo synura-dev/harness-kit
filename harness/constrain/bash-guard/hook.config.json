@@ -1,0 +1,5 @@
+{
+  "agy_replace": true,
+  "agy_repeat": true,
+  "agy_repeat_ttl_ms": 60000
+}

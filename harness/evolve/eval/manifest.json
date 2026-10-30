@@ -1,0 +1,13 @@
+{
+  "id": "eval",
+  "kind": "lib",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "desc": "eval hoi quy tat dinh cho chinh harness (spawn hook/CLI that, khong LLM)",
+  "cmds": "run|list|baseline|compare|bench [bench: --event E --n N --out F] [--case S] [--json] [--timeout-s N] [--case-timeout-s N] [--baseline-file F]",
+  "files": { "helpers": ["eval.mjs", "fn-runner.mjs", "bench/hook-latency.mjs"] },
+  "tests": ["eval.test.mjs", "bench/hook-latency.test.mjs"],
+  "config": { "defaults": null, "schema": null },
+  "data": "data/knowledge/eval",
+  "tier": "T1"
+}

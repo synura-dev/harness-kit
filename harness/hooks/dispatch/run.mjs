@@ -1,0 +1,158 @@
+// Dispatcher hook cho Claude Code (Dot 5.2b): MOT script cho moi su kien. `node run.mjs <Event> [module-id]`.
+// Doc stdin 1 lan -> chon module theo events+tools -> chay tuan tu (timeout rieng, onError rieng, tran tong) -> gop (merge.mjs) -> in dung dinh dang Claude
+// -> ghi moi `records` MOT lan qua writer cua core. Khong ghi stdin/lenh tho (chi id module + loai loi). Loi toan cuc: fail-open `{}` exit 0 (WorktreeCreate: exit 1).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { isObj } from '../../core/io/paths.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { DEFAULTS, ORDER, loadModules, applies } from './modules.mjs';
+import { mergeResults, applyUpdate, render } from './merge.mjs';
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const TIMEOUT = Symbol('timeout');
+
+function withTimeout(promise, ms) {
+  let t;
+  const timer = new Promise((_, rej) => { t = setTimeout(() => rej(new Error('timeout')), ms); });
+  return Promise.race([promise, timer]).finally(() => clearTimeout(t));
+}
+
+/** Doc stdin co tran: {raw, over, timedOut}. */
+export function readStdin(max, ms) {
+  return new Promise((resolve) => {
+    const chunks = []; let size = 0; let done = false;
+    const fin = (extra) => {
+      if (done) return; done = true; clearTimeout(timer);
+      try { process.stdin.pause(); process.stdin.removeAllListeners('data'); } catch {}
+      resolve({ raw: Buffer.concat(chunks).toString('utf8'), over: false, timedOut: false, ...extra });
+    };
+    const timer = setTimeout(() => fin({ timedOut: true }), ms);
+    try {
+      process.stdin.on('data', (c) => { size += c.length; if (size > max) fin({ over: true }); else chunks.push(c); });
+      process.stdin.on('end', () => fin({}));
+      process.stdin.on('error', () => fin({}));
+    } catch { fin({}); }
+  });
+}
+
+function parseInput(r, max) {
+  if (r.over) return { err: 'oversize' };
+  if (r.timedOut) return { err: 'stdin-timeout' };
+  let s = String(r.raw || '');
+  if (s.length > max) return { err: 'oversize' };
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+  if (!s.trim()) return { err: 'empty' };
+  try { const v = JSON.parse(s); return isObj(v) ? { input: v } : { err: 'badjson' }; } catch { return { err: 'badjson' }; }
+}
+
+/** Ho so Claude (mac dinh); agy.mjs truyen ho so rieng cung loi. */
+export const CLAUDE = { order: ORDER, render, setEvent: true, failOut, noop: () => ({ stdout: '{}', stderr: '', code: 0 }) };
+const traceRec = (rule, reason) => ({ sink: 'gate', data: { kind: 'gate', decision: 'allow', hook: 'dispatch', rule, reason } });
+
+function failOut(event, why) {
+  if (event === 'WorktreeCreate') return { stdout: '', stderr: `worktree create loi: ${why}\n`, code: 1 };
+  if (event === 'WorktreeRemove') return { stdout: '', stderr: '', code: 0 };
+  return { stdout: '{}', stderr: '', code: 0 };
+}
+
+async function vaultQuery() {
+  const v = await import('../../knowledge/vault/vault.mjs');
+  return (a) => v.query({ status: a.status, limit: a.limit }, { root: a.root || undefined, now: a.now, timeoutS: a.timeoutS });
+}
+
+/** Ghi tat ca records MOT lan (moi sink qua writer cua core / nhat ky cua module). Khong nem. */
+async function writeRecords(records, input) {
+  for (const r of records) {
+    try {
+      if (r.sink === 'gate') (await import('../../core/audit/gate-event.mjs')).recordGate(r.data, r.ctx || input || {});
+      else if (r.sink === 'audit') { const w = await import('../../core/audit/audit-write.mjs'); w.writeEnvelope(r.data, r.opts || {}, w.auditRoot()); }
+      else if (r.sink === 'guard') await (await import('../../constrain/guard/hook.mjs')).log(r.data, { logFile: process.env.GUARD_LOG_FILE || '' });
+      else if (r.sink === 'worktree') await (await import('../../constrain/worktree/hook.mjs')).log(r.data);
+    } catch { /* fail-open */ }
+  }
+}
+
+/**
+ * Loi cot loi (testable, khong in/exit): dispatch({event, only, raw|input, cfg}) -> {stdout, stderr, code, records, input}.
+ * raw = noi dung stdin da doc ({raw, over, timedOut}) hoac chuoi. Khong ghi file (caller goi writeRecords).
+ */
+export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, startedAt = Date.now(), profile = CLAUDE }) {
+  const r = typeof stdin === 'string' ? { raw: stdin } : stdin || { raw: '' };
+  const p = parseInput(r, cfg.maxInputBytes);
+  if (p.err) return { ...profile.failOut(event, p.err), records: [traceRec('fail-open', p.err)], input: {} };
+  const original = p.input;
+  const ev = event || (typeof original.hook_event_name === 'string' ? original.hook_event_name : '');
+  if (!profile.order[ev]) return { ...profile.noop(ev), records: [], input: original };
+  if (cfg.enabled === false && ev !== 'WorktreeCreate') return { ...profile.noop(ev), records: [], input: original };
+  if (profile.setEvent && !original.hook_event_name) original.hook_event_name = ev;
+  const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
+  const state = { input: original, items: [], traces: [], denied: false };
+  const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
+
+  const work = async () => {
+    const mods = await loadModules(ev, { only, validate: validateHookModule, order: profile.order });
+    for (const m of mods) {
+      if (m.error) { trace(m.id, m.error); continue; }
+      if (!applies(m.mod, ev, state.input)) continue;
+      if (m.gate && state.denied) continue; // deny cat chuoi gate; audit van chay
+      const left = budget - (Date.now() - startedAt);
+      if (left < 50) { trace(m.id, 'budget'); continue; }
+      const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
+      let res; let kind = '';
+      try {
+        const ctx = { write: false, deadline: Date.now() + tmo };
+        if (m.id === 'knowledge-inject') ctx.query = await vaultQuery();
+        res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
+      } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
+      if (!kind && validateHookResult(res).length) kind = 'bad-result';
+      if (kind) {
+        trace(m.id, kind);
+        if (m.mod.onError === 'closed') { state.items.push({ id: m.id, result: { decision: 'deny', reason: `dispatch[${m.id}]: ${kind} (closed)` } }); if (m.gate) state.denied = true; }
+        continue;
+      }
+      if (!res) continue;
+      state.items.push({ id: m.id, result: res });
+      if (res.decision === 'deny') { if (m.gate) state.denied = true; }
+      else if (res.updatedInput) state.input = applyUpdate(state.input, res.updatedInput);
+    }
+  };
+
+  let timedOut = false;
+  try {
+    const left = Math.max(50, budget - (Date.now() - startedAt));
+    const w = await Promise.race([work().then(() => null), new Promise((res) => { const t = setTimeout(() => res(TIMEOUT), left); t.unref(); })]);
+    if (w === TIMEOUT) timedOut = true;
+  } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); }
+  if (timedOut) state.traces.push(traceRec('module-error', 'dispatch: budget-timeout'));
+  const merged = mergeResults(state.items);
+  const out = profile.render(ev, merged);
+  const records = [...merged.records, ...state.traces];
+  return { ...out, records, input: original };
+}
+
+async function loadCfg() {
+  try {
+    const { loadHookConfig } = await import('../../core/config/config.mjs');
+    const c = loadHookConfig('dispatch', { defaults: DEFAULTS, files: [path.join(HERE, 'hook.config.json')] }).config;
+    return { ...DEFAULTS, ...c, budgetsMs: { ...DEFAULTS.budgetsMs, ...(isObj(c.budgetsMs) ? c.budgetsMs : {}) } };
+  } catch { return DEFAULTS; }
+}
+
+/** Vo CLI dung chung (Claude + agy): doc stdin 1 lan, dispatch, in, ghi records 1 lan, exit. profile.mapRecords(records, input) tuy chon. */
+export async function main({ event, only = '', profile = CLAUDE } = {}) {
+  const startedAt = Date.now() - Math.round(process.uptime() * 1000);
+  let out = profile.failOut(event, 'dispatch-error'); let records = []; let input = {};
+  try {
+    const cfg = await loadCfg();
+    const stdin = await readStdin(cfg.maxInputBytes, cfg.stdinTimeoutMs);
+    const r = await dispatch({ event, only, stdin, cfg, startedAt, profile });
+    out = r; records = r.records; input = r.input;
+    if (profile.mapRecords) records = profile.mapRecords(records, input);
+  } catch { /* fail-open */ }
+  try { if (out.stdout) fs.writeSync(1, out.stdout); if (out.stderr) fs.writeSync(2, out.stderr); } catch {}
+  try { await writeRecords(records, input); } catch {}
+  process.exit(out.code);
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) main({ event: process.argv[2] || '', only: process.argv[3] || '' }).catch(() => process.exit(0));

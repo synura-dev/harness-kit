@@ -1,0 +1,8 @@
+[
+  { "id": "fp-tsc-version-null", "desc": "tsc --version khong phai verify", "run": { "kind": "fn", "module": "core/audit/fingerprint.mjs", "export": "verifyKind" },
+    "args": ["tsc --version"], "expect": { "exit": 0, "value": null } },
+  { "id": "fp-bg-exit0-null", "desc": "npm test & exit 0 (chay nen + nuot exit) khong phai verify", "run": { "kind": "fn", "module": "core/audit/fingerprint.mjs", "export": "verifyKind" },
+    "args": ["npm test & exit 0"], "expect": { "exit": 0, "value": null } },
+  { "id": "fp-bun-test-kind", "desc": "doi chung: bun test -> test", "run": { "kind": "fn", "module": "core/audit/fingerprint.mjs", "export": "verifyKind" },
+    "args": ["bun test"], "expect": { "exit": 0, "value": "test" } }
+]

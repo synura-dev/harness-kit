@@ -1,0 +1,1 @@
+{"id":"tool-adapters","kind":"lib","layer":"ext","entry":"claude.mjs","files":{"helpers":["agy.mjs","_util.mjs","report.mjs"]},"tests":["../sync.test.mjs"],"config":{"defaults":null,"schema":null},"data":null,"tier":"T1"}

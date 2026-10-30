@@ -1,0 +1,9 @@
+{
+  "mode": "enforce",
+  "hardTimeoutMs": 2000,
+  "maxInputBytes": 1048576,
+  "logAllow": false,
+  "fillEffort": false,
+  "default": { "model": "sonnet" },
+  "opusAllowed": []
+}

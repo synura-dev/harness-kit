@@ -1,0 +1,4 @@
+{
+  "maxInputBytes": 1048576,
+  "stdinTimeoutMs": 1500
+}

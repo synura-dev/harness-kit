@@ -1,0 +1,17 @@
+{
+  "id": "evolve-loop",
+  "kind": "cli",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "domain": "evolve",
+  "desc": "vong tien hoa: loi lap (>=3 lan/7 ngay) -> de xuat -> oracle eval -> apply --approve co version -> rollback",
+  "cmds": ["candidates", "propose", "check", "apply", "rollback", "log", "list", "eval run|list|baseline|compare|bench"],
+  "default": "index",
+  "aliases": ["eval"],
+  "aliasMap": { "eval": { "fallback": ["eval"], "onEmpty": ["eval", "help"] } },
+  "files": { "helpers": ["loop.mjs", "policy.mjs"] },
+  "tests": ["loop.test.mjs"],
+  "config": { "defaults": null, "schema": null },
+  "data": "evolve",
+  "tier": "T1"
+}

@@ -1,0 +1,18 @@
+{
+  "extRoots": [],
+  "repoRootFiles": [],
+  "ownerRoots": [
+    "."
+  ],
+  "docsDir": "docs",
+  "tools": {
+    "claude": {
+      "enabled": true,
+      "skillsMode": "copy",
+      "hookRegistration": ".claude/settings.json",
+      "adapterFiles": [
+        "adapters/claude.mjs"
+      ]
+    }
+  }
+}

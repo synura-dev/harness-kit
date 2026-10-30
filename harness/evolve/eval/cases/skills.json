@@ -1,0 +1,6 @@
+[
+  { "id": "skills-prune-keeps-unmarked", "desc": "prune --apply khong xoa thu muc skill khong marker",
+    "run": { "kind": "cli", "args": ["skills", "prune", "--apply", "--root", "{tmp}", "--src", "src", "--target", "t/claude", "--json"] },
+    "setup": { "files": { "src/.keep": "", "t/claude/manual-skill/SKILL.md": "khong marker" } },
+    "expect": { "exit": 0, "exists": ["t/claude/manual-skill/SKILL.md"] } }
+]

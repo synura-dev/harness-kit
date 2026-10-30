@@ -1,0 +1,1 @@
+{"id":"install","kind":"lib","layer":"ext","entry":"cli.mjs","desc":"cai harness tren may: kiem Node/bun, build skills (--adopt), doctor rut gon, huong dan dang ky hook","cmds":"[run] [--dry-run] [--skip-doctor]","files":{"helpers":["install.mjs"]},"tests":["install.test.mjs"],"config":{"defaults":null,"schema":null},"data":null,"tier":"T1"}

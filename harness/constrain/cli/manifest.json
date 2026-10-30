@@ -1,0 +1,16 @@
+{
+  "id": "constrain-cli",
+  "kind": "cli",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "domain": "constrain",
+  "desc": "han che: hook module + worktree + tien trinh ket + config (gop config)",
+  "cmds": "hooks | worktree(list|prune) | proc | config show [tool|guard] [id]; sources <tool>",
+  "aliases": ["config"],
+  "files": { "helpers": [] },
+  "tests": ["cli.test.mjs"],
+  "config": { "defaults": null, "schema": null },
+  "data": null,
+  "tier": "T0",
+  "aliasMap": { "config": { "fallback": ["config"], "onEmpty": ["config"] } }
+}

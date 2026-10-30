@@ -1,0 +1,912 @@
+{
+  "name": "agent-guard-kit",
+  "version": "0.1.0",
+  "source_commit": "f917e43df64596cdc1867c6f6bc246f0e8b56281",
+  "files": [
+    {
+      "path": "harness/core/agy/adapters-report.mjs",
+      "md5": "1b5dac22e09b7bcb66b9cf8418e3b231",
+      "bytes": 9892
+    },
+    {
+      "path": "harness/core/agy/agents.mjs",
+      "md5": "9525eb66fd4d190d8beeffb99ae3eb46",
+      "bytes": 3540
+    },
+    {
+      "path": "harness/core/agy/hints.mjs",
+      "md5": "0869f246aed5cab5713beb6b013a5e2b",
+      "bytes": 5061
+    },
+    {
+      "path": "harness/core/audit/audit-write.mjs",
+      "md5": "b8b36539fa49714004e4df80f8eb8258",
+      "bytes": 1866
+    },
+    {
+      "path": "harness/core/audit/candidates.mjs",
+      "md5": "0f192c959b361d8724f82b9807709037",
+      "bytes": 1711
+    },
+    {
+      "path": "harness/core/audit/fingerprint.mjs",
+      "md5": "9564fbcac7714a4f1ba311d962e9f28f",
+      "bytes": 7700
+    },
+    {
+      "path": "harness/core/audit/gate-event.mjs",
+      "md5": "dab251ace50b04ef5eb7a9c228ecd942",
+      "bytes": 6804
+    },
+    {
+      "path": "harness/core/audit/scan.mjs",
+      "md5": "015a3cd2baef045a42bf145bfff01784",
+      "bytes": 1971
+    },
+    {
+      "path": "harness/core/audit/signature.mjs",
+      "md5": "06dcc7d9784685b125c061fc985bdd4a",
+      "bytes": 2037
+    },
+    {
+      "path": "harness/core/checks/clutter-check.mjs",
+      "md5": "fdacca997e9e97b071bd754647615a2b",
+      "bytes": 13538
+    },
+    {
+      "path": "harness/core/checks/import-check.mjs",
+      "md5": "c1693bdd48deb8749a9367ec4aa99d1f",
+      "bytes": 5506
+    },
+    {
+      "path": "harness/core/checks/manifest-check.mjs",
+      "md5": "97bca165edc6177eacd65c51beb58ac6",
+      "bytes": 4864
+    },
+    {
+      "path": "harness/core/checks/ref-check.mjs",
+      "md5": "3e8ead9c7d9b1722d908b4249b3b15f5",
+      "bytes": 5475
+    },
+    {
+      "path": "harness/core/checks/scan-input.mjs",
+      "md5": "fa0d85cdc5a598cec4b109c55752644d",
+      "bytes": 9440
+    },
+    {
+      "path": "harness/core/config/audit-config.mjs",
+      "md5": "1c327287cbee8655b8a114e90f805f28",
+      "bytes": 5742
+    },
+    {
+      "path": "harness/core/config/config.mjs",
+      "md5": "bbd8fa923619ce215d9fdddbb8b6deb6",
+      "bytes": 13729
+    },
+    {
+      "path": "harness/core/config/contract-validate.mjs",
+      "md5": "b62a41edb3e99142addb0886aa32ba4e",
+      "bytes": 12593
+    },
+    {
+      "path": "harness/core/config/contract.mjs",
+      "md5": "ec4cf1ed8caebe2ade36fd233706d71e",
+      "bytes": 14628
+    },
+    {
+      "path": "harness/core/io/agy-payload.mjs",
+      "md5": "b0b159bc4b17637ab5387ce439ff189c",
+      "bytes": 1707
+    },
+    {
+      "path": "harness/core/io/fmt.mjs",
+      "md5": "fe3c503c8df6abd76a2aa0dbdf1ed215",
+      "bytes": 655
+    },
+    {
+      "path": "harness/core/io/jsonl-store.mjs",
+      "md5": "182f30947799922f7635cf4bec1de3e8",
+      "bytes": 11498
+    },
+    {
+      "path": "harness/core/io/out.mjs",
+      "md5": "35f95eaea4a98dc88d5b1a4961ff7d0a",
+      "bytes": 2447
+    },
+    {
+      "path": "harness/core/io/paths.mjs",
+      "md5": "b850cca33a621e610d9ed4451853a1d6",
+      "bytes": 7655
+    },
+    {
+      "path": "harness/core/io/safe-id.mjs",
+      "md5": "5f371fb4f9d0c857128339d79440090d",
+      "bytes": 824
+    },
+    {
+      "path": "harness/core/io/stdio.mjs",
+      "md5": "eb83e363f780eb75ebd8271a3ea538c9",
+      "bytes": 936
+    },
+    {
+      "path": "harness/core/io/storage.mjs",
+      "md5": "4613e72955cdf3398e10d29dbbe87867",
+      "bytes": 5446
+    },
+    {
+      "path": "harness/core/registry/data-registry.mjs",
+      "md5": "09f1f7353d8c2038d1700efa984cbe74",
+      "bytes": 14518
+    },
+    {
+      "path": "harness/core/registry/plugin-registry.mjs",
+      "md5": "05265031b2870861d006d984206239d3",
+      "bytes": 11983
+    },
+    {
+      "path": "harness/core/runtime/proc-list.mjs",
+      "md5": "795c2a2075a8ec0c3a1db8aba3e08ed2",
+      "bytes": 2741
+    },
+    {
+      "path": "harness/core/runtime/worktree.mjs",
+      "md5": "235466197f3052ad15ee747f7ebc20f1",
+      "bytes": 12780
+    },
+    {
+      "path": "harness/constrain/README.md",
+      "md5": "8fa3d00af15e8878829bb863057a419c",
+      "bytes": 19755
+    },
+    {
+      "path": "harness/constrain/approval/analyze.mjs",
+      "md5": "92adea036b72c392a1adf0901047b94f",
+      "bytes": 10860
+    },
+    {
+      "path": "harness/constrain/approval/approval.config.json",
+      "md5": "17b5dc1b9f804431a930b27c6a2333c4",
+      "bytes": 7181
+    },
+    {
+      "path": "harness/constrain/approval/hook.mjs",
+      "md5": "c8295ebfd19e38fbfeac009103a994af",
+      "bytes": 9997
+    },
+    {
+      "path": "harness/constrain/approval/manifest.json",
+      "md5": "6d5279610e2cb8a2040d11881fd3a2c0",
+      "bytes": 440
+    },
+    {
+      "path": "harness/constrain/approval/parse.mjs",
+      "md5": "338b158718e6ed97828d3c69c32d45da",
+      "bytes": 6828
+    },
+    {
+      "path": "harness/constrain/bash-guard/adapters/agy.mjs",
+      "md5": "ad0fa6e7397c0e16e155ff4986465bc9",
+      "bytes": 3015
+    },
+    {
+      "path": "harness/constrain/bash-guard/hook.config.json",
+      "md5": "72523e634a908f40be2a13c35397707c",
+      "bytes": 78
+    },
+    {
+      "path": "harness/constrain/bash-guard/hook.mjs",
+      "md5": "f4dde153f52c9327f32039b0884a7896",
+      "bytes": 4792
+    },
+    {
+      "path": "harness/constrain/bash-guard/io.mjs",
+      "md5": "37ba82bdedc153bb8baed944370d8275",
+      "bytes": 267
+    },
+    {
+      "path": "harness/constrain/bash-guard/manifest.json",
+      "md5": "5c3ef6e100bf8eb29ee6f022c881baee",
+      "bytes": 472
+    },
+    {
+      "path": "harness/constrain/cli/cli.mjs",
+      "md5": "91bb7cedf73975ed8beeca208712882e",
+      "bytes": 4220
+    },
+    {
+      "path": "harness/constrain/cli/manifest.json",
+      "md5": "763b85aefecad6b06268b01c69f08d57",
+      "bytes": 536
+    },
+    {
+      "path": "harness/constrain/data-gate/README.md",
+      "md5": "b486037a61185cd106ba55ff707e60a4",
+      "bytes": 1507
+    },
+    {
+      "path": "harness/constrain/data-gate/hook.config.json",
+      "md5": "c0a1cdf71197653d21fd4c3c900369f7",
+      "bytes": 37
+    },
+    {
+      "path": "harness/constrain/data-gate/hook.mjs",
+      "md5": "f3b20ca3f60da0dafdcc52ff0d32a469",
+      "bytes": 8160
+    },
+    {
+      "path": "harness/constrain/data-gate/manifest.json",
+      "md5": "92a56c19380771cf9521be5b0567bc79",
+      "bytes": 265
+    },
+    {
+      "path": "harness/constrain/guard/hook.config.json",
+      "md5": "e08db95688c1b7b42602cbef1fbf9b8f",
+      "bytes": 2706
+    },
+    {
+      "path": "harness/constrain/guard/hook.mjs",
+      "md5": "cf5be43155886301fffb99d13a85ebaa",
+      "bytes": 18195
+    },
+    {
+      "path": "harness/constrain/guard/manifest.json",
+      "md5": "058acee499752e1187a4e68469ec735c",
+      "bytes": 436
+    },
+    {
+      "path": "harness/constrain/model-policy/hook.config.json",
+      "md5": "1695454de0896944719779e6ca7f3c07",
+      "bytes": 178
+    },
+    {
+      "path": "harness/constrain/model-policy/hook.mjs",
+      "md5": "1be524ffa0fa1b72157a94c1854e613e",
+      "bytes": 7771
+    },
+    {
+      "path": "harness/constrain/model-policy/manifest.json",
+      "md5": "c5f02b423611378560a459f080e3fb84",
+      "bytes": 423
+    },
+    {
+      "path": "harness/constrain/proc-orphans/hook.config.json",
+      "md5": "174dac91ff8b1f4c6937ed9a0e3346fc",
+      "bytes": 65
+    },
+    {
+      "path": "harness/constrain/proc-orphans/hook.mjs",
+      "md5": "1fe5bc41f85689bb0eb9187bb6445b1c",
+      "bytes": 7333
+    },
+    {
+      "path": "harness/constrain/proc-orphans/manifest.json",
+      "md5": "2f6516f2e873c3d824772e4a862ba164",
+      "bytes": 268
+    },
+    {
+      "path": "harness/constrain/verify-gate/gate.mjs",
+      "md5": "9d82bfe89214beaca2085b58a79c9cf1",
+      "bytes": 15016
+    },
+    {
+      "path": "harness/constrain/verify-gate/hook.config.json",
+      "md5": "6b891236a0c1a635211dbfc7a09dedcc",
+      "bytes": 216
+    },
+    {
+      "path": "harness/constrain/verify-gate/hook.mjs",
+      "md5": "5bb6917c6cfbbe3e19242cc549089aba",
+      "bytes": 15062
+    },
+    {
+      "path": "harness/constrain/verify-gate/manifest.json",
+      "md5": "6bcb624ed5eb33815ff34ea1755b19ae",
+      "bytes": 284
+    },
+    {
+      "path": "harness/constrain/worktree/hook.config.json",
+      "md5": "9b80690a09c23bda18f43fd79d9ecaf6",
+      "bytes": 43
+    },
+    {
+      "path": "harness/constrain/worktree/hook.mjs",
+      "md5": "f4c87c39639abf9ee0129b69cdcd07d2",
+      "bytes": 6530
+    },
+    {
+      "path": "harness/constrain/worktree/manifest.json",
+      "md5": "8d64e8144167b35189375c6cd9f5166e",
+      "bytes": 304
+    },
+    {
+      "path": "harness/observe/README.md",
+      "md5": "1102ff85fd80ee0be0da9478101bd4fb",
+      "bytes": 15382
+    },
+    {
+      "path": "harness/observe/audit/adapters/agy.mjs",
+      "md5": "6e6304f35036ad0d2932023fd274e068",
+      "bytes": 15570
+    },
+    {
+      "path": "harness/observe/audit/audit.config.json",
+      "md5": "e69d667e4f2ce993c26b42a54fced0d3",
+      "bytes": 27
+    },
+    {
+      "path": "harness/observe/audit/audit.mjs",
+      "md5": "f4c44a1587020b2e3ee3f3f22fb27761",
+      "bytes": 19508
+    },
+    {
+      "path": "harness/observe/audit/defaults.mjs",
+      "md5": "2494375ef402f3fbc0cd6e7e835dbfa3",
+      "bytes": 966
+    },
+    {
+      "path": "harness/observe/audit/manifest.json",
+      "md5": "3508402baf1bfc9bf37387688d34d260",
+      "bytes": 410
+    },
+    {
+      "path": "harness/observe/audit/redact.mjs",
+      "md5": "6f1e6fd1905cfae040ce3bfdd682ebac",
+      "bytes": 1622
+    },
+    {
+      "path": "harness/observe/audit/stdin.mjs",
+      "md5": "4fb30fea684a90fb5f488196e88b723e",
+      "bytes": 914
+    },
+    {
+      "path": "harness/observe/cost/cli.mjs",
+      "md5": "041e082d6f563f0804497006207d0864",
+      "bytes": 3871
+    },
+    {
+      "path": "harness/observe/cost/cost.config.json",
+      "md5": "cc10fe5c6e4bb358e2ba2c6580bb4232",
+      "bytes": 508
+    },
+    {
+      "path": "harness/observe/cost/cost.mjs",
+      "md5": "a4f7067419a03bae6edcabca3ab45565",
+      "bytes": 9392
+    },
+    {
+      "path": "harness/observe/cost/manifest.json",
+      "md5": "52e75302ad64f01949be7deb5c5709f9",
+      "bytes": 480
+    },
+    {
+      "path": "harness/observe/data-check/README.md",
+      "md5": "c3b5f6c8075fa912e2f28c51ea7be7f2",
+      "bytes": 1486
+    },
+    {
+      "path": "harness/observe/data-check/hook.config.json",
+      "md5": "eaab4a05d97eb2cdafbccf84c5857a0b",
+      "bytes": 216
+    },
+    {
+      "path": "harness/observe/data-check/hook.mjs",
+      "md5": "eaa04a472d28c4b696595ff085182fe4",
+      "bytes": 8159
+    },
+    {
+      "path": "harness/observe/data-check/manifest.json",
+      "md5": "a7214bbb4053d986ace7d1992f0d54f7",
+      "bytes": 266
+    },
+    {
+      "path": "harness/observe/evidence/cli.mjs",
+      "md5": "df3bacf06a7dcf610e22f96d420e7491",
+      "bytes": 3529
+    },
+    {
+      "path": "harness/observe/evidence/evidence.mjs",
+      "md5": "cfc78f39e5613d85a722c6c387b0af25",
+      "bytes": 8181
+    },
+    {
+      "path": "harness/observe/evidence/manifest.json",
+      "md5": "2b1ba2c061f1a36caab48b35c3582b06",
+      "bytes": 406
+    },
+    {
+      "path": "harness/observe/storage/README.md",
+      "md5": "4226d5b6269ecc46c288e293379050f8",
+      "bytes": 9481
+    },
+    {
+      "path": "harness/observe/storage/data.mjs",
+      "md5": "6d233d27d91d2e1dfd4aecd4aaa9519e",
+      "bytes": 30863
+    },
+    {
+      "path": "harness/observe/storage/manifest.json",
+      "md5": "692a35b1101fd5a5988a2aa0cc6aeac8",
+      "bytes": 563
+    },
+    {
+      "path": "harness/observe/storage/mv.mjs",
+      "md5": "b497171850049dece0fb00c8825a6bff",
+      "bytes": 6918
+    },
+    {
+      "path": "harness/observe/storage/mvpart.mjs",
+      "md5": "e2a480a039c23fb13e60e52c51357a20",
+      "bytes": 12108
+    },
+    {
+      "path": "harness/observe/storage/register.mjs",
+      "md5": "bb20d3644a5ba156a27825f5d5d34810",
+      "bytes": 8673
+    },
+    {
+      "path": "harness/observe/storage/registry.json",
+      "md5": "ef7adb841d61226acffc180a50a029d3",
+      "bytes": 3424
+    },
+    {
+      "path": "harness/observe/storage/relocate.mjs",
+      "md5": "d5047081ad4825bc0fcfdf30da67f01a",
+      "bytes": 2787
+    },
+    {
+      "path": "harness/observe/views/QUERY.md",
+      "md5": "fce6de02037654e189ad060a9001f893",
+      "bytes": 3592
+    },
+    {
+      "path": "harness/observe/views/data.mjs",
+      "md5": "71125082464619baee86a96d828b169b",
+      "bytes": 3022
+    },
+    {
+      "path": "harness/observe/views/digest.mjs",
+      "md5": "56e9ab2d3445fe994c52743665201e9e",
+      "bytes": 7724
+    },
+    {
+      "path": "harness/observe/views/manifest.json",
+      "md5": "38b111667141bcc0bb1a6d25c97cb82c",
+      "bytes": 1702
+    },
+    {
+      "path": "harness/observe/views/observe.mjs",
+      "md5": "46fe3eb7d7afad0377185e65503ea37a",
+      "bytes": 3160
+    },
+    {
+      "path": "harness/observe/views/prune.mjs",
+      "md5": "d024ff80e83b552575d900e2e5c4bb96",
+      "bytes": 4475
+    },
+    {
+      "path": "harness/observe/views/query/args.mjs",
+      "md5": "dad0b18ea790d381ace8ad4dfc7dc467",
+      "bytes": 2126
+    },
+    {
+      "path": "harness/observe/views/query/duck.mjs",
+      "md5": "b37d309d097aa2520fd58f3227487a0f",
+      "bytes": 4633
+    },
+    {
+      "path": "harness/observe/views/query/engine.mjs",
+      "md5": "995b98994a1b63e10e324c1bd5a744ad",
+      "bytes": 4960
+    },
+    {
+      "path": "harness/observe/views/query/files.mjs",
+      "md5": "5655fd32e346fb000b79a8ddcc372283",
+      "bytes": 1620
+    },
+    {
+      "path": "harness/observe/views/query/format.mjs",
+      "md5": "1f2178bc7fef4bc86831aa2ec3ec2cf9",
+      "bytes": 2756
+    },
+    {
+      "path": "harness/observe/views/query/query.mjs",
+      "md5": "8ff0a264b00297df588593deee2b2806",
+      "bytes": 4772
+    },
+    {
+      "path": "harness/observe/views/query/reports.json",
+      "md5": "c5c6eb04d0209977e9010d8910b82ca2",
+      "bytes": 7362
+    },
+    {
+      "path": "harness/observe/views/query/rows.mjs",
+      "md5": "5b7937ffcab8a781916ee1dfa67e21cc",
+      "bytes": 4061
+    },
+    {
+      "path": "harness/observe/views/review/review.mjs",
+      "md5": "cb5ef27a6e72384c889396844e9e65d3",
+      "bytes": 222
+    },
+    {
+      "path": "harness/observe/views/review/util.mjs",
+      "md5": "7ff406f033c71a4cbd499e98f36b25ec",
+      "bytes": 1525
+    },
+    {
+      "path": "harness/observe/views/review/view-format.mjs",
+      "md5": "c0a7d6c35f5d4e1c18f974c7cdda1271",
+      "bytes": 4620
+    },
+    {
+      "path": "harness/observe/views/review/view.mjs",
+      "md5": "90f514d8742d969f72a0068327a05fa5",
+      "bytes": 8171
+    },
+    {
+      "path": "harness/observe/views/review/why-map.mjs",
+      "md5": "4fdf796e4d7265aca7b77a111a3604c0",
+      "bytes": 7346
+    },
+    {
+      "path": "harness/observe/views/runs.mjs",
+      "md5": "e6f267aafe65a4558cb3e78188d11ba1",
+      "bytes": 3994
+    },
+    {
+      "path": "harness/observe/views/sizes.mjs",
+      "md5": "c4d4d402ee48247d3208db2e84ce4565",
+      "bytes": 2526
+    },
+    {
+      "path": "harness/knowledge/README.md",
+      "md5": "6971b008a8f2703f1549f30da41d50ce",
+      "bytes": 6801
+    },
+    {
+      "path": "harness/knowledge/inject/hook.config.json",
+      "md5": "be503039b8036389a9cc8fff5d62f777",
+      "bytes": 176
+    },
+    {
+      "path": "harness/knowledge/inject/hook.mjs",
+      "md5": "8de34c0ccf884e2682af5be59801b5c4",
+      "bytes": 10105
+    },
+    {
+      "path": "harness/knowledge/inject/manifest.json",
+      "md5": "0c1b2777233a7e1ba97a067a3b41d0f1",
+      "bytes": 331
+    },
+    {
+      "path": "harness/knowledge/vault/cli.mjs",
+      "md5": "811f3949c2b00906dafd2a94eda0518e",
+      "bytes": 7104
+    },
+    {
+      "path": "harness/knowledge/vault/frontmatter.mjs",
+      "md5": "9f2b41fee61dcfa2833c873aa27c065f",
+      "bytes": 3366
+    },
+    {
+      "path": "harness/knowledge/vault/manifest.json",
+      "md5": "1d7066c061a38807675f97538cb4645a",
+      "bytes": 408
+    },
+    {
+      "path": "harness/knowledge/vault/probe.mjs",
+      "md5": "4e42ac194dc2e1489091ec893bda34df",
+      "bytes": 4094
+    },
+    {
+      "path": "harness/knowledge/vault/schema.mjs",
+      "md5": "1dffe8a1eb27d4b8552606c004155dad",
+      "bytes": 9638
+    },
+    {
+      "path": "harness/knowledge/vault/vault.mjs",
+      "md5": "c9db322a5aeecba37e178cd7a7ec9f87",
+      "bytes": 13466
+    },
+    {
+      "path": "harness/evolve/README.md",
+      "md5": "61e80fccc87b3b48e3b8baa230f4e58c",
+      "bytes": 7240
+    },
+    {
+      "path": "harness/evolve/eval/bench/hook-latency.mjs",
+      "md5": "7465f43a7922ca7f172a4665c2df0664",
+      "bytes": 11834
+    },
+    {
+      "path": "harness/evolve/eval/cases/approval.json",
+      "md5": "11d0d57b404b0e13ed0a3e97d14e09b3",
+      "bytes": 4028
+    },
+    {
+      "path": "harness/evolve/eval/cases/fingerprint.json",
+      "md5": "1b23b13640144a8bc1fbe44e58865d05",
+      "bytes": 735
+    },
+    {
+      "path": "harness/evolve/eval/cases/guard.json",
+      "md5": "efd240b27226de19f01d038e17611133",
+      "bytes": 736
+    },
+    {
+      "path": "harness/evolve/eval/cases/knowledge.json",
+      "md5": "5c2790eac88058276f16b1e15274b749",
+      "bytes": 1501
+    },
+    {
+      "path": "harness/evolve/eval/cases/model-policy.json",
+      "md5": "caf62de225e574df1dc4515999980d10",
+      "bytes": 1423
+    },
+    {
+      "path": "harness/evolve/eval/cases/skills.json",
+      "md5": "94f3a84633e977dbbd2a5227b43f8281",
+      "bytes": 419
+    },
+    {
+      "path": "harness/evolve/eval/cases/verify-gate.json",
+      "md5": "e6e2d8a4fa8b151c7e2ea03f19392e9d",
+      "bytes": 2330
+    },
+    {
+      "path": "harness/evolve/eval/cli.mjs",
+      "md5": "7c450628631a4f0d817fad71be23b966",
+      "bytes": 5643
+    },
+    {
+      "path": "harness/evolve/eval/eval.mjs",
+      "md5": "04f32709a64011a12130b70a6649c34b",
+      "bytes": 14366
+    },
+    {
+      "path": "harness/evolve/eval/fn-runner.mjs",
+      "md5": "f1fde01e59bd43d4d3964b01e7f53ee4",
+      "bytes": 1127
+    },
+    {
+      "path": "harness/evolve/eval/manifest.json",
+      "md5": "f18cb13c0d401c78f51e6d91bb1440d6",
+      "bytes": 560
+    },
+    {
+      "path": "harness/evolve/loop/cli.mjs",
+      "md5": "1619ba197fc7abb530f7d2ff2fdd9b35",
+      "bytes": 6045
+    },
+    {
+      "path": "harness/evolve/loop/loop.mjs",
+      "md5": "7ff2a85f7a31e68e4677f87a713826dd",
+      "bytes": 19679
+    },
+    {
+      "path": "harness/evolve/loop/manifest.json",
+      "md5": "68446592b002984067d77b0cc7c023ea",
+      "bytes": 644
+    },
+    {
+      "path": "harness/evolve/loop/policy.mjs",
+      "md5": "246e094e347063ff1ff62582180f67f8",
+      "bytes": 5208
+    },
+    {
+      "path": "harness/build/README.md",
+      "md5": "479cd96bb6bbe20b8ea2b3870c4e0617",
+      "bytes": 2676
+    },
+    {
+      "path": "harness/build/install/cli.mjs",
+      "md5": "ee055156c23eaa6123e52290fbb4b3e3",
+      "bytes": 1876
+    },
+    {
+      "path": "harness/build/install/install.mjs",
+      "md5": "c468d25174706b792ca25eca2c9efcc9",
+      "bytes": 4951
+    },
+    {
+      "path": "harness/build/install/manifest.json",
+      "md5": "37e7c54e21fb4fa54ab5dd0f4a2fd9ce",
+      "bytes": 344
+    },
+    {
+      "path": "harness/build/skills/build.mjs",
+      "md5": "70853d97a50343448ca1d8561afda960",
+      "bytes": 1839
+    },
+    {
+      "path": "harness/build/skills/cli.mjs",
+      "md5": "000a8b5cabe569a4442589fb2c9da3f4",
+      "bytes": 3505
+    },
+    {
+      "path": "harness/build/skills/manifest.json",
+      "md5": "12bf99f8e26d2da45bd929ac9b8ebb96",
+      "bytes": 1350
+    },
+    {
+      "path": "harness/build/skills/skills.mjs",
+      "md5": "625fa9bc39e63d4f6917822f34335035",
+      "bytes": 17656
+    },
+    {
+      "path": "harness/hooks/README.md",
+      "md5": "9a9277849ff906c76346f5925eef3bab",
+      "bytes": 4007
+    },
+    {
+      "path": "harness/hooks/dispatch/README.md",
+      "md5": "074a2b8c5a59a8aff03ba68162e5f589",
+      "bytes": 2343
+    },
+    {
+      "path": "harness/hooks/dispatch/agy.mjs",
+      "md5": "4b1cfe65ddcd17f4efef35c2f5ec140f",
+      "bytes": 4186
+    },
+    {
+      "path": "harness/hooks/dispatch/hook.config.json",
+      "md5": "69b41536c98d84a470c38315e0274798",
+      "bytes": 57
+    },
+    {
+      "path": "harness/hooks/dispatch/manifest.json",
+      "md5": "ff02b67c5cacbf818397cf2d85f93ea5",
+      "bytes": 433
+    },
+    {
+      "path": "harness/hooks/dispatch/merge.mjs",
+      "md5": "081acda34a7ea6efad6ddb57b6d49d84",
+      "bytes": 3184
+    },
+    {
+      "path": "harness/hooks/dispatch/modules.mjs",
+      "md5": "519c117f6cd6ac7b23373ee9b0e240c4",
+      "bytes": 3777
+    },
+    {
+      "path": "harness/hooks/dispatch/run.mjs",
+      "md5": "5fa6a021351bcfd16c7e5ea82cfc6fb4",
+      "bytes": 8828
+    },
+    {
+      "path": "harness/cli/commands/config.mjs",
+      "md5": "fa01b7f74a1c35332d3a2afaf3013f6d",
+      "bytes": 4390
+    },
+    {
+      "path": "harness/cli/commands/doctor.mjs",
+      "md5": "ea4fa2ec6011ba324eedc7aa05dffd7d",
+      "bytes": 16955
+    },
+    {
+      "path": "harness/cli/commands/proc-watch.mjs",
+      "md5": "062a4fe8a04be0ab52a51568bb473a41",
+      "bytes": 6715
+    },
+    {
+      "path": "harness/cli/commands/worktree.mjs",
+      "md5": "e8657d0322f336f43783bfda89db3400",
+      "bytes": 6707
+    },
+    {
+      "path": "harness/cli/harness.mjs",
+      "md5": "c4b0d237206ee2903cb6ad0966593a91",
+      "bytes": 12560
+    },
+    {
+      "path": "harness/cli/manifest.json",
+      "md5": "8803679ee993cff20a47aec245f0f141",
+      "bytes": 559
+    },
+    {
+      "path": "harness/tools/sync.mjs",
+      "md5": "420d7378899e69f3162fab6369a5f78c",
+      "bytes": 6852
+    },
+    {
+      "path": "harness/tools/adapters/_util.mjs",
+      "md5": "9800f36a9a55b67eb1349f22a8f46a3a",
+      "bytes": 1789
+    },
+    {
+      "path": "harness/tools/adapters/agy.mjs",
+      "md5": "bfbd1ebb7f059dab6328cbdc948c6b05",
+      "bytes": 6614
+    },
+    {
+      "path": "harness/tools/adapters/claude.mjs",
+      "md5": "b57f6fd4bb91da29a4a0b5d7f2b9720e",
+      "bytes": 6929
+    },
+    {
+      "path": "harness/tools/adapters/manifest.json",
+      "md5": "6dbc6a1ba1b61375d709c6e1aa2c74c7",
+      "bytes": 222
+    },
+    {
+      "path": "harness/tools/adapters/report.mjs",
+      "md5": "49c19b24cd23e10647b00c6a90b5058b",
+      "bytes": 2067
+    },
+    {
+      "path": "skills/README.md",
+      "md5": "593b46136d8eda62da4d28fee97ee48b",
+      "bytes": 314
+    },
+    {
+      "path": "skills/audit-review/SKILL.md",
+      "md5": "0ed0c23977f35b998a0f14f872557d49",
+      "bytes": 2936
+    },
+    {
+      "path": "skills/bg-wait-with-timeout/SKILL.md",
+      "md5": "d8eb74650b39ff9c6ce219084b7da27e",
+      "bytes": 1270
+    },
+    {
+      "path": "skills/find-skills/SKILL.md",
+      "md5": "8d2d0cf5513ae192beaf5b51c262427a",
+      "bytes": 5734
+    },
+    {
+      "path": "skills/harness-config/SKILL.md",
+      "md5": "b8d00500d31f25a12bdcba854ae6efd6",
+      "bytes": 2661
+    },
+    {
+      "path": "skills/propose-automation/SKILL.md",
+      "md5": "6dfb5155845c88dfccc99438692f430b",
+      "bytes": 2171
+    },
+    {
+      "path": "skills/scratch-script-runner/SKILL.md",
+      "md5": "fee756b7691507b55bf12475d92fa34c",
+      "bytes": 1315
+    },
+    {
+      "path": "skills/skill-auditor/SKILL.md",
+      "md5": "df7d5cf5a77d0addeb17f5874a1c42fe",
+      "bytes": 1742
+    },
+    {
+      "path": ".claude-plugin/plugin.json",
+      "md5": "30ab3a2bbc73ee23108fde9510489731",
+      "bytes": 214
+    },
+    {
+      "path": "hooks/hooks.json",
+      "md5": "bfb51378b1b158f574ce9963a8e3aaab",
+      "bytes": 4661
+    },
+    {
+      "path": "config/defaults/workspace.default.json",
+      "md5": "c16bc51f48323cf4c3624a00f57901e0",
+      "bytes": 300
+    },
+    {
+      "path": "skills/harness/SKILL.md",
+      "md5": "b41259c1cfdb5cb3712e1c01cf4f207e",
+      "bytes": 444
+    },
+    {
+      "path": "commands/doctor.md",
+      "md5": "896c93d49e19e17485ede3d6614e5fb0",
+      "bytes": 169
+    },
+    {
+      "path": "README.md",
+      "md5": "ef76b9a8606ebdef0d3dd4f13c75e1f3",
+      "bytes": 502
+    },
+    {
+      "path": "LICENSE",
+      "md5": "5809aea6732d1c5cf669f5c7966920e4",
+      "bytes": 10
+    }
+  ]
+}

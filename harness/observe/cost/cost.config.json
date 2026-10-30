@@ -1,0 +1,9 @@
+{
+  "_note": "UOC TINH, CAP NHAT TAY. USD / 1M token. null = chua biet gia -> cost=null (KHONG bia gia). Khoa: id model day du hoac alias haiku|sonnet|opus. Ghi de bang config/cost/default.json (machine/project). cache = token doc cache (tokens_cache cua audit).",
+  "prices": {
+    "haiku":  { "in": null, "out": null, "cache": null },
+    "sonnet": { "in": null, "out": null, "cache": null },
+    "opus":   { "in": null, "out": null, "cache": null }
+  },
+  "rank": { "haiku": 1, "sonnet": 2, "opus": 3 }
+}

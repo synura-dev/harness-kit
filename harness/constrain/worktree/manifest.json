@@ -1,0 +1,1 @@
+{ "id": "worktree-hook", "kind": "hook", "layer": "ext","adapters":{"claude":"native","agy":"n/a","note":"agy khong co hook worktree"}, "entry": "hook.mjs", "files": { "helpers": [] }, "tests": ["hook.test.mjs"], "config": { "defaults": "hook.config.json", "schema": null }, "data": null, "tier": "T2" }

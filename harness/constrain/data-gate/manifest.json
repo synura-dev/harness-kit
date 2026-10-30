@@ -1,0 +1,1 @@
+{ "id": "data-gate", "kind": "hook", "layer": "ext","adapters":{"claude":"native","agy":"none"}, "entry": "hook.mjs", "files": { "helpers": [] }, "tests": ["hook.test.mjs"], "config": { "defaults": "hook.config.json", "schema": null }, "data": null, "tier": "T2" }

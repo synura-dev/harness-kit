@@ -1,0 +1,29 @@
+{
+  "id": "cli",
+  "kind": "cli",
+  "layer": "core",
+  "entry": "harness.mjs",
+  "domain": "harness",
+  "domains": {},
+  "files": {
+    "helpers": [
+      "commands/doctor.mjs",
+      "commands/worktree.mjs",
+      "commands/proc-watch.mjs",
+      "commands/config.mjs"
+    ]
+  },
+  "tests": [
+    "commands/doctor.test.mjs",
+    "commands/adapters.test.mjs",
+    "commands/worktree.test.mjs",
+    "commands/proc-watch.test.mjs",
+    "commands/config.test.mjs"
+  ],
+  "config": {
+    "defaults": null,
+    "schema": null
+  },
+  "data": null,
+  "tier": "T0"
+}
