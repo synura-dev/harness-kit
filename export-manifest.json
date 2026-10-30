@@ -1,7 +1,7 @@
 {
   "name": "agent-guard-kit",
   "version": "0.1.0",
-  "source_commit": "7edd21b821c945af0b3fdcd6cc90caf5fa6091e6",
+  "source_commit": "8c5a4fe031fd2ec93d7bb3652bfd2713e783726c",
   "files": [
     {
       "path": "harness/core/agy/adapters-report.mjs",
@@ -115,8 +115,8 @@
     },
     {
       "path": "harness/core/io/paths.mjs",
-      "md5": "715959564f632632e15952963bf005ad",
-      "bytes": 7892
+      "md5": "47264bee4e32fb0cb9b40ddd13e12348",
+      "bytes": 7868
     },
     {
       "path": "harness/core/io/safe-id.mjs",

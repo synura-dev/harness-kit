@@ -55,12 +55,12 @@ export function ensureDataIgnore(opts = {}) {
     const f = path.join(d, '.gitignore');
     if (fs.existsSync(f)) {
       const cur = fs.readFileSync(f, 'utf8');
-      if (cur.split(/\r?\n/).some((l) => /^\/?data\/?\s*$/.test(l.trim()))) return false;
-      fs.appendFileSync(f, (cur === '' || cur.endsWith('\n') ? '' : '\n') + 'data/\n');
+      if (cur.split(/\r?\n/).some((l) => l.trim() === '*')) return false;
+      fs.appendFileSync(f, (cur === '' || cur.endsWith('\n') ? '' : '\n') + '*\n');
       return true;
     }
     fs.mkdirSync(d, { recursive: true });
-    fs.writeFileSync(f, 'data/\n');
+    fs.writeFileSync(f, '*\n');
     return true;
   } catch { return false; }
 }
