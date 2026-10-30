@@ -41,7 +41,9 @@ export function dataDir(kind, opts = {}) {
   const env = opts.env || process.env;
   const e = env.HUB_DATA_DIR;
   const r = resolveHub(opts);
-  const base = typeof e === 'string' && e.trim() ? path.resolve(e.trim()) : r.source === 'plugin' ? path.join(r.hubDir, '.harness', 'data') : path.join(r.hubDir, 'data');
+  const plug = path.join(r.hubDir, '.harness', 'data');
+  // Mot goc cho cung workspace: hook plugin ghi <ws>/.harness/data; CLI (ma sao chep, khong plugin.json) thay thu muc do thi dung chung. Hub goc khong co .harness -> giu data/.
+  const base = typeof e === 'string' && e.trim() ? path.resolve(e.trim()) : r.source === 'plugin' || (r.source === 'default' && fs.existsSync(plug)) ? plug : path.join(r.hubDir, 'data');
   return kind ? path.join(base, String(kind)) : base;
 }
 

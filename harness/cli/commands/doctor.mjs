@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ver } from '../../core/runtime/proc-list.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
-import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks } from '../../core/io/paths.mjs';
+import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks, isPluginMode } from '../../core/io/paths.mjs';
 
 if (process.argv.includes('--adapters')) {
   const { buildReport, formatAdaptersTable } = await import('../../core/agy/adapters-report.mjs');
@@ -66,7 +66,19 @@ for (const b of findBadHookCommands(path.join(HUB_ROOT, '.agents', 'hooks.json')
 // du an (registry/verify) thuoc hub tooling: kiem bang `node harness/cli/harness.mjs projects check` (doctor chi kiem harness, khong import hub)
 
 // hook dispatcher (settings.json -> hooks/dispatch/run.mjs <Event>; audit la module cua dispatcher)
-const dispatchPath = path.join(HUB_ROOT, 'harness', 'hooks', 'dispatch', 'run.mjs');
+// Plugin: chay o che do plugin (plugin.json o goc ma), co CLAUDE_PLUGIN_ROOT, hoac truyen --plugin-dir <p> -> hook den tu plugin, khong doi hook trong settings.
+// Gioi han: doctor khong thay duoc plugin nap bang --plugin-dir cua phien claude khac; chi canh bao khi chac chan thieu.
+const pdIdx = process.argv.indexOf('--plugin-dir');
+const pluginDirArg = pdIdx > 0 ? process.argv[pdIdx + 1] : null;
+const pluginLoaded = isPluginMode() || !!process.env.CLAUDE_PLUGIN_ROOT || !!pluginDirArg;
+const enabledGuardPlugin = (() => {
+  for (const f of [path.join(HUB_ROOT, '.claude', 'settings.json'), path.join(HUB_ROOT, '.claude', 'settings.local.json'), path.join(os.homedir(), '.claude', 'settings.json')]) {
+    try { const j = JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); if (Object.keys(j.enabledPlugins || {}).some((k) => /agent-guard-kit/.test(k) && j.enabledPlugins[k])) return true; } catch {}
+  }
+  return false;
+})();
+const pluginSeen = pluginLoaded || enabledGuardPlugin;
+const dispatchPath = path.join(isPluginMode() ? REPO_DIR : HUB_ROOT, 'harness', 'hooks', 'dispatch', 'run.mjs');
 line(fs.existsSync(dispatchPath), 'hooks/dispatch/run.mjs ton tai');
 const lowerPosix = (s) => String(s).replace(/\\/g, '/').toLowerCase();
 const projectSettingsFile = path.join(HUB_ROOT, '.claude', 'settings.json');
@@ -80,17 +92,20 @@ try {
   const expand = (c) => String(c).replace(/\$\{?CLAUDE_PROJECT_DIR\}?|%CLAUDE_PROJECT_DIR%/g, () => HUB_ROOT.split(path.sep).join('/'));
   const target = (c) => { const m = expand(c).match(/"([^"]*dispatch[\\/]run\.mjs)"|(\S*dispatch[\\/]run\.mjs)/); return m ? path.resolve(HUB_ROOT, m[1] || m[2]) : null; };
   const good = cmds.filter(([, c]) => { const t = target(c); return t && fs.existsSync(t); });
-  line(cmds.length === 0 ? false : good.length === cmds.length, `.claude/settings.json hook dispatch`, `${good.length}/${cmds.length} su kien tro toi file dispatch/run.mjs ton tai`);
+  if (cmds.length === 0 && pluginSeen) line(null, '.claude/settings.json hook dispatch', 'khong co hook trong settings: hook den tu plugin agent-guard-kit');
+  else if (cmds.length === 0) line(false, '.claude/settings.json hook dispatch', 'canh bao: khong co hook guard trong settings va khong thay plugin agent-guard-kit nap (enabledPlugins/--plugin-dir). Neu da nap plugin bang --plugin-dir cua phien claude, chay doctor kem --plugin-dir <p>; doctor khong tu phat hien duoc truong hop do');
+  else line(good.length === cmds.length, `.claude/settings.json hook dispatch`, `${good.length}/${cmds.length} su kien tro toi file dispatch/run.mjs ton tai`);
   try {
     const { hook_events } = await import(new URL('../../observe/audit/defaults.mjs', import.meta.url).href);
     const have = new Set(good.map(([ev]) => ev));
     const missing = Object.keys(hook_events || {}).filter((ev) => !have.has(ev));
     const extra = [...have].filter((ev) => !(hook_events || {})[ev]);
-    line(!missing.length, '.claude/settings.json du su kien hook_events', missing.length ? 'thieu: ' + missing.join(', ') : '');
+    if (cmds.length) line(!missing.length, '.claude/settings.json du su kien hook_events', missing.length ? 'thieu: ' + missing.join(', ') : '');
     if (extra.length) console.log('[warn] settings co su kien khong co trong hook_events:', extra.join(', '));
   } catch (e) { console.log('[warn] khong so duoc hook_events:', e.message); }
 } catch (e) {
-  line(false, '.claude/settings.json', 'khong doc/parse duoc (' + (e.code || e.message) + ')');
+  if (pluginSeen && e && e.code === 'ENOENT') line(null, '.claude/settings.json', 'khong co (plugin mode)');
+  else line(false, '.claude/settings.json', 'khong doc/parse duoc (' + (e.code || e.message) + ')');
 }
 
 // hooks block built from hook_events (audit/defaults.mjs), command path computed from this hub

@@ -1,27 +1,29 @@
 ---
 name: propose-automation
-description: Decide when and how to create a hook or schedule so the hub improves itself. Use when the user says "from now on / every time X", when the same manual step has repeated about 3 times, or when a recorded fact needs periodic re-checking.
+description: Quyết định khi nào và bằng cách nào tạo hook, lịch hoặc tool tự động. Dùng khi người dùng nói "từ giờ / mỗi lần X", khi một bước thủ công lặp khoảng 3 lần, hoặc khi một dữ kiện cần kiểm tra lại định kỳ.
 ---
 
-# Propose Automation
+# Propose automation
 
-Create hooks and schedules on demand, not in advance. Propose first; never install silently.
+Tạo tự động hóa theo nhu cầu, không làm trước. Đề xuất trước, không cài âm thầm.
 
-## Steps
+## Nguyên tắc
+Máy làm được thì máy làm: bước tất định (kiểm tra, quét, dọn, báo cáo) thành mã chạy tự động; agent chỉ giữ phần phán đoán.
 
-1. **Trigger.** One of: the user states a standing rule ("from now on when X": needs a hook, memory alone cannot enforce it); a manual step repeated about 3 times; an unconfirmed or aging fact in memory.
-2. **Pick the mechanism** (verified 2026-10-20, see memory `hooks-and-scheduling-facts`; re-check if the docs may have changed):
-   - React to an event, e.g. session end or before a tool call: hook in settings.json.
-   - Recurring, needs local files/MCP, machine on: desktop scheduled task, or session cron (dies when the session closes, expires after 7 days).
-   - Recurring, machine may be off, no local files: cloud `/schedule` (min 1 hour, fresh clone).
-3. **Propose** in at most 6 lines: purpose, mechanism, exact trigger or cron, what it will run, risk, how to remove. Hooks run commands with the user's privileges, so wait for approval.
-4. **Start safe:** notification or log-only first; add blocking or editing behavior only after the user trusts it.
-5. **Create** via the `update-config` skill (hooks/settings) or the schedule/cron tools; do not hand-edit settings.json if a skill covers it.
-   - Cơ chế ghi data: chạy `harness data register <zone>/<domain|ws>/<tool> --class <log|cache|artifact|durable> [--project ID]` trước lần ghi đầu; hệ thống tự cảnh báo nếu thiếu.
-6. **Register** in `AUTOMATIONS.md` at the hub root: name, type, purpose, created date, review-by date, status.
-7. **Review:** on each review-by date, check the log; keep, tune or delete. Record the outcome in the register.
+## Các bước
+1. **Kích hoạt.** Một trong: quy tắc thường trực ("từ giờ khi X": cần hook, ghi nhớ không cưỡng chế được); bước thủ công lặp khoảng 3 lần; dữ kiện cũ cần kiểm tra lại.
+2. **Chọn cơ chế** (kiểm tra tài liệu hiện hành nếu không chắc, ghi "chưa xác nhận" khi chưa kiểm):
+   - Phản ứng theo sự kiện (kết thúc phiên, trước/sau gọi công cụ): hook.
+   - Định kỳ, cần file/MCP cục bộ, máy bật: tác vụ lịch trên máy, hoặc cron theo phiên (mất khi đóng phiên).
+   - Định kỳ, máy có thể tắt, không cần file cục bộ: lịch trên đám mây.
+   - Bước lặp có đầu vào/đầu ra rõ: một tool nhỏ có test, đăng ký đúng chuẩn.
+3. **Đề xuất** tối đa 6 dòng: mục đích, cơ chế, điều kiện kích hoạt hoặc cron, lệnh sẽ chạy, rủi ro, cách gỡ. Hook chạy lệnh với quyền người dùng, nên chờ duyệt.
+4. **Bắt đầu an toàn:** chỉ thông báo hoặc ghi log; thêm hành vi chặn/sửa khi đã tin cậy.
+5. **Tạo** bằng công cụ cấu hình có sẵn, không sửa tay file cấu hình nếu đã có công cụ.
+   - Nếu tự động hóa ghi dữ liệu: `harness data register <zone>/<domain|ws>/<tool> --class <log|cache|artifact|durable>` trước lần ghi đầu.
+6. **Ghi sổ:** tên, loại, mục đích, ngày tạo, ngày xem lại, trạng thái.
+7. **Xem lại** đúng hạn: xem log, giữ/chỉnh/xóa, ghi kết quả vào sổ.
 
-## Rules
-
-- Anything unverified about hooks/scheduling must be labeled "not confirmed" or checked with docs first (see memory `verify-before-asserting`).
-- Prefer the cheapest model and fewest tools for the automation itself.
+## Quy tắc
+- Điều chưa xác minh về hook/lịch phải gắn nhãn "chưa xác nhận" hoặc kiểm tra tài liệu trước.
+- Tự động hóa dùng model rẻ nhất và ít công cụ nhất đủ việc.

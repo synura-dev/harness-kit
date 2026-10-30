@@ -1,7 +1,7 @@
 {
   "name": "agent-guard-kit",
   "version": "0.1.0",
-  "source_commit": "8c5a4fe031fd2ec93d7bb3652bfd2713e783726c",
+  "source_commit": "b3e11ada8ad4a29335e2221897b9139cc21c4d44",
   "files": [
     {
       "path": "harness/core/agy/adapters-report.mjs",
@@ -115,8 +115,8 @@
     },
     {
       "path": "harness/core/io/paths.mjs",
-      "md5": "47264bee4e32fb0cb9b40ddd13e12348",
-      "bytes": 7868
+      "md5": "edd42577f9b0efef85fb13e5622232ea",
+      "bytes": 8118
     },
     {
       "path": "harness/core/io/safe-id.mjs",
@@ -780,8 +780,8 @@
     },
     {
       "path": "harness/cli/commands/doctor.mjs",
-      "md5": "ea4fa2ec6011ba324eedc7aa05dffd7d",
-      "bytes": 16955
+      "md5": "c3277abdbb967ad9819d17cf83c56232",
+      "bytes": 18596
     },
     {
       "path": "harness/cli/commands/proc-watch.mjs",
@@ -859,9 +859,19 @@
       "bytes": 2661
     },
     {
+      "path": "skills/harness-core/SKILL.md",
+      "md5": "23770482632233b60878ec84a51aee95",
+      "bytes": 3195
+    },
+    {
+      "path": "skills/harness-dev-loop/SKILL.md",
+      "md5": "31f748c7428794086bb290d70fe7eb54",
+      "bytes": 4024
+    },
+    {
       "path": "skills/propose-automation/SKILL.md",
-      "md5": "6dfb5155845c88dfccc99438692f430b",
-      "bytes": 2171
+      "md5": "8f03f4f993a9e20c8bbe4c31f97ff0d9",
+      "bytes": 2429
     },
     {
       "path": "skills/scratch-script-runner/SKILL.md",
