@@ -104,6 +104,10 @@ function mergeInto(target, over, ctx, prefix = '') {
 
 const parseEnv = (s) => { try { return clean(JSON.parse(s)); } catch { return s; } };
 
+// Lop du an (workspace/.harness/config/<tool>/project.json) la dau vao khong tin cay: chi cac khoa nay duoc dat (them luat siet).
+// Moi khoa khac (projectResolver, extRoots, ownerRoots, knowledge.root, duong dan/ma thuc thi...) bi chan.
+export const PROJECT_LAYER_ALLOW = Object.freeze({ guard: Object.freeze(['denyPatterns', 'allowlist']) });
+
 export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) {
   const pd = typeof env.CLAUDE_PLUGIN_DATA === 'string' && env.CLAUDE_PLUGIN_DATA.trim();
   let pname = 'agent-guard-kit'; try { pname = JSON.parse(fs.readFileSync(path.join(repoDir, '.claude-plugin', 'plugin.json'), 'utf8')).name || pname; } catch { /* mac dinh */ }
@@ -154,7 +158,15 @@ export function loadConfig(tool, opts = {}) {
       try { extra = fs.readdirSync(path.join(cfgDir, ft)).filter((f) => f.endsWith('.local.json') && f !== 'local.json').sort(); } catch { /* thieu thu muc */ }
       for (const f of extra) if (apply(path.join(cfgDir, ft, f), 'machine', 'machine')) warnings.push(`${LEGACY_WARNING}: ${ft}/${f} -> ${configPath('machine', ft)}`);
       if (plug && machineDir) apply(path.join(machineDir, configPath('machine', ft).replace(/^config\//, '')), 'machine', 'machine');
-      if (plug && projectDir && !o.skipProjectLayer) apply(path.join(projectDir, ft, 'project.json'), 'project', 'project:project');
+      if (plug && projectDir && !o.skipProjectLayer) {
+        const pj = readConfigJson(path.join(projectDir, ft, 'project.json'), warnings, maxBytes);
+        if (pj) {
+          const allow = PROJECT_LAYER_ALLOW[ft] || [];
+          const kept = {};
+          for (const k of Object.keys(pj)) { if (allow.includes(k)) kept[k] = pj[k]; else warnings.push(`project.json: khoa "${k}" khong duoc phep o lop du an, bo`); }
+          mergeInto(config, kept, mk('project', 'project:project'));
+        }
+      }
       if (o.project !== undefined && o.project !== null) {
         if (validName(o.project)) {
           const pp = at(configPath('project', ft, o.project));

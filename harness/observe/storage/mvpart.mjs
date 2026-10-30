@@ -48,6 +48,8 @@ export function movePartition(src, dst, lim, fsx = fs) {
   const before = manifest(src, lim);
   if (before.truncated) return { skipped: true, reason: `manifest ${before.truncated}`, files: 0, bytes: 0 };
   const done = []; // [{from,to}] de hoan tac
+  const kept = [];
+  const back = (list) => { for (const d of list.reverse()) { if (fs.existsSync(d.a)) { kept.push(d.a); continue; } try { fs.renameSync(d.b, d.a); } catch {} } };
   let renamed = 0;
   try {
     for (const f of before.files) {
@@ -67,8 +69,8 @@ export function movePartition(src, dst, lim, fsx = fs) {
       done.push({ a, b });
     }
   } catch (e) {
-    for (const d of done.reverse()) { try { fs.renameSync(d.b, d.a); } catch {} }
-    return { skipped: true, reason: e.code || e.message, files: 0, bytes: 0 };
+    back(done);
+    return { skipped: true, reason: (e.code || e.message) + (kept.length ? `; giu ca hai (src moi): ${kept.join(', ')}` : ''), files: 0, bytes: 0 };
   }
   // kiem md5 tai dich theo manifest cu (ten co the doi .legacy)
   let ok = true;
@@ -76,11 +78,22 @@ export function movePartition(src, dst, lim, fsx = fs) {
     try { if (crypto.createHash('md5').update(fs.readFileSync(done[i].b)).digest('hex') !== before.files[i].md5) { ok = false; break; } } catch { ok = false; break; }
   }
   if (!ok) {
-    for (const d of done.reverse()) { try { fs.renameSync(d.b, d.a); } catch {} }
-    return { skipped: true, reason: 'md5 lech; da hoan tac', files: 0, bytes: 0 };
+    back(done);
+    return { skipped: true, reason: 'md5 lech; da hoan tac' + (kept.length ? `; giu ca hai: ${kept.join(', ')}` : ''), files: 0, bytes: 0 };
   }
-  try { fs.rmSync(src, { recursive: true, force: true }); } catch {}
-  return { moved: true, files: before.files.length, bytes: before.bytes, renamed, md5: before.md5 };
+  // file moi xuat hien trong src sau manifest (writer): chuyen not; khong xoa de quy
+  const conLai = [];
+  const rest = [];
+  const scan = (d, pre) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) { const rel = pre ? `${pre}/${e.name}` : e.name; if (e.isDirectory() && !e.isSymbolicLink()) scan(path.join(d, e.name), rel); else rest.push(rel); } };
+  scan(src, '');
+  let extra = 0;
+  for (const rel of rest) {
+    const r2 = moveFile(path.join(src, ...rel.split('/')), path.join(dst, ...rel.split('/')), fsx);
+    if (r2.moved) { extra++; renamed += r2.renamed; } else conLai.push(rel);
+  }
+  const rmEmpty = (d) => { let es = []; try { es = fs.readdirSync(d, { withFileTypes: true }); } catch { return; } for (const e of es) if (e.isDirectory() && !e.isSymbolicLink()) rmEmpty(path.join(d, e.name)); try { fs.rmdirSync(d); } catch {} };
+  rmEmpty(src);
+  return { moved: true, files: before.files.length + extra, bytes: before.bytes, renamed, md5: before.md5, conLai };
 }
 
 /** Liet ke file con lai (khong thuoc date=) duoi absRoot, bo khoa *.lock: [rel posix]. */
@@ -94,7 +107,7 @@ function listRest(absRoot, lim) {
       if (out.length >= lim.maxFiles) { truncated = `max-files ${lim.maxFiles}`; return; }
       const rel = pre ? `${pre}/${e.name}` : e.name;
       if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) walk(path.join(dir, e.name), rel);
+      if (e.isDirectory()) { if (!DATE_RE.test(e.name)) walk(path.join(dir, e.name), rel); }
       else if (e.isFile() && !e.name.endsWith('.lock')) out.push(rel);
     }
   };
@@ -118,7 +131,11 @@ export function moveFile(a, b, fsx = fs) {
   }
   try { fsx.renameSync(a, b); } catch (e) { return { skipped: true, reason: e.code || e.message }; }
   let ok = false; try { ok = crypto.createHash('md5').update(fs.readFileSync(b)).digest('hex') === before; } catch {}
-  if (!ok) { try { fs.renameSync(b, a); } catch {} return { skipped: true, reason: 'md5 lech; da hoan tac' }; }
+  if (!ok) {
+    if (fs.existsSync(a)) return { skipped: true, reason: `md5 lech; giu ca hai (${a} la file moi, ${b} la ban chuyen)` };
+    try { fs.renameSync(b, a); } catch {}
+    return { skipped: true, reason: 'md5 lech; da hoan tac' };
+  }
   return { moved: true, bytes: fs.statSync(b).size, renamed };
 }
 
@@ -134,9 +151,10 @@ export async function mvpartCmd(args = [], ctx = {}) {
     const before = bi >= 0 ? args[bi + 1] : null;
     if (bi >= 0 && (!/^\d{4}-\d{2}-\d{2}$/.test(before || '') || ki >= 0)) throw new Error('abort: --before YYYY-MM-DD (khong kem --keep-days)');
     const rest = args.includes('--rest');
+    const force = args.includes('--force');
     if (!Number.isInteger(keep) || keep < 0 || keep > 3650) throw new Error('abort: --keep-days 0..3650');
     const pos = args.filter((a, i) => !a.startsWith('--') && !(i > 0 && (args[i - 1] === '--keep-days' || args[i - 1] === '--before')));
-    if (pos.length !== 1) throw new Error('abort: usage: data mvpart <key> [--yes] [--keep-days N | --before YYYY-MM-DD] [--rest]');
+    if (pos.length !== 1) throw new Error('abort: usage: data mvpart <key> [--yes] [--keep-days N | --before YYYY-MM-DD] [--rest] [--force]');
     const key = pos[0];
     const root = ctx.root || dataRoot();
     const reg = ctx.reg || loadDataRegistry({ registryFile: ctx.registryFile, workspacesDir: ctx.wsDir, noCache: true });
@@ -151,6 +169,7 @@ export async function mvpartCmd(args = [], ctx = {}) {
     const now = ctx.now ?? Date.now();
     const cut = new Date(now); cut.setDate(cut.getDate() - keep); // giu date >= cut
     const cutStr = before || ymd(cut);
+    if (before && !force) { const lim1 = new Date(now); lim1.setDate(lim1.getDate() + 1); if (before > ymd(lim1)) throw new Error(`abort: --before ${before} qua xa tuong lai (> hom nay+1); them --force neu that su can`); }
     const lim = { maxFiles: ctx.opts?.maxFiles ?? MVPART_LIMITS.maxFiles, deadline: ctx.opts?.deadline ?? now + MVPART_LIMITS.timeoutS * 1000 };
     const parts = findParts(absOld).filter((p) => p.date < cutStr).sort((a, b) => (a.rel < b.rel ? -1 : 1));
     let nf = 0; let nb = 0; let moved = 0; let renamed = 0; const skipped = []; let truncated = null;
@@ -171,7 +190,7 @@ export async function mvpartCmd(args = [], ctx = {}) {
       if (Date.now() > lim.deadline) { truncated = 'timeout'; break; }
       if (nf >= lim.maxFiles) { truncated = `max-files ${lim.maxFiles}`; break; }
       const res = movePartition(path.join(absOld, ...p.rel.split('/')), path.join(absNew, ...p.rel.split('/')), lim, ctx.fsx || fs);
-      if (res.moved) { moved++; nf += res.files; nb += res.bytes; renamed += res.renamed; L(`chuyen ${p.rel}: ${res.files} file ${res.bytes}B md5=${res.md5}${res.renamed ? ` (${res.renamed} file -> .legacy)` : ''}`); }
+      if (res.moved) { if (res.conLai?.length) { skipped.push(`${p.rel} (con lai ${res.conLai.length})`); L(`con lai ${p.rel}: ${res.conLai.join(', ')}`); } moved++; nf += res.files; nb += res.bytes; renamed += res.renamed; L(`chuyen ${p.rel}: ${res.files} file ${res.bytes}B md5=${res.md5}${res.renamed ? ` (${res.renamed} file -> .legacy)` : ''}`); }
       else { skipped.push(p.rel); L(`bo qua ${p.rel}: ${res.reason}`); }
     }
     if (rest && !truncated) {

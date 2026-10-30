@@ -52,6 +52,7 @@ export function parseResolveOutput(out) {
 
 // Provider inject qua ctx.resolveProject(id)->{path}|null. Khong co provider -> bo qua kiem project.
 function resolveProject(id, ctx) {
+  if (ctx.resolverFailed) return null; // fail-closed: resolver co cau hinh nhung khong dung duoc
   return ctx.resolveProject ? ctx.resolveProject(id) : { path: 'unchecked' };
 }
 

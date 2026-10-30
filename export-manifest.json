@@ -1,7 +1,7 @@
 {
   "name": "agent-guard-kit",
   "version": "0.1.0",
-  "source_commit": "f917e43df64596cdc1867c6f6bc246f0e8b56281",
+  "source_commit": "7edd21b821c945af0b3fdcd6cc90caf5fa6091e6",
   "files": [
     {
       "path": "harness/core/agy/adapters-report.mjs",
@@ -20,8 +20,8 @@
     },
     {
       "path": "harness/core/audit/audit-write.mjs",
-      "md5": "b8b36539fa49714004e4df80f8eb8258",
-      "bytes": 1866
+      "md5": "eeef3f688df43f8e54e99908be88893c",
+      "bytes": 1938
     },
     {
       "path": "harness/core/audit/candidates.mjs",
@@ -80,8 +80,8 @@
     },
     {
       "path": "harness/core/config/config.mjs",
-      "md5": "bbd8fa923619ce215d9fdddbb8b6deb6",
-      "bytes": 13729
+      "md5": "11739e974e6e63726eab678cfcb8195e",
+      "bytes": 14451
     },
     {
       "path": "harness/core/config/contract-validate.mjs",
@@ -115,8 +115,8 @@
     },
     {
       "path": "harness/core/io/paths.mjs",
-      "md5": "b850cca33a621e610d9ed4451853a1d6",
-      "bytes": 7655
+      "md5": "715959564f632632e15952963bf005ad",
+      "bytes": 7892
     },
     {
       "path": "harness/core/io/safe-id.mjs",
@@ -135,8 +135,8 @@
     },
     {
       "path": "harness/core/registry/data-registry.mjs",
-      "md5": "09f1f7353d8c2038d1700efa984cbe74",
-      "bytes": 14518
+      "md5": "121eaed8575d70c82d059a7e10a6da99",
+      "bytes": 15122
     },
     {
       "path": "harness/core/registry/plugin-registry.mjs",
@@ -415,13 +415,13 @@
     },
     {
       "path": "harness/observe/storage/README.md",
-      "md5": "4226d5b6269ecc46c288e293379050f8",
-      "bytes": 9481
+      "md5": "1eefe84be69247fdfd09e7b9c4546bc6",
+      "bytes": 9745
     },
     {
       "path": "harness/observe/storage/data.mjs",
-      "md5": "6d233d27d91d2e1dfd4aecd4aaa9519e",
-      "bytes": 30863
+      "md5": "528fb905f0e480e2a27ec40d8ac5b12e",
+      "bytes": 31664
     },
     {
       "path": "harness/observe/storage/manifest.json",
@@ -435,13 +435,13 @@
     },
     {
       "path": "harness/observe/storage/mvpart.mjs",
-      "md5": "e2a480a039c23fb13e60e52c51357a20",
-      "bytes": 12108
+      "md5": "c4dc5c3297d60805c79a44ced8793f44",
+      "bytes": 13728
     },
     {
       "path": "harness/observe/storage/register.mjs",
-      "md5": "bb20d3644a5ba156a27825f5d5d34810",
-      "bytes": 8673
+      "md5": "9f48f78810bf8096e1f21596b5e7e031",
+      "bytes": 8771
     },
     {
       "path": "harness/observe/storage/registry.json",
@@ -465,8 +465,8 @@
     },
     {
       "path": "harness/observe/views/digest.mjs",
-      "md5": "56e9ab2d3445fe994c52743665201e9e",
-      "bytes": 7724
+      "md5": "c51690794ebddcca74df25a04ed732c0",
+      "bytes": 7804
     },
     {
       "path": "harness/observe/views/manifest.json",
@@ -785,8 +785,8 @@
     },
     {
       "path": "harness/cli/commands/proc-watch.mjs",
-      "md5": "062a4fe8a04be0ab52a51568bb473a41",
-      "bytes": 6715
+      "md5": "f251fe2b33612fbcfd628b17fa3cdfbc",
+      "bytes": 6753
     },
     {
       "path": "harness/cli/commands/worktree.mjs",
@@ -795,8 +795,8 @@
     },
     {
       "path": "harness/cli/harness.mjs",
-      "md5": "c4b0d237206ee2903cb6ad0966593a91",
-      "bytes": 12560
+      "md5": "5a0ece47d865c6f1d6df6474d4933081",
+      "bytes": 12598
     },
     {
       "path": "harness/cli/manifest.json",
@@ -884,7 +884,7 @@
       "bytes": 4661
     },
     {
-      "path": "config/defaults/workspace.default.json",
+      "path": "config/workspace/default.json",
       "md5": "c16bc51f48323cf4c3624a00f57901e0",
       "bytes": 300
     },

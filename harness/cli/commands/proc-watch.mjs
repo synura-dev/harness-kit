@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { samePath } from '../../core/io/paths.mjs';
+import { samePath, ensureDataIgnore } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { parseDate } from '../../core/runtime/proc-list.mjs';
 
@@ -70,7 +70,7 @@ export function analyze(procs, opts = {}, now = Date.now(), selfPid = process.pi
 function writeLog(entry, root = dataPathFor('watchdog'), maxBytes = DEFAULTS.maxLogBytes) {
   const ts = new Date().toISOString();
   const dir = path.join(root, `date=${ts.slice(0, 10)}`);
-  fs.mkdirSync(dir, { recursive: true });
+  ensureDataIgnore(); fs.mkdirSync(dir, { recursive: true });
   const f = path.join(dir, 'proc-watch.jsonl');
   const line = JSON.stringify({ ts, ...entry }) + '\n';
   try { if (fs.statSync(f).size + line.length > maxBytes) return null; } catch {}

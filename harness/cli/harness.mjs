@@ -15,7 +15,7 @@ import { GROUP_ZONES } from '../core/config/contract.mjs';
 import { loadConfig } from '../core/config/config.mjs';
 import { guardWrite } from '../core/io/storage.mjs';
 import { loadDataRegistry, ZONES } from '../core/registry/data-registry.mjs';
-import { dataRoot } from '../core/io/paths.mjs';
+import { dataRoot, ensureDataIgnore } from '../core/io/paths.mjs';
 import { dataPathFor } from '../core/io/storage.mjs';
 
 import { auditRoot } from '../core/audit/audit-write.mjs';
@@ -189,7 +189,7 @@ function logGateway(e) {
   try {
     const ts = new Date().toISOString();
     const dir = path.join(auditRoot(), 'gateway', `date=${ts.slice(0, 10)}`); // ton trong HUB_DATA_DIR + registry
-    fs.mkdirSync(dir, { recursive: true });
+    ensureDataIgnore(); fs.mkdirSync(dir, { recursive: true });
     guardWrite(path.join(dir, 'gateway.jsonl')); // chi warn (audit khong enforce)
     const args = e.args.map((a) => String(a).slice(0, 80)).slice(0, 10);
     fs.appendFileSync(path.join(dir, 'gateway.jsonl'), JSON.stringify({ ts, domain: e.domain, cmd: e.cmd, args, session: process.env.CLAUDE_SESSION_ID || null, exit: e.exit, ms: e.ms, ...(e.dataWarn ? { dataWarn: e.dataWarn } : {}) }) + '\n');

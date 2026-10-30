@@ -105,3 +105,5 @@ Dung khi du lieu dang ghi lien tuc (audit) nen khong `data mv` ca thu muc duoc.
 - Doc gop: `dataReadRoots(key)` / `dataPathsFor(key, ...parts)` (core/registry) tra [path moi, legacy] chi nhung goc ton tai; reader lap qua cac goc. `data tail` doc ca legacy va gop theo `ts`.
 - May bat reader sot: `raw-paths.test.mjs` quet harness/ hub/ tim duong cung toi key goc (allowlist `ALLOW` co ly do); mac dinh chi bao, `DATA_RAW_PATHS_STRICT=1` de fail.
 Tmp/test: env `HARNESS_DATA_REGISTRY`, `HARNESS_DATA_WORKSPACES` doi registry cho CLI; `register --no-resolve` (chi khi HUB_DATA_DIR khac data that) bo qua `projects resolve`.
+
+- mvpart an toan: `--rest` bo qua thu muc `date=*` (giu bao ve keep-days); khong xoa de quy (chuyen not file moi cua writer, rmdir thu muc rong, file khong chuyen duoc bao `con lai`); rollback khong de file moi (giu ca hai); `--before` > hom nay+1 can `--force`.

@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { auditReadRoots } from '../../core/audit/audit-write.mjs';
 import { loadAuditConfig, auditRoot } from '../../core/config/audit-config.mjs';
 import { fmtDur as fmtDurCore } from '../../core/io/fmt.mjs';
+import { ensureDataIgnore } from '../../core/io/paths.mjs';
 import { listFiles, nodeRows } from './query/query.mjs';
 import { replaceReason, isReadOnly, normalize, countDenied } from '../../core/agy/hints.mjs';
 
@@ -106,7 +107,7 @@ export async function writeDigest(date, opts = {}) {
   const aggs = aggregate(rows, { includePhantom: !!opts.includePhantom });
   const text = renderDigest(date, aggs, { truncated: lim.truncated, maxRows: outRows, agy: agyBash(rows, (opts.root ? [root] : auditReadRoots()).reduce((n, r) => n + countDenied(r, date), 0)) });
   const dir = join(root, 'digest');
-  mkdirSync(dir, { recursive: true });
+  ensureDataIgnore(); mkdirSync(dir, { recursive: true });
   const file = join(dir, `${date}.md`);
   writeFileSync(file, text);
   return { file, rows: Math.min(aggs.length, outRows), files: files.length, truncated: lim.truncated || (aggs.length > outRows ? 'max_rows' : null) };

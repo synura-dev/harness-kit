@@ -53,7 +53,12 @@ export function ensureDataIgnore(opts = {}) {
     if (r.source !== 'plugin') return false;
     const d = path.join(r.hubDir, '.harness');
     const f = path.join(d, '.gitignore');
-    if (fs.existsSync(f)) return false;
+    if (fs.existsSync(f)) {
+      const cur = fs.readFileSync(f, 'utf8');
+      if (cur.split(/\r?\n/).some((l) => /^\/?data\/?\s*$/.test(l.trim()))) return false;
+      fs.appendFileSync(f, (cur === '' || cur.endsWith('\n') ? '' : '\n') + 'data/\n');
+      return true;
+    }
     fs.mkdirSync(d, { recursive: true });
     fs.writeFileSync(f, 'data/\n');
     return true;

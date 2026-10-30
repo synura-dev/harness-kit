@@ -3,7 +3,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { dataRoot, workspaceRoot } from '../io/paths.mjs';
+import { dataRoot, workspaceRoot, isPluginMode, codeRoot } from '../io/paths.mjs';
 
 /** Cac vung cap 1 cua data/. */
 export const ZONES = Object.freeze(['system', 'knowledge', 'workspaces', 'external', '_inbox']);
@@ -80,6 +80,13 @@ export function writeAtomic(file, text) {
 }
 const mtimeOf = (f) => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
 const cache = new Map();
+const regWarned = new Set();
+/** registry thieu/hong -> moi write ok:true (fail-open); canh bao ro 1 lan/file/tien trinh de khong im lang. */
+function warnRegistryOnce(file) {
+  if (regWarned.has(file)) return;
+  regWarned.add(file);
+  try { process.stderr.write(formatWarn({ rule: 'registry-missing', path: file, detail: 'registry.json thieu/hong: moi ghi data duoc cho qua (khong kiem registry)', fix: 'cai/khoi phuc harness/observe/storage/registry.json trong goc ma' }) + '\n'); } catch {}
+}
 
 function normEntry(e, ws) {
   const o = { ...e };
@@ -93,7 +100,7 @@ export function loadDataRegistry(opts = {}) {
   const env = opts.env || process.env;
   const hub = workspaceRoot(opts);
   const dir = dataRoot(undefined, opts);
-  const file = opts.registryFile || path.join(hub, 'harness', 'observe', 'storage', 'registry.json');
+  const file = opts.registryFile || path.join(isPluginMode() ? codeRoot() : hub, 'harness', 'observe', 'storage', 'registry.json');
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   let names = [];
   try { names = fs.readdirSync(wsDir).filter((n) => n.endsWith('.json') && !n.endsWith('.example.json')).sort(); } catch {}
@@ -113,7 +120,7 @@ export function loadDataRegistry(opts = {}) {
       const src = isObj(w.entries) ? w.entries : w;
       for (const [k, v] of Object.entries(src)) if (isObj(v) && !k.startsWith('_') && k !== 'workspace') reg.entries[k.includes('/') ? k : `workspaces/${ws}/${k}`] = normEntry({ tool: k.includes('/') ? undefined : k, ...(k.includes('/') ? {} : { path: k }), ...v }, ws);
     }
-  } catch { reg.entries = {}; reg.failed = true; reg.failedFiles.push(file); }
+  } catch { reg.entries = {}; reg.failed = true; reg.failedFiles.push(file); warnRegistryOnce(file); }
   if (!opts.noCache) cache.set(ck, reg);
   return reg;
 }
@@ -202,7 +209,7 @@ export function resolveDataRel(key, opts = {}) {
 /** Cap nhat entry co phys path === from (registry.json hoac workspaces/<ws>.json): path=to, legacy=from (ve lai legacy cu thi bo legacy). Tra {key,file}|null. */
 export function setEntryPath(from, to, opts = {}) {
   const hub = workspaceRoot(opts);
-  const file = opts.registryFile || path.join(hub, 'harness', 'observe', 'storage', 'registry.json');
+  const file = opts.registryFile || path.join(isPluginMode() ? codeRoot() : hub, 'harness', 'observe', 'storage', 'registry.json');
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   const norm = (x) => toPosix(x).replace(/\/+$/, '');
   const apply = (v) => {

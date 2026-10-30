@@ -6,7 +6,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadConfig } from '../../core/config/config.mjs';
 import { spawnSync } from 'node:child_process';
 import { parseCommon, emit } from '../../core/io/out.mjs';
-import { dataRoot, workspaceRoot, isInside, samePath } from '../../core/io/paths.mjs';
+import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
 import { readJson, readJsonl, appendJsonl, dataPath, dataPathFor, today } from '../../core/io/storage.mjs';
 import { REPO_ROOT_FILES } from '../../core/config/contract.mjs';
 import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, classRetention, formatWarn, writeAtomic } from '../../core/registry/data-registry.mjs';
@@ -372,8 +372,18 @@ export async function run(argv = process.argv.slice(2)) {
       if (!fn) { console.error(`data ${cmd}: chua cai`); return { code: 1 }; }
       // Provider/owner roots tu config 'hub' (projectResolver: module export resolveProject; ownerRoots). Thieu -> bo qua.
       let hc = {}; try { hc = loadConfig('workspace', { root: workspaceRoot() }).config || {}; } catch {}
-      let resolveProject; if (hc.projectResolver) { try { const pm = await import(pathToFileURL(path.join(workspaceRoot(), hc.projectResolver)).href); resolveProject = (id) => { const { project } = pm.resolveProject(id); return project && project.path ? { path: project.path } : null; }; } catch {} }
-      const out = await fn(r.filter((x) => x !== '--json'), { root, reg, o, hubRoot: workspaceRoot(), dataDir: root, resolveProject, ownerRoots: hc.ownerRoots, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
+      let resolveProject, resolverFailed = false;
+      if (hc.projectResolver) {
+        // Ma thuc thi: chi nhap tu goc tin cay (plugin mode: goc ma plugin; hub: goc hub), khong '..'/tuyet doi ra ngoai.
+        const trusted = isPluginMode() ? codeRoot() : workspaceRoot();
+        const fail = (why) => { resolverFailed = true; console.error(formatWarn({ rule: 'project-resolver', path: String(hc.projectResolver), detail: why, fix: 'sua config projectResolver (trong goc tin cay) hoac bo khoa' })); };
+        try {
+          const abs = path.resolve(trusted, String(hc.projectResolver));
+          if (String(hc.projectResolver).split(/[\\/]/).includes('..') || !isInside(abs, trusted)) fail('projectResolver ra ngoai goc tin cay, bo');
+          else { const pm = await import(pathToFileURL(abs).href); resolveProject = (id) => { const { project } = pm.resolveProject(id); return project && project.path ? { path: project.path } : null; }; }
+        } catch (e) { fail('import projectResolver loi: ' + String(e && e.message || e).slice(0, 120)); }
+      }
+      const out = await fn(r.filter((x) => x !== '--json'), { root, reg, o, hubRoot: workspaceRoot(), dataDir: root, resolverFailed, resolveProject, ownerRoots: hc.ownerRoots, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
       for (const l of out.lines || []) console.log(l);
       return { code: out.code ?? 0 };
     }
