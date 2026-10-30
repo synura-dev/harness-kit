@@ -1,0 +1,14 @@
+{
+  "name": "agent-guard-kit-marketplace",
+  "description": "Marketplace mot plugin: agent-guard-kit",
+  "owner": {
+    "name": "Phat Huynh"
+  },
+  "plugins": [
+    {
+      "name": "agent-guard-kit",
+      "source": "./",
+      "description": "Lop rang buoc tat dinh cho agent."
+    }
+  ]
+}

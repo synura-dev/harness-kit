@@ -2,18 +2,7 @@
 
 Plugin Claude Code: lop rang buoc tat dinh cho agent (guard, approval, data zone, audit, hook dispatcher, cong CLI). Zero dependency, can Node.
 
-## Cai dat
-
-Tu marketplace (Claude Code 2.1.275+; thay `<owner>/<repo>` bang marketplace chua plugin nay):
-
-```
-/plugin install agent-guard-kit --marketplace <owner>/<repo>
-```
-
-Thu cuc bo, khong cai: `claude --plugin-dir <duong-dan-plugin>`.
-
-## Ghi chu
-
+- Cai: `/plugin install agent-guard-kit --marketplace <owner>/<repo>` (repo nay chua .claude-plugin/marketplace.json).
 - Xuat tu mot chieu tu nguon goc; xem export-manifest.json (md5 tung file).
 - Du lieu: <du an>/.harness/data (tu them .gitignore). PLUGIN_ROOT chi doc.
 - Guard chi o muc no luc tot nhat (hook fail-open); nen tu them deny trong settings cua du an.

@@ -1,7 +1,7 @@
 {
   "name": "agent-guard-kit",
   "version": "0.1.0",
-  "source_commit": "06d64de41194c46ed60f40ccd8c8811431572d36",
+  "source_commit": "1bfbccac907a2a9024e78aec3c33a30467d13f89",
   "files": [
     {
       "path": "harness/core/agy/adapters-report.mjs",
@@ -765,8 +765,8 @@
     },
     {
       "path": "harness/hooks/dispatch/modules.mjs",
-      "md5": "519c117f6cd6ac7b23373ee9b0e240c4",
-      "bytes": 3777
+      "md5": "e44315038a88be476de51f5112121aa2",
+      "bytes": 3709
     },
     {
       "path": "harness/hooks/dispatch/run.mjs",
@@ -889,6 +889,11 @@
       "bytes": 214
     },
     {
+      "path": ".claude-plugin/marketplace.json",
+      "md5": "cad57760be31dd4ce144d5bee1c32b30",
+      "bytes": 291
+    },
+    {
       "path": "hooks/hooks.json",
       "md5": "bfb51378b1b158f574ce9963a8e3aaab",
       "bytes": 4661
@@ -910,8 +915,8 @@
     },
     {
       "path": "README.md",
-      "md5": "d271eb06419df06c800b9296e82b1eee",
-      "bytes": 758
+      "md5": "4a5f5304f7fec51c2be96335e705b1c0",
+      "bytes": 621
     },
     {
       "path": "LICENSE",
