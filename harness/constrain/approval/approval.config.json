@@ -22,6 +22,11 @@
   },
   "askRules": [
     {
+      "id": "git-reset-hard",
+      "regex": "\\bgit(?:\\.exe)?[\"']?\\s+(?:[^;&|\\n\\s]+\\s+){0,12}?[\"']?reset(?![\\w-])(?:\\s+[^;&|\\n\\s]+){0,12}?\\s+[\"']?--hard(?![\\w-])",
+      "reason": "git reset --hard xoa thay doi chua commit, can nguoi duyet. / git reset --hard discards uncommitted work, needs human approval."
+    },
+    {
       "id": "git-push",
       "regex": "\\bgit(?:\\.exe)?[\"']?\\s+(?:[^;&|\\n\\s]+\\s+){0,12}?[\"']?push(?![\\w-])",
       "unless": "\\bpush(?:\\s+[^;&|\\n\\s]+){0,40}?\\s+(?:--dry-run|-n)(?![\\w-])",

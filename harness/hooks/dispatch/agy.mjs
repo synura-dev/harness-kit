@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { main } from './run.mjs';
+import { TOOL_MAP, getCommand, makePick } from '../../core/io/agy-payload.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DOCTOR = path.resolve(HERE, '..', '..', 'cli', 'commands', 'doctor.mjs');
@@ -33,6 +34,52 @@ const BASH_GUARD_AGY = {
   },
 };
 
+/** Chuan hoa payload agy PreToolUse -> input kieu Claude (cung ham danh gia guard/approval, khong viet luat rieng cho agy).
+ *  run_command -> Bash/PowerShell {command}; write_file/edit_file -> Write/Edit {file_path}. Khong ung -> null. */
+export function toClaudeInput(input, toolName = 'Bash') {
+  const tc = input && typeof input === 'object' ? input.toolCall : null;
+  if (!tc || typeof tc !== 'object' || !tc.args || typeof tc.args !== 'object') return null;
+  const pick = makePick(tc.args);
+  const ws = Array.isArray(input.workspacePaths) && typeof input.workspacePaths[0] === 'string' ? input.workspacePaths[0] : '';
+  const base = { hook_event_name: 'PreToolUse', session_id: String(input.conversationId || input.sessionId || ''), cwd: pick('Cwd', 'cwd') || ws, cli: 'agy' };
+  if (tc.name === 'run_command') {
+    const command = getCommand(tc.args);
+    return { ...base, tool_name: toolName, tool_input: { command: typeof command === 'string' ? command : '' } };
+  }
+  if (tc.name === 'write_file' || tc.name === 'edit_file') {
+    const fp = pick('TargetFile', 'Path', 'FilePath', 'file_path', 'AbsolutePath');
+    return { ...base, tool_name: TOOL_MAP[tc.name], tool_input: { file_path: fp || '' } };
+  }
+  return null;
+}
+
+const RANK_D = { deny: 2, ask: 1 };
+const strongest = (rs) => rs.reduce((a, r) => ((RANK_D[r && r.decision] || 0) > (RANK_D[a && a.decision] || 0) ? r : a), {});
+
+/** guard agy: luat guard (force push, mongo, file nhay cam...) tren input chuan hoa. Loi -> {} (fail-open). */
+const GUARD_AGY = {
+  id: 'guard-agy', events: ['PreToolUse'], timeoutMs: 2500, onError: 'open',
+  async handle(event, input, ctx) {
+    const inp = toClaudeInput(input);
+    if (!inp) return {};
+    const g = (await import('../../constrain/guard/hook.mjs')).default;
+    const r = await g.handle(event, inp, ctx);
+    return r && r.decision === 'deny' ? r : (r && r.records ? { records: r.records } : {});
+  },
+};
+
+/** approval agy: cung module approval cua Claude. agy chay lenh qua shell bat ky (Windows: PowerShell) -> danh gia ca Bash va PowerShell, lay muc manh nhat. */
+const APPROVAL_AGY = {
+  id: 'approval-agy', events: ['PreToolUse'], timeoutMs: 2500, onError: 'open',
+  async handle(event, input, ctx) {
+    if (!input || !input.toolCall || input.toolCall.name !== 'run_command') return {};
+    const a = (await import('../../constrain/approval/hook.mjs')).default;
+    const rs = [];
+    for (const t of ['Bash', 'PowerShell']) rs.push(await a.handle(event, toClaudeInput(input, t), ctx));
+    return strongest(rs);
+  },
+};
+
 /** session agy: doctor luc SessionStart, MISS/LOI -> stderr; khong chan phien. */
 const SESSION_AGY = {
   id: 'session-agy', events: ['SessionStart'], timeoutMs: 9000, onError: 'open',
@@ -47,7 +94,7 @@ const SESSION_AGY = {
 const wrap = (m, gate = false) => ({ id: m.id, gate, load: async () => ({ default: m }) });
 export const AGY_ORDER = Object.freeze({
   SessionStart: [wrap(AUDIT_AGY), wrap(SESSION_AGY)],
-  PreToolUse: [wrap(BASH_GUARD_AGY, true), wrap(AUDIT_AGY)],
+  PreToolUse: [wrap(GUARD_AGY, true), wrap(APPROVAL_AGY, true), wrap(BASH_GUARD_AGY, true), wrap(AUDIT_AGY)],
   PostToolUse: [wrap(AUDIT_AGY)],
   PostInvocation: [wrap(AUDIT_AGY)],
   Stop: [wrap(AUDIT_AGY)],
@@ -56,10 +103,14 @@ export const AGY_ORDER = Object.freeze({
 const ALLOW = '{"decision":"allow"}\n';
 const NOOP = '{}\n';
 
-/** Ket qua gop -> dinh dang agy: Pre = {"decision":"allow|deny|ask"[,reason]}, con lai {}. */
+export const ASK_PREFIX = 'can nguoi duyet (agy -p khong hoi tuong tac duoc) / needs human approval: ';
+
+/** Ket qua gop -> dinh dang agy: Pre = {"decision":"allow|deny"[,reason]}, con lai {}.
+ *  ask -> deny kem ly do "can nguoi duyet" (agy -p khong co hoi tuong tac; schema that chi chac allow/deny). */
 export function renderAgy(event, m) {
   if (event !== 'PreToolUse') return { stdout: NOOP, stderr: '', code: 0 };
-  if (m.decision === 'deny' || m.decision === 'ask') return { stdout: JSON.stringify(m.reason === undefined ? { decision: m.decision } : { decision: m.decision, reason: m.reason }) + '\n', stderr: '', code: 0 };
+  if (m.decision === 'ask') return { stdout: JSON.stringify({ decision: 'deny', reason: ASK_PREFIX + (m.reason || 'approval') }) + '\n', stderr: '', code: 0 };
+  if (m.decision === 'deny') return { stdout: JSON.stringify(m.reason === undefined ? { decision: 'deny' } : { decision: 'deny', reason: m.reason }) + '\n', stderr: '', code: 0 };
   return { stdout: ALLOW, stderr: '', code: 0 };
 }
 
