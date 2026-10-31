@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+// CLI cua plugin cho agent: `harness [<domain> [lenh]]` = harness/cli/harness.mjs cua chinh plugin nay (bin/ nam trong PATH cua Bash tool khi plugin bat).
+// Workspace = CLAUDE_PROJECT_DIR | git top-level cua cwd | cwd; du an co dau hieu workspace (core/io/paths.mjs workspaceMarker) -> HUB_DATA_DIR/HARNESS_CONFIG_DIR nhu hook.
+// Truyen nguyen argv, thoat dung ma cua CLI. Loi khoi dong: mot dong HKERR (HK-CLI-001), exit 1.
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+
+const ROOT = path.resolve(path.dirname(fs.realpathSync(fileURLToPath(import.meta.url))), '..');
+const env = { ...process.env };
+try {
+  const { applyWorkspaceEnv } = await import(pathToFileURL(path.join(ROOT, 'harness', 'core', 'io', 'paths.mjs')).href);
+  if (!(env.CLAUDE_PROJECT_DIR || '').trim()) {
+    const g = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+    env.CLAUDE_PROJECT_DIR = g.status === 0 && g.stdout.trim() ? path.resolve(g.stdout.trim()) : process.cwd();
+  }
+  if (!(env.HARNESS_PLUGIN_DIR || '').trim()) env.HARNESS_PLUGIN_DIR = ROOT;
+  applyWorkspaceEnv(env, env.CLAUDE_PROJECT_DIR);
+} catch (e) {
+  process.stderr.write('HKERR ' + JSON.stringify({ code: 'HK-CLI-001', severity: 'error', cause: 'khoi dong CLI loi: ' + (e && e.message), fix_command: null, next_step: 'kiem plugin harness-kit con du file (harness/core/io/paths.mjs)', safe: false, source: 'bin/harness' }) + '\n');
+  process.exit(1);
+}
+const r = spawnSync(process.execPath, [path.join(ROOT, 'harness', 'cli', 'harness.mjs'), ...process.argv.slice(2)], { stdio: 'inherit', env, windowsHide: true });
+if (r.error) { process.stderr.write('HKERR ' + JSON.stringify({ code: 'HK-CLI-001', severity: 'error', cause: String(r.error.message), fix_command: null, next_step: 'kiem node', safe: false, source: 'bin/harness' }) + '\n'); process.exit(1); }
+process.exit(r.status === null ? 1 : r.status);

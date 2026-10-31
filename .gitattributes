@@ -1,0 +1,2 @@
+bin/harness text eol=lf
+bin/*.cmd text eol=crlf
