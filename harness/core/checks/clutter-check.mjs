@@ -8,7 +8,8 @@ const trimPath = (p) => String(p || '').replace(/\\/g, '/').replace(/^\.?\//, ''
 const isTest = (p) => /\.test\.[mc]?[jt]s$/.test(p);
 const GENERATED = /\.(jsonl|log|sqlite|db|ndjson)$/i;
 // noi dung toi thieu: rong, {} hoac [] (JSON); chi file nho hon fileMinBytes moi bi xet
-const TRIVIAL = /^\s*(\{\s*\}|\[\s*\])?\s*$/;
+const WORKSPACE_MARKER_FILES = new Set(['config/workspace/default.json', 'config/hub/default.json']);
+const TRIVIAL =/^\s*(\{\s*\}|\[\s*\])?\s*$/;
 const EMPTY_DEFAULT = /^\s*(\/\/[^\n]*\n|\/\*[\s\S]*?\*\/|\s)*export\s+default\s*\{\s*\}\s*;?\s*$/;
 
 /** Dem file nguon moi harness/<dir> (de quy; bo test, manifest.json, README*, fixture). Chi la so lieu, khong co tran. Tra [{dir, count}]. */
@@ -103,7 +104,9 @@ export function checkClutter(files, registry = {}, opts = {}) {
 
     // rong / chi export default {}
     const isEmptyCode = /\.[mc]?[jt]s$/.test(f.path) && typeof f.content === 'string' && EMPTY_DEFAULT.test(f.content);
-    const tiny = bytes < caps.fileMinBytes && (bytes === 0 || (typeof f.content === 'string' && TRIVIAL.test(f.content.replace(/^﻿/, ''))));
+    // dau hieu workspace (config/{workspace,hub}/default.json, paths.mjs workspaceMarker): duoc nhan dien workspace tham chieu, '{}' hop le
+    const isMarker = WORKSPACE_MARKER_FILES.has(f.path);
+    const tiny = !isMarker && bytes < caps.fileMinBytes && (bytes === 0 || (typeof f.content === 'string' && TRIVIAL.test(f.content.replace(/^﻿/, ''))));
     if (parts[0] !== 'data' && (isEmptyCode || tiny)) { // data/ chi tinh kich thuoc
       add('emptyFile', f.path, isEmptyCode ? 'chi export default {}' : `${bytes}B < ${caps.fileMinBytes}B va khong co khoa/noi dung`, 'xoa file hoac them noi dung that');
     }
@@ -128,7 +131,7 @@ export function checkClutter(files, registry = {}, opts = {}) {
     // config khong ai tham chieu
     // quy uoc: config/<tool>/*.example.json la mau hop le, khong can ai tham chieu
     const isToolExample = parts[0] === 'config' && parts.length === 3 && /\.example\.json$/.test(parts[2]);
-    if (parts[0] === 'config' && !isToolExample && !isRef(f.path)) {
+    if (parts[0] === 'config' && !isToolExample && !isMarker && !isRef(f.path)) {
       // mau *.example.*: hop le khi file that cung ten (bo '.example') duoc tham chieu
       const real = f.path.replace(/\.example(?=\.|$)/, '');
       if (!registered.has(f.path) && !(real !== f.path && (registered.has(real) || isRef(real)))) add('unusedConfig', f.path, 'config khong ai tham chieu', 'xoa hoac tham chieu tu code/manifest');

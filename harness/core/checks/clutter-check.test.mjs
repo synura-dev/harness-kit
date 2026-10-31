@@ -118,4 +118,8 @@ describe('checkClutter: pham vi may/cuc bo', () => {
     const r = checkClutter([f('config/guard/gemsocial.example.json'), f('config/guard/other.json')], { manifests: [], registered: [], referenced: [] });
     expect(rules(r)).toEqual(['unusedConfig:config/guard/other.json']);
   });
+  test('dau hieu workspace config/{workspace,hub}/default.json: mien emptyFile va unusedConfig', () => {
+    const r = checkClutter([f('config/hub/default.json', 1, 2, '{}'), f('config/workspace/default.json', 1, 2, '{}'), f('config/other/default.json', 1, 2, '{}')], { manifests: [], registered: [], referenced: [] });
+    expect(rules(r).sort()).toEqual(['emptyFile:config/other/default.json', 'unusedConfig:config/other/default.json']);
+  });
 });
