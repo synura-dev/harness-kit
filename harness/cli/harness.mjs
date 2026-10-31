@@ -17,7 +17,7 @@ import { GROUP_ZONES } from '../core/config/contract.mjs';
 import { loadConfig } from '../core/config/config.mjs';
 import { guardWrite } from '../core/io/storage.mjs';
 import { loadDataRegistry, ZONES } from '../core/registry/data-registry.mjs';
-import { dataRoot, ensureDataIgnore, workspaceRoot } from '../core/io/paths.mjs';
+import { dataRoot, ensureDataIgnore, hkerrLine, workspaceRoot } from '../core/io/paths.mjs';
 import { dataPathFor } from '../core/io/storage.mjs';
 
 import { auditRoot } from '../core/audit/audit-write.mjs';
@@ -101,6 +101,47 @@ function indexLines(root, doms, only, max = 25) {
     .map(([k, d]) => [k, d.desc || '-', available(root, d) ? d.cmds || '(khong co lenh con)' : '(chua co)'].concat(d.default === 'run' && available(root, d) ? ['(mac dinh: chay)'] : []).join(' - ') + (d.aliases && d.aliases.length ? ` [alias: ${d.aliases.join(', ')}]` : ''));
 }
 
+// Khoang cach chinh sua (Levenshtein), chuoi ngan.
+function editDistance(a, b) {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    prev = cur;
+  }
+  return prev[b.length];
+}
+
+/**
+ * Domain la -> hop dong loi (HKERR) + help rut gon (<= 10 dong). Thu muc <ws>/<hub|extRoot>/<domain>/manifest.json co ma chua dang ky
+ * -> goi y `harness ext register <rel>`; nguoc lai goi y domain gan ten nhat. Khong nem. -> { text, stderr }.
+ */
+export function unknownDomain(domain, doms, aliases = {}, ws = workspaceRoot(), json = false) {
+  let roots = ['hub'];
+  try { const x = loadConfig('workspace', { root: ws }).config.extRoots; if (Array.isArray(x)) roots = [...new Set([...roots, ...x.filter((s) => typeof s === 'string')])]; } catch { /* bo qua */ }
+  let extRel = null;
+  for (const r of roots) {
+    try { const dir = path.resolve(ws, r, domain); if (fs.existsSync(path.join(dir, 'manifest.json'))) { extRel = path.relative(ws, dir).split(path.sep).join('/'); break; } } catch { /* bo qua */ }
+  }
+  const names = [...new Set([...Object.keys(doms), ...Object.keys(aliases || {}), ...groupOrder(doms)])];
+  let near = null, best = Infinity;
+  for (const n of names) { const d = editDistance(domain.toLowerCase(), n.toLowerCase()); if (d < best) { best = d; near = n; } }
+  if (best > Math.max(2, Math.floor(domain.length / 3))) near = null;
+  const e = extRel
+    ? { code: 'HK_EXT_UNREGISTERED', cause: `${extRel}/manifest.json co nhung ext chua dang ky cho workspace nay`, fix_command: `harness ext register ${extRel}`, next_step: `kiem code ${extRel}/ roi dang ky (xac nhan TTY), sau do chay lai: harness ${domain}` }
+    : { code: 'HK_UNKNOWN_DOMAIN', cause: `khong co domain/alias/nhom ten ${domain}`, fix_command: near ? `harness ${near}` : 'harness --help', next_step: near ? `co phai y la "${near}"? Xem tat ca: harness --help` : 'xem danh sach domain: harness --help' };
+  const line = hkerrLine(e.code, e.cause, { severity: 'error', fix_command: e.fix_command, next_step: e.next_step, safe: true, source: 'harness-cli' });
+  const list = Object.keys(doms).join(', ');
+  const lines = [
+    `domain la: ${domain}`,
+    extRel ? `Ext ${extRel} chua dang ky. Chay: ${e.fix_command}` : near ? `Co phai y la: ${e.fix_command} ?` : 'Khong co domain gan ten.',
+    `Domain co san: ${list.length > 160 ? list.slice(0, 157) + '...' : list}`,
+    'Xem day du: harness --help',
+  ];
+  const text = json ? JSON.stringify({ error: { code: e.code, cause: e.cause, fix_command: e.fix_command, next_step: e.next_step, safe: true } }, null, 2) : lines.join('\n');
+  return { text, stderr: line + '\n', ...e };
+}
+
 export function run(argv, root, opts = {}) {
   const c = parseCommon(argv);
   // Co cua cong chi nhan khi dung TRUOC domain (sau domain la tham so cua CLI con, chuyen nguyen).
@@ -146,6 +187,11 @@ export function run(argv, root, opts = {}) {
   }
   // Ten nhom (khong trung domain) -> liet ke domain cua nhom. Domain luon uu tien; nhom trung ten domain dung --group.
   if (!group && domain && !known && !rest0.length && groupOrder(doms).includes(domain)) group = domain;
+  if (!group && domain && !known && !domain.startsWith('-')) {
+    const u = unknownDomain(domain, doms, aliases, opts.workspace || workspaceRoot(), c.json);
+    if (!opts.capture) console.log(u.text); // stderr (HKERR) do main ghi tu r.stderr
+    return { code: 2, text: u.text, stderr: u.stderr, printed: !opts.capture };
+  }
   const autoRun = known && !rest0.length && known.default === 'run' && available(root, known);
   if (group || !known || (!rest0.length && !autoRun)) {
     const inGroup = group ? groupOrder(doms).includes(group) : false;

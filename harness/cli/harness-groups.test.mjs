@@ -17,6 +17,33 @@ const hub = (doms = {}) => {
 };
 const idx = (r, a = []) => run(a, r, { capture: true });
 
+test('domain la: ext co manifest chua dang ky -> HKERR goi y ext register, help rut gon, exit 2', () => {
+  const r = hub({ ev: { zone: 'observe' } });
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'hgw-'));
+  fs.mkdirSync(path.join(ws, 'hub', 'tasks'), { recursive: true });
+  fs.writeFileSync(path.join(ws, 'hub', 'tasks', 'manifest.json'), '{}');
+  const u = run(['tasks'], r, { capture: true, workspace: ws, externals: [] });
+  expect(u.code).toBe(2);
+  const j = JSON.parse(u.stderr.trim().replace(/^HKERR /, ''));
+  expect(j).toMatchObject({ code: 'HK_EXT_UNREGISTERED', fix_command: 'harness ext register hub/tasks', severity: 'error', safe: true });
+  expect(j.cause).toBeTruthy(); expect(j.next_step).toContain('harness tasks');
+  expect(u.text.split('\n').length).toBeLessThanOrEqual(10);
+  expect(u.text).toContain('harness --help');
+});
+
+test('domain la hoan toan: goi y domain gan ten nhat, khong co -> harness --help', () => {
+  const r = hub({ ev: { zone: 'observe' }, report: { zone: 'observe' } });
+  const ws = fs.mkdtempSync(path.join(os.tmpdir(), 'hgw-'));
+  const near = run(['reprot'], r, { capture: true, workspace: ws, externals: [] });
+  expect(near.code).toBe(2);
+  expect(JSON.parse(near.stderr.trim().slice(6))).toMatchObject({ code: 'HK_UNKNOWN_DOMAIN', fix_command: 'harness report' });
+  expect(near.text.split('\n')[0]).toBe('domain la: reprot');
+  expect(near.text.split('\n').length).toBeLessThanOrEqual(10);
+  const far = run(['zzqqxxww'], r, { capture: true, workspace: ws, externals: [] });
+  expect(far.code).toBe(2);
+  expect(JSON.parse(far.stderr.trim().slice(6)).fix_command).toBe('harness --help');
+});
+
 test('groups: index nhom theo vung, 4 nhom chinh luon co tieu de, domain cu o legacy', () => {
   const r = hub({ ev: { zone: 'observe' }, gate: { zone: 'constrain' }, old: { zone: 'plugins' }, tl: { zone: 'tools' }, sk: { zone: 'build' } });
   const x = idx(r);
