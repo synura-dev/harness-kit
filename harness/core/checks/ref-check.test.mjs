@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { checkRefs, extractRefs, scanKind } from './ref-check.mjs';
+import { checkRefs, extractRefs, scanKind, makeCoreOwned, isHistorical } from './ref-check.mjs';
 
 const present = new Set(['harness/cli/harness.mjs', 'harness/plugins/foo/cli.mjs']);
 const exists = (p) => present.has(p);
@@ -65,4 +65,43 @@ test('ref-ignore ngoai docs/ khong che ref hong va bi canh bao', () => {
   const cfg = r.errors.filter((e) => e.file === 'config/a.json').map((e) => e.ref);
   expect(cfg).toContain('harness/core/gone.mjs');
   expect(cfg.some((x) => x.includes('ngoai docs/'))).toBe(true);
+});
+
+test('workspace mode: ref loi plugin khong loi, ref hub hong van bao, docs lich su bo qua (fixture that)', async () => {
+  const fs = await import('node:fs');
+  const os = await import('node:os');
+  const path = await import('node:path');
+  const { buildScanInput } = await import('./scan-input.mjs');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'refws-'));
+  try {
+    const plug = path.join(tmp, 'plugin'); const ws = path.join(tmp, 'ws');
+    fs.mkdirSync(path.join(plug, 'harness', 'core'), { recursive: true });
+    fs.mkdirSync(path.join(plug, 'harness', 'tools', 'adapters'), { recursive: true });
+    fs.writeFileSync(path.join(plug, 'harness', 'tools', 'adapters', 'claude.mjs'), '');
+    fs.mkdirSync(path.join(ws, 'docs', 'plans'), { recursive: true });
+    fs.mkdirSync(path.join(ws, 'config'), { recursive: true });
+    fs.writeFileSync(path.join(ws, 'docs', 'ARCH.md'), 'loi: harness/core/x.mjs\nadapter: harness/tools/adapters/claude.mjs\nhub hong: harness/skills/foo/SKILL.md\n');
+    fs.writeFileSync(path.join(ws, 'docs', 'audit-old.md'), 'cu: harness/skills/gone.md\n');
+    fs.writeFileSync(path.join(ws, 'config', 'a.json'), '{"owner": "harness/release/cli.mjs"}\n');
+    const si = buildScanInput(ws);
+    const coreOwned = makeCoreOwned({ coreDirs: ['core', 'tools'], existsInPlugin: (p) => fs.existsSync(path.join(plug, p)) });
+    const r = checkRefs({ files: si.files, exists: si.exists, coreOwned, skipHistorical: true });
+    const refs = r.errors.map((e) => `${e.file}:${e.ref}`).sort();
+    expect(refs).toEqual(['config/a.json:harness/release/cli.mjs', 'docs/ARCH.md:harness/skills/foo/SKILL.md']);
+    // khong workspace mode (khong coreOwned): doctor khong mu, loi plugin van bao trong repo plugin
+    const raw = checkRefs({ files: si.files, exists: si.exists });
+    expect(raw.errors.some((e) => e.ref === 'harness/core/x.mjs')).toBe(true);
+    expect(raw.errors.some((e) => e.file === 'docs/audit-old.md')).toBe(true);
+  } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
+});
+
+test('isHistorical va makeCoreOwned', () => {
+  expect(isHistorical('docs/audit-x.md')).toBe(true);
+  expect(isHistorical('docs/plans/p.md')).toBe(true);
+  expect(isHistorical('TASKS.md')).toBe(true);
+  expect(isHistorical('docs/ARCHITECTURE.md')).toBe(false);
+  const own = makeCoreOwned({ coreDirs: ['core'] });
+  expect(own('harness/core/x.mjs')).toBe(true);
+  expect(own('harness/skills/x')).toBe(false);
+  expect(own('config/x.json')).toBe(false);
 });

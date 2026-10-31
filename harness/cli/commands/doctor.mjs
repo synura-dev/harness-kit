@@ -46,6 +46,8 @@ const duck = ver('duckdb');
 line(duck ? true : null, 'duckdb', duck || 'tuy chon, khong co');
 
 const HUB_ROOT = workspaceRoot();
+// workspace mode: workspace (CLAUDE_PROJECT_DIR/hub) khac plugin root -> loi harness nam o plugin, khong trong workspace
+const WS_MODE = path.resolve(HUB_ROOT).toLowerCase() !== path.resolve(REPO_DIR).toLowerCase();
 const hub = resolveHub();
 console.log(`[info] hubDir = ${hub.hubDir} (nguon: ${hub.source})`);
 if (!isInside(REPO_DIR, hub.hubDir)) console.log(`[warn] repo (${REPO_DIR}) nam ngoai hubDir; kiem tra HUB_DIR/config/paths.local.json`);
@@ -163,7 +165,10 @@ else try {
     // skill chua build (vd worktree moi, .agents/skills khong tracked) = chua sinh, khong phai hong: chi canh bao kem lenh build
     const soft = r.tool === 'skills' ? r.problems.filter((p) => /^unbuilt:/.test(p)) : [];
     if (soft.length) warn('adapters', `adapter skills chua build (${soft.length} muc, vd ${soft[0].replace(/ \(chay:.*$/, '')}) -> chay: node harness/build/skills/cli.mjs build --apply`);
-    const hard = r.problems.filter((p) => !soft.includes(p));
+    // workspace mode: adapter la code loi cua plugin, workspace khong chua harness/tools/adapters -> khong phai loi
+    const noAdapter = WS_MODE ? r.problems.filter((p) => /^thieu adapter /.test(p)) : [];
+    if (noAdapter.length) { console.log(`[skip] adapter ${r.tool}: workspace mode, adapter nam o plugin (khong trong workspace)`); if (!r.changes.length && r.problems.length === noAdapter.length) continue; }
+    const hard = r.problems.filter((p) => !soft.includes(p) && !noAdapter.includes(p));
     for (const p of hard) line(false, `adapter ${r.tool}`, p);
     if (!r.changes.length && !hard.length && !soft.length) line(true, `adapter ${r.tool} khop nguon .agents/`);
     else if (r.changes.length || hard.length) console.log('       -> chay: node harness/tools/sync.mjs');
@@ -189,19 +194,26 @@ try {
 try {
   const { syncArchitecture } = await import(new URL('../../core/registry/plugin-registry.mjs', import.meta.url).href);
   const ar = syncArchitecture(HUB_ROOT, false);
-  if (ar.problem) warn('arch', ar.problem);
+  // workspace mode: khoi generated thuoc ARCHITECTURE cua plugin; workspace khong bat buoc co marker
+  if (ar.problem && WS_MODE && /thieu marker/.test(ar.problem)) console.log('[skip] arch: workspace mode, docs/ARCHITECTURE.md khong can marker generated');
+  else if (ar.problem) warn('arch', ar.problem);
   else if (ar.changed) { warn('arch', 'docs/ARCHITECTURE.md (khoi generated) lech registry; chay: node harness/cli/harness.mjs adapters --write-arch'); if (process.argv.includes('--strict')) { process.exitCode = 1; console.log('[LOI] architecture lech registry (strict)'); } }
 } catch (e) { console.log('[warn] architecture check loi:', e.message); }
 // ba check dai han (ref/import/clutter): mac dinh chi canh bao (D6); --strict exit 1 neu co muc error
 try {
   const { buildScanInput, collectStray } = await import(new URL('../../core/checks/scan-input.mjs', import.meta.url).href);
-  const { checkRefs } = await import(new URL('../../core/checks/ref-check.mjs', import.meta.url).href);
+  const { checkRefs, makeCoreOwned } = await import(new URL('../../core/checks/ref-check.mjs', import.meta.url).href);
   const { scanTree } = await import(new URL('../../core/checks/import-check.mjs', import.meta.url).href);
   const { checkClutter, checkStray, countSources, countFlat, scanCode } = await import(new URL('../../core/checks/clutter-check.mjs', import.meta.url).href);
   const si = buildScanInput(HUB_ROOT);
   const rows = [];
   const cap = (arr, n = 15) => { arr.slice(0, n).forEach((s) => console.log('[warn]', s)); if (arr.length > n) console.log(`[warn] ... con ${arr.length - n} muc nua`); };
-  const ref = checkRefs({ files: si.files, exists: si.exists });
+  // workspace mode: harness/<loi>/... thuoc plugin, docs lich su la anh chup -> khong phai loi ref cua workspace
+  const coreOwned = WS_MODE ? makeCoreOwned({
+    coreDirs: (() => { try { return fs.readdirSync(path.join(REPO_DIR, 'harness'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; } })(),
+    existsInPlugin: (p) => fs.existsSync(path.join(REPO_DIR, p)),
+  }) : null;
+  const ref = checkRefs({ files: si.files, exists: si.exists, coreOwned, skipHistorical: WS_MODE });
   cap(ref.errors.map((e) => `ref ${e.file}:${e.line} tro toi khong ton tai: ${e.ref}`));
   rows.push({ name: 'ref', total: ref.errors.length, errors: ref.errors.length, truncated: ref.truncated });
   const imp = scanTree(HUB_ROOT);

@@ -76,6 +76,19 @@ const ANY_MARK = /<!--\s*ref-ignore(?:-start|-end)?\s*-->/i;
 const MISUSE_REF = '<!-- ref-ignore --> ngoai docs/ (khong duoc che ref hong)';
 const EXTS =['.mjs', '.json', '.md'];
 
+// Docs lich su (bao cao audit, research, plans, TASKS.md): anh chup thoi diem viet, khong kiem ref.
+const HISTORICAL = /^(?:docs\/(?:audit-[^/]*\.md|research\/|plans\/)|TASKS\.md$)/;
+export const isHistorical = (p) => HISTORICAL.test(String(p).replace(/\\/g, '/').replace(/^\.\//, ''));
+
+/** coreOwned(path) cho workspace mode: path thuoc loi plugin neu khop thu muc loi harness/<top>/ hoac ton tai trong pluginRoot. */
+export function makeCoreOwned({ coreDirs = [], existsInPlugin = null } = {}) {
+  const dirs = new Set(coreDirs);
+  return (p) => {
+    const m = /^harness\/([^/]+)(?:\/|$)/.exec(p);
+    return !!m && (dirs.has(m[1]) || !!(existsInPlugin && existsInPlugin(p)));
+  };
+}
+
 // ref khong duoi hop le neu ton tai voi .mjs/.json/.md
 function refExists(exists, path) {
   if (exists(path)) return true;
@@ -88,8 +101,10 @@ function refExists(exists, path) {
  * @param {{files:{path:string,content:string}[], exists:(rel:string)=>boolean, limits?:object, now?:()=>number}} a
  * @returns {{ok:boolean, severity:string, errors:{file:string,line:number,ref:string}[], scanned:number, truncated:false|string}}
  */
-export function checkRefs({ files, exists, limits, now = Date.now }) {
+export function checkRefs({ files, exists, limits, now = Date.now, coreOwned = null, skipHistorical = false }) {
   const lim = { ...REF_LIMITS, ...(limits || {}) };
+  // workspace mode: ref thuoc loi plugin (coreOwned) khong phai loi cua workspace; ref toi file workspace hong van bao
+  const has = coreOwned ? (p) => exists(p) || coreOwned(p) : exists;
   const deadline = now() + lim.timeoutMs;
   const errors = [];
   let scanned = 0;
@@ -97,6 +112,7 @@ export function checkRefs({ files, exists, limits, now = Date.now }) {
   for (const f of files) {
     const kind = scanKind(f.path);
     if (!kind) continue;
+    if (skipHistorical && isHistorical(f.path)) continue;
     if (scanned >= lim.maxFiles) { truncated = 'max-files'; break; }
     if (now() > deadline) { truncated = 'timeout'; break; }
     let content = String(f.content ?? '');
@@ -114,7 +130,7 @@ export function checkRefs({ files, exists, limits, now = Date.now }) {
       if (mayIgnore && IGNORE_END.test(text)) { skipBlock = false; continue; }
       if (skipBlock || (mayIgnore && IGNORE_LINE.test(text)) || PLANNED_LINE.test(text)) continue;
       for (const r of extractRefs(text)) {
-        if (!refExists(exists, r.path)) errors.push({ file: rel, line, ref: r.ref });
+        if (!refExists(has, r.path)) errors.push({ file: rel, line, ref: r.ref });
       }
     }
   }
