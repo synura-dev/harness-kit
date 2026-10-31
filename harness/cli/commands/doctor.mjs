@@ -63,6 +63,14 @@ try {
 } catch (e) {
   if (e && e.code !== 'ENOENT') { process.exitCode = 1; console.log('[LOI]   .agents/hooks.json khong doc/parse duoc - ' + (e.message || e)); }
 }
+try {
+  const hjf = path.join(HUB_ROOT, '.agents', 'hooks.json');
+  if (fs.existsSync(hjf) && /"harness-kit"/.test(fs.readFileSync(hjf, 'utf8'))) {
+    const { init: agyInit } = await import('./agy.mjs');
+    const r = agyInit({ dir: HUB_ROOT, check: true });
+    if (r.code !== 0) line(false, 'agy shim/local thieu hoac lech', 'HKERR ' + JSON.stringify({ code: 'HK-AGY-001', severity: 'error', cause: r.lines.filter((l) => l.startsWith('[lech]')).join('; ').slice(0, 300), fix_command: 'harness agy init', next_step: 'chay fix_command trong du an roi chay lai doctor', safe: true, source: 'doctor' }));
+  }
+} catch { /* fail-open */ }
 for (const b of findBadHookCommands(path.join(HUB_ROOT, '.agents', 'hooks.json'), HUB_ROOT)) {
   const why = b.problem === 'ngoai-hub' ? 'tro ngoai hubDir' : b.problem === 'agents-prefix' ? 'command bat dau bang .agents/ (agy cwd = .agents/, dung "node ../harness/hooks/...")' : 'duong dan tuyet doi';
   line(false, `.agents/hooks.json ${why}`, b.command);

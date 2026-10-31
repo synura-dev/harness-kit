@@ -146,3 +146,12 @@ test('doctor: du an thuong (khong dau hieu hub) -> bo kiem gia dinh hub; co dau 
   expect(o2).toMatch(/nam ngoai hubDir/);
   expect(o2).toMatch(/ARCHITECTURE\.md khong doc duoc/);
 }, 60000);
+
+test('doctor: .agents/hooks.json co harness-kit nhung thieu shim/local -> exit 1 + HKERR fix_command', async () => {
+  const hub = await fixHub(true);
+  fs.mkdirSync(path.join(hub, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(hub, '.agents', 'hooks.json'), JSON.stringify({ 'harness-kit': { Stop: [{ type: 'command', command: 'node ./harness-agy-shim.mjs Stop' }] } }));
+  const p = runDoctor(hub);
+  expect(p.status).toBe(1);
+  expect(p.stdout).toContain('"fix_command":"harness agy init"');
+});
