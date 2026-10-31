@@ -221,12 +221,16 @@ export const DEFAULTS = {
   "redact": [
     "(token|key|secret|password|bearer|authorization)\\s*[=:]\\s*((bearer|basic)\\s+)?\\S+",
     "bearer\\s+[A-Za-z0-9._~+/=-]{3,}",
+    "(?<![\\w-])--(?!no-)[\\w-]*(?:password|passwd|passphrase|pass(?=\\s)|secret(?:[-_]?key)?|token|api[-_]?key|private[-_]?key)(?:-[\\w-]*)?(?<!-file)(?<!-dir)(?<!-path)\\s+(?:\"[^\"]*\"|'[^']*'|\\S+)",
+    "(?<![A-Za-z0-9])xox[abprs]-[A-Za-z0-9-]{10,}",
+    "(?<![A-Za-z0-9])AKIA[0-9A-Z]{10,}",
+    "(?<![A-Za-z0-9])AIza[A-Za-z0-9_-]{10,}",
     "sk-[A-Za-z0-9_-]{8,}",
     "(ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{8,}",
     "github_pat_[A-Za-z0-9_]{8,}",
     "\\d{6,}:[A-Za-z0-9_-]{30,}",
     "eyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]*",
-    "[a-z][a-z0-9+.-]*://[^\\s/:@]+:[^\\s/@]+@",
+    "[a-z][a-z0-9+.-]{0,31}://[^\\s/:@]+:[^\\s/@]+@",
     "\"(token|password|passwd|secret|api_?key|access_?token|authorization)\"\\s*:\\s*\"[^\"]*\"",
     "(https?://[^\\s?#]+)\\?[^\\s]*"
   ],

@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { isObj } from '../../core/io/paths.mjs';
+import { isObj, hkerrLine } from '../../core/io/paths.mjs';
 import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
 import { DEFAULTS, ORDER, loadModules, applies } from './modules.mjs';
 import { mergeResults, applyUpdate, render } from './merge.mjs';
@@ -48,6 +48,8 @@ function parseInput(r, max) {
 
 /** Ho so Claude (mac dinh); agy.mjs truyen ho so rieng cung loi. */
 export const CLAUDE = { order: ORDER, render, setEvent: true, failOut, noop: () => ({ stdout: '{}', stderr: '', code: 0 }) };
+const clean = (v, re) => String(v).replace(re, '').slice(0, 40);
+const gateWarn = (mod, kind) => hkerrLine('HK-GATE-001', 'gate hook loi, bo qua (fail-open)', { source: `${clean(mod, /[^\w.-]/g)}:${clean(kind, /[^\w:.-]/g)}` }) + '\n';
 const traceRec = (rule, reason) => ({ sink: 'gate', data: { kind: 'gate', decision: 'allow', hook: 'dispatch', rule, reason } });
 
 function failOut(event, why) {
@@ -62,15 +64,17 @@ async function vaultQuery() {
 }
 
 /** Ghi tat ca records MOT lan (moi sink qua writer cua core / nhat ky cua module). Khong nem. */
-async function writeRecords(records, input) {
+export async function writeRecords(records, input) {
+  const failed = [];
   for (const r of records) {
     try {
       if (r.sink === 'gate') (await import('../../core/audit/gate-event.mjs')).recordGate(r.data, r.ctx || input || {});
       else if (r.sink === 'audit') { const w = await import('../../core/audit/audit-write.mjs'); w.writeEnvelope(r.data, r.opts || {}, w.auditRoot()); }
       else if (r.sink === 'guard') await (await import('../../constrain/guard/hook.mjs')).log(r.data, { logFile: process.env.GUARD_LOG_FILE || '' });
       else if (r.sink === 'worktree') await (await import('../../constrain/worktree/hook.mjs')).log(r.data);
-    } catch { /* fail-open */ }
+    } catch (e) { failed.push({ sink: String(r.sink).replace(/[^\w-]/g, '').slice(0, 20), kind: String((e && e.name) || 'Error').replace(/[^\w]/g, '').slice(0, 30) }); }
   }
+  if (failed.length) { try { fs.writeSync(2, hkerrLine('HK-WRITE-001', `ghi ${failed.length} record that bai (fail-open)`, { source: `${failed[0].sink}:${failed[0].kind}` }) + '\n'); } catch {} }
 }
 
 /**
@@ -80,24 +84,24 @@ async function writeRecords(records, input) {
 export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, startedAt = Date.now(), profile = CLAUDE }) {
   const r = typeof stdin === 'string' ? { raw: stdin } : stdin || { raw: '' };
   const p = parseInput(r, cfg.maxInputBytes);
-  if (p.err) return { ...profile.failOut(event, p.err), records: [traceRec('fail-open', p.err)], input: {} };
+  if (p.err) { const o = profile.failOut(event, p.err); if (event === 'PreToolUse') o.stderr = (o.stderr || '') + gateWarn('dispatch', p.err); return { ...o, records: [traceRec('fail-open', p.err)], input: {} }; }
   const original = p.input;
   const ev = event || (typeof original.hook_event_name === 'string' ? original.hook_event_name : '');
   if (!profile.order[ev]) return { ...profile.noop(ev), records: [], input: original };
   if (cfg.enabled === false && ev !== 'WorktreeCreate') return { ...profile.noop(ev), records: [], input: original };
   if (profile.setEvent && !original.hook_event_name) original.hook_event_name = ev;
   const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
-  const state = { input: original, items: [], traces: [], denied: false };
+  const state = { input: original, items: [], traces: [], denied: false, warns: [] };
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
 
   const work = async () => {
     const mods = await loadModules(ev, { only, validate: validateHookModule, order: profile.order, modules: cfg.modules });
     for (const m of mods) {
-      if (m.error) { trace(m.id, m.error); continue; }
+      if (m.error) { trace(m.id, m.error); if (m.gate) state.warns.push(gateWarn(m.id, m.error)); continue; }
       if (!applies(m.mod, ev, state.input)) continue;
       if (m.gate && state.denied) continue; // deny cat chuoi gate; audit van chay
       const left = budget - (Date.now() - startedAt);
-      if (left < 50) { trace(m.id, 'budget'); continue; }
+      if (left < 50) { trace(m.id, 'budget'); if (m.gate && m.mod.onError !== 'closed') state.warns.push(gateWarn(m.id, 'budget')); continue; }
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = '';
       try {
@@ -108,6 +112,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       if (!kind && validateHookResult(res).length) kind = 'bad-result';
       if (kind) {
         trace(m.id, kind);
+        if (m.gate && m.mod.onError !== 'closed') state.warns.push(gateWarn(m.id, kind));
         if (m.mod.onError === 'closed') { state.items.push({ id: m.id, result: { decision: 'deny', reason: `dispatch[${m.id}]: ${kind} (closed)` } }); if (m.gate) state.denied = true; }
         continue;
       }
@@ -123,10 +128,11 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
     const left = Math.max(50, budget - (Date.now() - startedAt));
     const w = await Promise.race([work().then(() => null), new Promise((res) => { const t = setTimeout(() => res(TIMEOUT), left); t.unref(); })]);
     if (w === TIMEOUT) timedOut = true;
-  } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); }
-  if (timedOut) state.traces.push(traceRec('module-error', 'dispatch: budget-timeout'));
+  } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
+  if (timedOut) { state.traces.push(traceRec('module-error', 'dispatch: budget-timeout')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'budget-timeout')); }
   const merged = mergeResults(state.items);
   const out = profile.render(ev, merged);
+  if (state.warns.length) out.stderr = (out.stderr || '') + state.warns.join('');
   const records = [...merged.records, ...state.traces];
   return { ...out, records, input: original };
 }
