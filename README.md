@@ -7,9 +7,11 @@ Plugin Claude Code: lop rang buoc tat dinh cho agent (guard, approval, data zone
 ## Cai dat
 
 ```
-/plugin marketplace add <owner>/<repo>
-/plugin install harness-kit@harness-kit-marketplace
+/plugin marketplace add synura-dev/harness-kit
+/plugin install harness-kit@synura
 ```
+
+Repo private: can dang nhap GitHub (git credential) co quyen doc repo thi `marketplace add` va cap nhat moi chay duoc.
 
 Xong, khong can setup them: khong launcher, khong `bin/harness.mjs` o du an, khong sua PATH. Hook Claude do plugin cung cap; CLI `harness` co trong PATH cua Bash tool.
 Cho agy: chay `harness agy init` mot lan trong du an (sinh `.agents/hooks.json`, shim, `.agents/harness-agy.local.json`; thieu thi hook SessionStart/doctor tu sinh lai hoac bao `fix_command`). Agy goi CLI bang `node ./.agents/harness-agy-shim.mjs cli <lenh>` (process.execPath + duong dan tuyet doi, khong PATH).

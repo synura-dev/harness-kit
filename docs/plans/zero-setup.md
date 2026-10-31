@@ -16,7 +16,7 @@ Hiện trạng [XN]:
 - Wrapper hook plugin tự suy biến vị trí dữ liệu/cấu hình theo bố cục thư mục (`HK/hooks/run.mjs:17-27`); suy luận này trùng với nơi khác, cần gom một chỗ.
 - Lớp máy: `pluginLayerDirs` = `CLAUDE_PLUGIN_DATA` | `~/.claude/plugins/data/<name>/config` (`HK/harness/core/config/config.mjs:111-116`).
   Docs [XN docs, code.claude.com plugins-reference]: `CLAUDE_PLUGIN_DATA` = `~/.claude/plugins/data/<id>/`, `<id>` = định danh plugin đã thay ký tự lạ bằng `-`; biến KHÔNG có trong môi trường lệnh Bash tool.
-  => CLI do agent gọi (không có biến) rơi về `.../data/harness-kit/` còn hook dùng `.../data/<id>/`: hai bên đọc HAI file `ext/local.json` khác nhau (`ext-registry.mjs:67-74`). [CKC: giá trị `<id>` thật, vd `harness-kit-harness-kit-marketplace`].
+  => CLI do agent gọi (không có biến) rơi về `.../data/harness-kit/` còn hook dùng `.../data/<id>/`: hai bên đọc HAI file `ext/local.json` khác nhau (`ext-registry.mjs:67-74`). [CKC: giá trị `<id>` thật, vd `harness-kit-synura`].
 Thiết kế:
 - Mặc định: dữ liệu `<dự án>/.harness/data`, cấu hình `<dự án>/.harness/config`, trạng thái `.harness/.state`. Biến env `HUB_DATA_DIR`/`HARNESS_CONFIG_DIR` vẫn là ghi đè tường minh.
 - Một hàm `resolveLayout({env,cwd})` trong `core/io/paths.mjs` trả `{mode:'env'|'project', workspace, dataDir, configDir, machineDir, source}`; hook (`hooks/run.mjs`), CLI `bin/`, shim agy cùng gọi (bỏ suy luận trùng ở `run.mjs:17-27`).

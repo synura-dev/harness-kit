@@ -54,7 +54,7 @@ function healLocal(root) {
 }
 function runCli(args) {
   const root = candidates().find(valid);
-  if (!root) { process.stderr.write(hkerr('HK-AGY-002', 'error', 'khong tim thay plugin harness-kit (env/harness-agy.local.json/installed_plugins.json)', 'cai plugin harness-kit (/plugin install harness-kit@harness-kit-marketplace) roi chay lai', false)); process.exit(1); }
+  if (!root) { process.stderr.write(hkerr('HK-AGY-002', 'error', 'khong tim thay plugin harness-kit (env/harness-agy.local.json/installed_plugins.json)', 'cai plugin harness-kit (/plugin install harness-kit@synura) roi chay lai', false)); process.exit(1); }
   healLocal(root);
   const env = { ...process.env, HARNESS_PLUGIN_DIR: path.resolve(root.trim()) };
   if (!(env.CLAUDE_PROJECT_DIR || '').trim()) env.CLAUDE_PROJECT_DIR = WS;
