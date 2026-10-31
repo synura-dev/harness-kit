@@ -92,3 +92,21 @@ test('workspaceRoot/dataRoot/codeRoot: ten trung tinh, hubDir/dataDir la alias',
   expect(dataRoot('x', { env })).toBe(dataDir('x', { env }));
   expect(codeRoot()).toBe(REPO_DIR);
 });
+
+import { ensureDataIgnore } from './paths.mjs';
+function pluginFixture() {
+  const repo = tmp(); const proj = tmp();
+  fs.mkdirSync(path.join(repo, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), '{}');
+  return { repo, proj };
+}
+test('ensureDataIgnore: HUB_DATA_DIR ngoai .harness -> khong tao <du an>/.harness', () => {
+  const { repo, proj } = pluginFixture();
+  ensureDataIgnore({ repoDir: repo, env: { CLAUDE_PROJECT_DIR: proj, HUB_DATA_DIR: path.join(proj, 'data') } });
+  expect(fs.existsSync(path.join(proj, '.harness'))).toBe(false);
+});
+test('ensureDataIgnore: mac dinh -> van tao .harness/.gitignore', () => {
+  const { repo, proj } = pluginFixture();
+  ensureDataIgnore({ repoDir: repo, env: { CLAUDE_PROJECT_DIR: proj } });
+  expect(fs.existsSync(path.join(proj, '.harness', '.gitignore'))).toBe(true);
+});

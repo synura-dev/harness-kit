@@ -53,6 +53,9 @@ export function ensureDataIgnore(opts = {}) {
     const r = resolveHub(opts);
     if (r.source !== 'plugin') return false;
     const d = path.join(r.hubDir, '.harness');
+    // HUB_DATA_DIR tro ra ngoai <du an>/.harness (vd hub: <du an>/data) -> khong tao .harness rac.
+    const e = (opts.env || process.env).HUB_DATA_DIR;
+    if (typeof e === 'string' && e.trim() && !(path.resolve(e.trim()) + path.sep).startsWith(d + path.sep)) return false;
     const f = path.join(d, '.gitignore');
     if (fs.existsSync(f)) {
       const cur = fs.readFileSync(f, 'utf8');
