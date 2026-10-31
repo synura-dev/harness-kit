@@ -91,7 +91,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
 
   const work = async () => {
-    const mods = await loadModules(ev, { only, validate: validateHookModule, order: profile.order });
+    const mods = await loadModules(ev, { only, validate: validateHookModule, order: profile.order, modules: cfg.modules });
     for (const m of mods) {
       if (m.error) { trace(m.id, m.error); continue; }
       if (!applies(m.mod, ev, state.input)) continue;
@@ -135,7 +135,7 @@ async function loadCfg() {
   try {
     const { loadHookConfig } = await import('../../core/config/config.mjs');
     const c = loadHookConfig('dispatch', { defaults: DEFAULTS, files: [path.join(HERE, 'hook.config.json')] }).config;
-    return { ...DEFAULTS, ...c, budgetsMs: { ...DEFAULTS.budgetsMs, ...(isObj(c.budgetsMs) ? c.budgetsMs : {}) } };
+    return { ...DEFAULTS, ...c, budgetsMs: { ...DEFAULTS.budgetsMs, ...(isObj(c.budgetsMs) ? c.budgetsMs : {}) }, modules: isObj(c.modules) ? c.modules : {} };
   } catch { return DEFAULTS; }
 }
 

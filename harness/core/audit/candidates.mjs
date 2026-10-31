@@ -37,6 +37,7 @@ export function repeatedFailureCandidates(events, nowIso) {
         status: 'incubating',
         createdAt: nowIso,
         lastSeenAt: nowIso,
+        ...(data.evs[0] && typeof data.evs[0].source === 'string' ? { source: data.evs[0].source } : {}), // external: ext:<id>
         _evs: data.evs,
         _fp: data.fp,
       });

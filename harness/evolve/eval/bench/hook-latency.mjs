@@ -142,8 +142,8 @@ function renderMarkdown(out) {
   return L.join('\n') + '\n';
 }
 
-// Thu muc doc lay tu config 'hub' (docsDir, mac dinh 'docs'); khong cung docs/ cua hub.
-const docsDir = () => { try { return loadConfig('hub', { root: workspaceRoot() }).config.docsDir || 'docs'; } catch { return 'docs'; } };
+// Thu muc doc lay tu config workspace (docsDir, mac dinh 'docs'); khong cung docs/ cua hub.
+const docsDir = () => { try { return loadConfig('workspace', { root: workspaceRoot() }).config.docsDir || 'docs'; } catch { return 'docs'; } };
 const DEFAULT_DOC = () => path.join(workspaceRoot(), docsDir(), 'research', 'hook-latency-baseline.md');
 
 /** Ghi --out an toan: khong ghi de doc mac dinh, khong ghi de file co san neu thieu force. Nem Error khi tu choi. */

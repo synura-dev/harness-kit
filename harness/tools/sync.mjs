@@ -1,5 +1,5 @@
 // node harness/tools/sync.mjs [--check] [--tool <name>]
-// Nguon that = .agents/ (rules, agents) va harness/skills/ (skill: build qua harness/build/skills, --adopt). Sinh adapter cho tung CLI bat trong config/hub/default.json.
+// Nguon that = .agents/ (rules, agents) va harness/skills/ (skill: build qua harness/build/skills, --adopt). Sinh adapter cho tung CLI bat trong config workspace.
 // --check: khong ghi, chi bao lech (exit 1 neu co lech/loi). Node ESM, khong dependency.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -102,7 +102,7 @@ if (process.argv[1] && samePath(process.argv[1], fileURLToPath(import.meta.url))
   if (ti >= 0 && (!only || only.startsWith('--'))) fail('--tool thieu gia tri');
   let tools;
   try { tools = loadTools(); } catch (e) { fail(e.message); }
-  if (only && !(only in tools)) fail('--tool ' + only + ' khong co trong config/hub/default.json (co: ' + Object.keys(tools).join(', ') + ')');
+  if (only && !(only in tools)) fail('--tool ' + only + ' khong co trong config workspace (co: ' + Object.keys(tools).join(', ') + ')');
   const res = await syncAll({ check, only });
   let bad = 0;
   for (const r of res) {

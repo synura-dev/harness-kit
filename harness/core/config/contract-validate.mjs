@@ -67,7 +67,7 @@ const manifestSchema = () => Object.freeze({
     id: 'kebab-string', kind: KINDS, layer: LAYERS, entry: 'string', domain: 'string?', desc: 'string?', cmds: 'string|string[]?', aliases: 'string[]?',
     domains: '{<domain>: file | {file, desc?, cmds?, default?, aliases?}}', adapters: '{<cli>: native|none|n/a|<file>, note?}',
     default: ['run', 'index'], files: '{helpers:string[]}', tests: 'string[]',
-    config: '{defaults:string|null,schema:string|null,tool:string?}', data: 'string|null', tier: TIERS,
+    config: '{defaults:string|null,schema:string|null,tool:string?}', data: 'string|null|[{path|zone,class,retentionDays?,tool}]', tier: TIERS,
   },
 });
 
@@ -89,7 +89,8 @@ export function validateExtManifest(obj) {
   if (obj.aliases !== undefined && !aliasOk(obj.aliases)) e.push('aliases phai la mang kebab-case');
   if (obj.default !== undefined && !['run', 'index'].includes(obj.default)) e.push('default phai la run|index');
   if (obj.domains !== undefined) {
-    if (!isObj(obj.domains)) e.push('domains phai la object');
+    if (Array.isArray(obj.domains)) { if (!obj.domains.every((x) => typeof x === 'string')) e.push('domains (mang) phai la string'); }
+    else if (!isObj(obj.domains)) e.push('domains phai la object hoac mang string');
     else for (const [k, v] of Object.entries(obj.domains)) {
       if (typeof v === 'string') continue;
       if (!isObj(v) || typeof v.file !== 'string') e.push(`domains.${k} phai la file hoac {file,...}`);
@@ -114,7 +115,16 @@ export function validateExtManifest(obj) {
       if (v !== undefined && v !== null && typeof v !== 'string') e.push(`config.${k} phai la string|null`);
     }
   }
-  if (obj.data !== undefined && obj.data !== null && typeof obj.data !== 'string') e.push('data phai la string|null');
+  if (Array.isArray(obj.data)) {
+    obj.data.forEach((d, i) => {
+      if (!isObj(d)) { e.push(`data[${i}] phai la object`); return; }
+      if (d.path === undefined && d.zone === undefined) e.push(`data[${i}] can path hoac zone`);
+      if (d.path !== undefined && typeof d.path !== 'string') e.push(`data[${i}].path phai la string`);
+      if (d.zone !== undefined && typeof d.zone !== 'string') e.push(`data[${i}].zone phai la string`);
+      if (d.class !== undefined && typeof d.class !== 'string') e.push(`data[${i}].class phai la string`);
+      if (d.tool !== undefined && typeof d.tool !== 'string') e.push(`data[${i}].tool phai la string`);
+    });
+  } else if (obj.data !== undefined && obj.data !== null && typeof obj.data !== 'string') e.push('data phai la string|null|mang');
   if (obj.tier !== undefined && !TIERS.includes(obj.tier)) e.push(`tier phai thuoc ${TIERS.join('|')}`);
   const helpers = isObj(obj.files) && strArr(obj.files.helpers) ? obj.files.helpers : [];
   const tests = strArr(obj.tests) ? obj.tests : [];

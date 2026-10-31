@@ -32,7 +32,6 @@ export function resolveHub({ env = process.env, repoDir = REPO_DIR, cwd = proces
 export const toPosix = (s) => String(s).replace(/\\/g, '/');
 export const hubDir = (opts) => resolveHub(opts).hubDir;
 // Ten trung tinh: workspaceRoot() = goc workspace (hubDir() la alias cu). codeRoot() = repo chua harness/ (khong doi theo HUB_DIR).
-export const resolveWorkspace = (opts) => { const r = resolveHub(opts); return { workspaceRoot: r.hubDir, source: r.source }; };
 export const workspaceRoot = (opts) => resolveHub(opts).hubDir;
 export const codeRoot = () => REPO_DIR;
 

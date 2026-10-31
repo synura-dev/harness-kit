@@ -370,7 +370,7 @@ export async function run(argv = process.argv.slice(2)) {
       try { mod = await import(new URL('./register.mjs', import.meta.url)); } catch {}
       const fn = mod && mod[cmd === 'register' ? 'registerCmd' : 'treeCmd'];
       if (!fn) { console.error(`data ${cmd}: chua cai`); return { code: 1 }; }
-      // Provider/owner roots tu config 'hub' (projectResolver: module export resolveProject; ownerRoots). Thieu -> bo qua.
+      // Provider/owner roots tu config workspace (projectResolver: module export resolveProject; ownerRoots). Thieu -> bo qua.
       let hc = {}; try { hc = loadConfig('workspace', { root: workspaceRoot() }).config || {}; } catch {}
       let resolveProject, resolverFailed = false;
       if (hc.projectResolver) {

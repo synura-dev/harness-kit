@@ -14,19 +14,10 @@
       "target": "system/audit",
       "path": "system/audit"
     },
-    "runs": {
-      "zone": "system",
-      "class": "log",
-      "owner": "hub/dispatch/dispatch-worker.mjs",
-      "retentionDays": 14,
-      "target": "system/runs",
-      "path": "system/runs",
-      "legacy": "runs"
-    },
     "play": {
       "zone": "system",
       "class": "log",
-      "owner": "hub/play",
+      "owner": "harness/tools/play",
       "retentionDays": 14,
       "target": "system/play",
       "path": "system/play",
@@ -84,27 +75,6 @@
       "target": "knowledge/evals",
       "path": "knowledge/evals",
       "legacy": "evals"
-    },
-    "tasks": {
-      "zone": "knowledge",
-      "class": "durable",
-      "owner": "hub/tasks",
-      "target": "knowledge/tasks",
-      "path": "knowledge/tasks",
-      "legacy": "tasks"
-    },
-    "agy-home": {
-      "zone": "external",
-      "class": "durable",
-      "owner": "hub/agy (app-state cua agy CLI)",
-      "retentionDays": null,
-      "caps": {
-        "maxFiles": 20000,
-        "maxDepth": 12
-      },
-      "note": "external: khong dung, khong clean, khong adopt",
-      "path": "external/agy-home",
-      "legacy": "agy-home"
     }
   },
   "_externalRule": "Du lieu do ben ngoai harness sinh: data scan phat hien -> data adopt vao _inbox -> duyet: dang ky (zone external neu la app-state) hoac xoa; doctor canh bao.",

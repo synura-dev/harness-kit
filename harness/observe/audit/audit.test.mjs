@@ -113,7 +113,7 @@ for (const [name, content] of [['missing', null], ['broken', '{nope'], ['partial
 }
 
 const withEnv = (env, fn) => {
-  const keys = ['CLAUDE_AUDIT_DIR', 'HUB_DATA_DIR'];
+  const keys = ['CLAUDE_AUDIT_DIR', 'HUB_DATA_DIR', 'HUB_DIR'];
   const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   for (const k of keys) delete process.env[k];
   Object.assign(process.env, env);
@@ -122,7 +122,7 @@ const withEnv = (env, fn) => {
 const hubDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 test('auditRoot: default is <hub>/data/audit', () => {
-  expect(withEnv({}, auditRoot)).toBe(dataPathFor('audit', { quiet: true }));
+  withEnv({}, () => expect(auditRoot()).toBe(dataPathFor('audit', { quiet: true })));
 });
 test('auditRoot: CLAUDE_AUDIT_DIR overrides', () => {
   expect(withEnv({ CLAUDE_AUDIT_DIR: '/x/y', HUB_DATA_DIR: '/h' }, auditRoot)).toBe('/x/y');

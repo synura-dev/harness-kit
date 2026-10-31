@@ -62,11 +62,11 @@ system/
   gateway/
     -  [log] owner=harness/cli/gateway retention=30d
   play/
-    -  [log] owner=hub/play retention=14d
+    -  [log] owner=harness/tools/play retention=14d
   proc-orphans/
     -  [log] owner=harness/constrain/proc-orphans retention=7d
   runs/
-    -  [log] owner=hub/dispatch/dispatch-worker.mjs retention=14d
+    -  [log] owner=<ext>/dispatch/dispatch-worker.mjs retention=14d
   watchdog/
     -  [log] owner=harness/cli/commands/proc-watch.mjs retention=14d
   worktree/
@@ -81,17 +81,17 @@ knowledge/
   memory/
     -  [durable] owner=harness/knowledge/vault retention=giu
   tasks/
-    -  [durable] owner=hub/tasks retention=giu
+    -  [durable] owner=<ext>/tasks retention=giu
 workspaces/
   ws-demo/
     -  [durable] owner=skill ws-demo retention=giu
   proj-demo/
-    release  [durable] owner=harness/tools/release retention=giu
+    release  [durable] owner=ext:release retention=giu
     starter-baseline  [artifact] owner=proj-demo deploy E3 (baseline Starter) retention=giu
     starter-work  [artifact] owner=proj-demo deploy E3 (ban sao Starter) retention=giu
 external/
   agy-home/
-    -  [durable] owner=hub/agy (app-state cua agy CLI) retention=giu
+    -  [durable] owner=<ext>/agy (app-state cua agy CLI) retention=giu
 ```
 <!-- data-tree:end -->
 
@@ -103,7 +103,7 @@ Dung khi du lieu dang ghi lien tuc (audit) nen khong `data mv` ca thu muc duoc.
 - `data relocate <key> <to-rel> [--yes]`: CHI ghi registry (`path=<to-rel>`, `legacy=<cu>`), khong di chuyen file; dry-run mac dinh. to-rel khong `..`/tuyet doi/reserved. Loi thoat: `data relocate <key> <duong cu> --yes` (ghi ve cho cu).
 - `data mvpart <key> [--yes] [--keep-days N | --before YYYY-MM-DD] [--rest]` (`--before`: chuyen moi phan vung date < gia tri, ngay mai = chuyen ca hom nay; `--rest`: chuyen them file khong theo ngay, md5 tung file, bo qua *.lock): chuyen tung phan vung `date=YYYY-MM-DD` tu legacy sang path moi; giu hom nay + hom qua (gio dia phuong; `--keep-days 0` chi giu hom nay). md5 manifest truoc/sau tung phan vung, rename cung o, lech md5 -> hoan tac phan vung. Trung ten file o dich -> file cu thanh `<ten>.legacy.jsonl` canh file moi (khong sua noi dung). EBUSY/EPERM -> bo qua phan vung, tiep tuc. Tran 5000 file/60s (`truncated: ...`), khoa `.state/mvpart.lock`, ghi vet data-access.
 - Doc gop: `dataReadRoots(key)` / `dataPathsFor(key, ...parts)` (core/registry) tra [path moi, legacy] chi nhung goc ton tai; reader lap qua cac goc. `data tail` doc ca legacy va gop theo `ts`.
-- May bat reader sot: `raw-paths.test.mjs` quet harness/ hub/ tim duong cung toi key goc (allowlist `ALLOW` co ly do); mac dinh chi bao, `DATA_RAW_PATHS_STRICT=1` de fail.
+- May bat reader sot: `raw-paths.test.mjs` quet harness/ va extension tim duong cung toi key goc (allowlist `ALLOW` co ly do); mac dinh chi bao, `DATA_RAW_PATHS_STRICT=1` de fail.
 Tmp/test: env `HARNESS_DATA_REGISTRY`, `HARNESS_DATA_WORKSPACES` doi registry cho CLI; `register --no-resolve` (chi khi HUB_DATA_DIR khac data that) bo qua `projects resolve`.
 
 - mvpart an toan: `--rest` bo qua thu muc `date=*` (giu bao ve keep-days); khong xoa de quy (chuyen not file moi cua writer, rmdir thu muc rong, file khong chuyen duoc bao `con lai`); rollback khong de file moi (giu ca hai); `--before` > hom nay+1 can `--force`.

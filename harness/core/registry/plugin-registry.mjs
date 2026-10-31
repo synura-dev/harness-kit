@@ -115,7 +115,7 @@ export function readManifests(harnessDir = HARNESS_DIR) {
   return out;
 }
 
-/** Registry plugins/ (opts.pluginsDir). plugins/ mac dinh co the vang (da chuyen het sang hub/ + observe/...): khong bao loi. */
+/** Registry plugins/ (opts.pluginsDir). plugins/ mac dinh co the vang (da chuyen het sang extension ngoai + observe/...): khong bao loi. */
 export function loadPluginRegistry(opts = {}) {
   const pluginsDir = opts.pluginsDir || path.join(HARNESS_DIR, 'plugins');
   const r = scan(subdirs(pluginsDir).map((d) => ({ rel: d, dir: path.join(pluginsDir, d) })));
@@ -151,7 +151,7 @@ export function renderArchitecture(opts = {}) {
   let extRoots = opts.extRoots;
   if (extRoots === undefined) { try { extRoots = loadConfig('workspace', { root: hub }).config.extRoots; } catch { /* khong co config -> khong extRoots */ } }
   const reg = loadHarnessRegistry({ harnessDir: hd, hubRoot: hub, extRoots });
-  const rel = (f) => path.relative(hub, f).split(path.sep).join('/'); // tuong doi goc hub: harness/... va hub/...
+  const rel = (f) => path.relative(hub, f).split(path.sep).join('/'); // tuong doi goc workspace: harness/... va <ext>/...
   const L = ['Sinh tu manifest registry + contract (`node harness/cli/harness.mjs adapters --write-arch`); KHONG sua tay trong khoi nay.', ''];
   L.push('### Cay thu muc harness/ (2 cap)', '```');
   for (const z of TOP_DIRS) {

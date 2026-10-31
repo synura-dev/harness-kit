@@ -10,7 +10,7 @@ import { loadDataRegistry, resolveDataRel, setEntryPath } from '../../core/regis
 import { manifest } from './mv.mjs';
 
 const LOCK_TTL_MS = 5 * 60 * 1000;
-export const MVPART_LIMITS = { maxFiles: 5000, timeoutS: 60 };
+const MVPART_LIMITS = { maxFiles: 5000, timeoutS: 60 };
 const fmtB = (n) => (n > 1048576 ? `${(n / 1048576).toFixed(1)}MB` : n > 1024 ? `${(n / 1024).toFixed(1)}KB` : `${n}B`);
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 const DATE_RE = /^date=(\d{4}-\d{2}-\d{2})$/;
@@ -116,7 +116,7 @@ function listRest(absRoot, lim) {
 }
 
 /** Chuyen 1 file (md5 truoc/sau, trung ten -> .legacy, khong de). Tra {moved,bytes,renamed} | {skipped,reason}. */
-export function moveFile(a, b, fsx = fs) {
+function moveFile(a, b, fsx = fs) {
   let before; try { before = crypto.createHash('md5').update(fs.readFileSync(a)).digest('hex'); } catch (e) { return { skipped: true, reason: e.code || e.message }; }
   let renamed = 0;
   fs.mkdirSync(path.dirname(b), { recursive: true });

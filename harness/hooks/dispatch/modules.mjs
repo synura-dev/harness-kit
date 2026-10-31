@@ -4,6 +4,8 @@ export const DEFAULTS = {
   enabled: true,
   maxInputBytes: 1048576, // stdin qua tran -> fail-open + ghi vet (khong doc tiep)
   stdinTimeoutMs: 1500,
+  // bat/tat module tuy chon: modules.<id>.enabled=false -> bo qua. Mac dinh tat ca BAT. Loi (guard, audit, worktree-hook) khong tat duoc.
+  modules: {},
   // tran thoi gian TONG moi su kien (ms), < `timeout` trong settings. Het -> tra phan da co, bo module chua chay.
   budgetsMs: {
     PreToolUse: 2500, PostToolUse: 2500, PostToolUseFailure: 2500, SubagentStart: 2500, PermissionRequest: 2500, PermissionDenied: 2500,
@@ -25,6 +27,8 @@ const INJECT = { id: 'knowledge-inject', load: () => import('../../knowledge/inj
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'knowledge-inject', 'verify-gate']);
+
 export const ORDER = Object.freeze({
   PreToolUse: [GUARD, DATA_GATE, APPROVAL, BASH_GUARD, MODEL_POLICY, AUDIT],
   PostToolUse: [AUDIT, DATA_CHECK],
@@ -44,10 +48,11 @@ export const ORDER = Object.freeze({
 
 
 /** Nap module cua mot su kien: [{id, gate, mod}]; module loi nap/khong hop le -> {id, gate, error}. Khong nem. */
-export async function loadModules(event, { only = '', validate, order = ORDER } = {}) {
+export async function loadModules(event, { only = '', validate, order = ORDER, modules = {} } = {}) {
   const out = [];
   for (const e of order[event] || []) {
     if (only && e.id !== only) continue;
+    if (OPTIONAL.includes(e.id) && modules && modules[e.id] && modules[e.id].enabled === false) continue;
     try {
       const mod = (await e.load()).default;
       const errs = typeof validate === 'function' ? validate(mod) : [];

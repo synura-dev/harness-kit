@@ -4,15 +4,15 @@ import path from 'node:path';
 import { loadConfig } from '../config/config.mjs';
 import { toPosix } from '../io/paths.mjs';
 
-// Danh sach CLI ho tro, doc tu config/hub/default.json (moi CLI: enabled, hookRegistration, adapterFiles). Co fallback khi thieu.
-// hookRegistration: file dang ky hook cua CLI (tuong doi goc hub). adapterFiles: ten file adapter hop le trong <hook>/ (de canh bao 'none' ma van co file).
+// Danh sach CLI ho tro, doc tu config workspace (config/workspace config: moi CLI: enabled, hookRegistration, adapterFiles). Co fallback khi thieu.
+// hookRegistration: file dang ky hook cua CLI (tuong doi goc workspace). adapterFiles: ten file adapter hop le trong <hook>/ (de canh bao 'none' ma van co file).
 
 export const DEFAULT_TOOLS = {
   claude: { enabled: true, hookRegistration: '.claude/settings.json', adapterFiles: ['adapters/claude.mjs'] },
   agy: { enabled: true, hookRegistration: '.agents/hooks.json', adapterFiles: ['adapters/agy.mjs'] },
 };
 
-// Nguon tools: config/hub/{default,local}.json qua loadConfig('workspace'); thieu thi doc cu config/tools.json (canh bao legacy-config).
+// Nguon tools: config workspace qua loadConfig('workspace'); thieu thi doc cu config/tools.json (canh bao legacy-config).
 // strict=true: tools.json cu hong/khong doc duoc thi throw (sync); mac dinh nuot loi. Tra {tools|null, warnings}.
 export function loadToolsConfig(root, { strict = false } = {}) {
   const r = loadConfig('workspace', { root });
@@ -21,7 +21,7 @@ export function loadToolsConfig(root, { strict = false } = {}) {
   let txt;
   try { txt = fs.readFileSync(path.join(root, 'config', 'tools.json'), 'utf8'); }
   catch (e) { if (strict && e && e.code !== 'ENOENT') throw new Error('config/tools.json khong doc duoc: ' + e.message); return { tools: null, warnings }; }
-  warnings.push('legacy-config: tools.json -> hub/default.json');
+  warnings.push('legacy-config: tools.json -> workspace config');
   try { const j = JSON.parse(txt.charCodeAt(0) === 0xfeff ? txt.slice(1) : txt); return { tools: j && j.tools && typeof j.tools === 'object' ? j.tools : (strict ? {} : null), warnings }; }
   catch (e) { if (strict) throw new Error('config/tools.json JSON hong: ' + e.message); return { tools: null, warnings }; }
 }

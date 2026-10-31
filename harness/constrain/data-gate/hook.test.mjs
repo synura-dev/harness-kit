@@ -53,7 +53,7 @@ test('Bash: false positives allowed, cwd-aware', async () => {
   assert.ok(denied(await call('Bash', { command: 'ls ../data/' })) === false); // ../data tu tmp = ngoai dataDir
 });
 test('Bash: bien the cong harness duoc phep, doc data van chan', async () => {
-  for (const c of ['timeout 120 node harness/cli/harness.mjs data scan | head -n 60', 'cd "E:/11. Agents" && node harness/cli/harness.mjs data clean', 'node "E:/11. Agents/harness/cli/harness.mjs" data stat', 'node E:\\x\\harness\\cli\\harness.mjs data ls | head', 'timeout 60 node harness/cli/harness.mjs data ls 2>&1 | tail -5'])
+  for (const c of ['timeout 120 node harness/cli/harness.mjs data scan | head -n 60', 'cd "E:/my ws" && node harness/cli/harness.mjs data clean', 'node "E:/my ws/harness/cli/harness.mjs" data stat', 'node E:\\x\\harness\\cli\\harness.mjs data ls | head', 'timeout 60 node harness/cli/harness.mjs data ls 2>&1 | tail -5'])
     assert.ok(!denied(await call('Bash', { command: c })), c);
   for (const c of ['node harness/cli/harness.mjs data ls x && cat data/x', 'timeout 5 cat data/x.json', 'node -e "require(\'fs\').readFileSync(\'data/x\')" harness/', 'cd x && cat data/x.json | head'])
     assert.ok(denied(await call('Bash', { command: c })), c);

@@ -4,6 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dataRoot, workspaceRoot, isPluginMode, codeRoot } from '../io/paths.mjs';
+import { loadConfig } from '../config/config.mjs';
 
 /** Cac vung cap 1 cua data/. */
 export const ZONES = Object.freeze(['system', 'knowledge', 'workspaces', 'external', '_inbox']);
@@ -23,7 +24,7 @@ export const CLASS_DEFAULTS = Object.freeze({
 const ENFORCE_MODES = Object.freeze(['off', 'warn', 'enforce']);
 export const DEFAULT_ENFORCE = 'warn';
 /** Duong dan mac dinh khai bao khi registry thieu entry/path (khong roi ve key goc cu). */
-export const DEFAULT_PATHS = Object.freeze({ audit: 'system/audit' });
+const DEFAULT_PATHS = Object.freeze({ audit: 'system/audit' });
 const warnedNoPath = new Set();
 
 /** Cac rule canh bao. */
@@ -95,6 +96,50 @@ function normEntry(e, ws) {
   return o;
 }
 
+/**
+ * Muc data khai bao trong manifest cua external (<extRoot>/<ten>/manifest.json, extRoots tu config workspace; field data[]). Doc truc tiep manifest
+ * (khong can external da dang ky/chay): zone+path => path 'zone/path'; chi path => path; chi zone => 'zone/<id>'. Co limit, khong throw.
+ * data[] cho phep them `legacy` (ten cu cap 1). Muc sai bi bo. owner = <extRoot>/<ten>.
+ */
+const MANIFEST_SCAN_MAX = 40;
+export function manifestDataEntries(extDir, ownerPrefix = path.basename(extDir)) {
+  const out = {};
+  let names = [];
+  try { names = fs.readdirSync(extDir, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).sort().slice(0, MANIFEST_SCAN_MAX); } catch { return out; }
+  for (const n of names) {
+    const m = readJ(path.join(extDir, n, 'manifest.json'));
+    if (!isObj(m) || !Array.isArray(m.data)) continue;
+    const id = typeof m.id === 'string' && m.id ? m.id : n;
+    for (const e of m.data) {
+      try {
+        if (!isObj(e)) continue;
+        if (e.zone !== undefined && !ZONES.includes(e.zone)) continue;
+        if (e.class !== undefined && !CLASSES.includes(e.class)) continue;
+        if (e.path === undefined && e.zone === undefined) continue;
+        const segs = (e.path === undefined ? [id] : String(e.path).split(/[\\/]/)).filter(Boolean);
+        if (!segs.length || segs.some((x) => x === '.' || x === '..') || path.isAbsolute(String(e.path ?? ''))) continue;
+        const rel = [...(e.zone ? [e.zone] : []), ...segs].join('/');
+        const key = e.tool ? String(e.tool) : segs[segs.length - 1];
+        if (out[key]) continue;
+        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), target: rel, path: rel, ...(e.legacy ? { legacy: String(e.legacy) } : {}) };
+      } catch { /* bo muc sai */ }
+    }
+  }
+  return out;
+}
+
+const extRootsMemo = new Map();
+/** Thu muc ext (tuyet doi) theo config workspace.extRoots (tuong doi goc ma/workspace). opts.extDirs ghi de (test). Loi -> rong. */
+function extDirsFor(base, opts) {
+  if (Array.isArray(opts.extDirs)) return opts.extDirs.map((d) => ({ abs: d, prefix: path.basename(d) }));
+  if (!extRootsMemo.has(base)) {
+    let roots = [];
+    try { const r = loadConfig('workspace', { root: base, env: opts.env || process.env }).config.extRoots; if (Array.isArray(r)) roots = r.filter((x) => typeof x === 'string' && x && !path.isAbsolute(x) && !x.split(/[\\/]/).includes('..')); } catch { /* khong co */ }
+    extRootsMemo.set(base, roots);
+  }
+  return extRootsMemo.get(base).map((r) => ({ abs: path.join(base, r), prefix: toPosix(r) }));
+}
+
 /** Hop nhat registry.json (+ config/data/workspaces/*.json). Loi doc -> registry rong (fail-open, failed=true). */
 export function loadDataRegistry(opts = {}) {
   const env = opts.env || process.env;
@@ -104,7 +149,9 @@ export function loadDataRegistry(opts = {}) {
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   let names = [];
   try { names = fs.readdirSync(wsDir).filter((n) => n.endsWith('.json') && !n.endsWith('.example.json')).sort(); } catch {}
-  const ck = [file, mtimeOf(file), wsDir, ...names.map((n) => n + ':' + mtimeOf(path.join(wsDir, n))), dir, env.HARNESS_DATA_ENFORCE || ''].join('\n');
+  const extBase = isPluginMode() ? codeRoot() : hub;
+  const extDirs = extDirsFor(extBase, opts);
+  const ck = [file, mtimeOf(file), extDirs.map((d) => d.abs).join(';'), wsDir, ...names.map((n) => n + ':' + mtimeOf(path.join(wsDir, n))), dir, env.HARNESS_DATA_ENFORCE || ''].join('\n');
   if (!opts.noCache && cache.has(ck)) return cache.get(ck);
   const reg = { enforce: DEFAULT_ENFORCE, entries: {}, reserved: [], dataDir: dir, failedFiles: [] };
   try {
@@ -113,6 +160,8 @@ export function loadDataRegistry(opts = {}) {
     if (ENFORCE_MODES.includes(j.enforce)) reg.enforce = j.enforce;
     if (Array.isArray(j.reserved)) reg.reserved = j.reserved.map(String);
     if (isObj(j.entries)) for (const [k, v] of Object.entries(j.entries)) if (isObj(v)) reg.entries[k] = normEntry(v);
+    // Muc tu manifest external (extRoots): registry.json thang neu cung key (cho phep ghi de / chuyen dan).
+    for (const d of extDirs) for (const [k, v] of Object.entries(manifestDataEntries(d.abs, d.prefix))) if (!reg.entries[k]) reg.entries[k] = normEntry(v);
     for (const n of names) {
       const w = readJ(path.join(wsDir, n));
       if (!isObj(w)) { reg.failedFiles.push(path.join(wsDir, n)); reg.failed = true; continue; }

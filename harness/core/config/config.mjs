@@ -110,7 +110,7 @@ export const PROJECT_LAYER_ALLOW = Object.freeze({ guard: Object.freeze(['denyPa
 
 export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) {
   const pd = typeof env.CLAUDE_PLUGIN_DATA === 'string' && env.CLAUDE_PLUGIN_DATA.trim();
-  let pname = 'agent-guard-kit'; try { pname = JSON.parse(fs.readFileSync(path.join(repoDir, '.claude-plugin', 'plugin.json'), 'utf8')).name || pname; } catch { /* mac dinh */ }
+  let pname = 'harness-kit'; try { pname = JSON.parse(fs.readFileSync(path.join(repoDir, '.claude-plugin', 'plugin.json'), 'utf8')).name || pname; } catch { /* mac dinh */ }
   const machineDir = path.join(pd ? pd : path.join(os.homedir(), '.claude', 'plugins', ['da', 'ta'].join(''), pname), 'config');
   let projectDir = null; try { projectDir = path.join(workspaceRoot({ env, repoDir }), '.harness', 'config'); } catch { /* khong co */ }
   return { machineDir, projectDir };
