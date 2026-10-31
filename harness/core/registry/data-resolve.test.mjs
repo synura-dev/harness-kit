@@ -73,3 +73,11 @@ test('memory thieu entry: mac dinh memory, khong canh bao no-path', () => {
   try { expect(resolveDataRel('memory', o).rel).toBe('memory'); } finally { process.stderr.write = w; }
   expect(got).not.toContain('rule=no-path');
 });
+
+test('evolve thieu entry: mac dinh evolve, khong canh bao no-path', () => {
+  const { o } = mk({ zone: 'workspaces', class: 'log', owner: 'o' });
+  const w = process.stderr.write; let got = '';
+  process.stderr.write = (s) => { got += s; return true; };
+  try { expect(resolveDataRel('evolve', o).rel).toBe('evolve'); } finally { process.stderr.write = w; }
+  expect(got).not.toContain('rule=no-path');
+});
