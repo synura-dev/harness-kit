@@ -2,6 +2,7 @@
 // Chay module co adapter agy: audit (adapters/agy.mjs, tu ghi), bash-guard (adapters/agy.mjs, deny), session (doctor luc SessionStart).
 // VERIFIED agy 1.4.3 (xem hooks/README.md): PreToolUse stdout `{}` = deny moi tool -> PHAI in {"decision":"allow"}; PostToolUse/SessionStart in object khong truong la;
 // updatedInput bi agy chan -> khong dung. Su kien lay tu argv (payload agy khong co hook_event_name; adapter audit tu suy ra nhu cu).
+import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -84,6 +85,11 @@ const APPROVAL_AGY = {
 const SESSION_AGY = {
   id: 'session-agy', events: ['SessionStart'], timeoutMs: 9000, onError: 'open',
   async handle() {
+    try { // tu sinh lai shim + local.json neu thieu (chi khi du an da dung hook agy cua harness-kit)
+      const ws = (process.env.CLAUDE_PROJECT_DIR || '').trim();
+      const hj = ws && path.join(ws, '.agents', 'hooks.json');
+      if (hj && fs.existsSync(hj) && /"harness-kit"/.test(fs.readFileSync(hj, 'utf8'))) { const { init } = await import('../../cli/commands/agy.mjs'); init({ dir: ws }); }
+    } catch (e) { process.stderr.write('HKERR ' + JSON.stringify({ code: 'HK-AGY-003', severity: 'warn', cause: 'khong tu sinh duoc shim agy: ' + String(e && e.message).slice(0, 120), fix_command: 'harness agy init', next_step: 'chay lenh fix_command trong du an', safe: true, source: 'hooks/dispatch/agy.mjs' }) + '\n'); }
     const r = spawnSync(process.execPath, [DOCTOR], { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     const out = String(r.stdout || '');
     if (/\[MISS\]|\[LOI\]/.test(out)) process.stderr.write(out);

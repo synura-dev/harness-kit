@@ -3,6 +3,9 @@
 // Tim goc plugin (theo may, khong commit): env HARNESS_KIT_PLUGIN_DIR > .agents/harness-agy.local.json {pluginRoot} (do init ghi, gitignored)
 //   > ~/.claude/plugins/installed_plugins.json (harness-kit@*, uu tien projectPath = du an, roi lastUpdated moi nhat).
 // Roi chay <plugin>/harness/hooks/dispatch/agy.mjs <Event> voi workspace = .agents/.. (CLAUDE_PROJECT_DIR).
+// Che do CLI: `node ./harness-agy-shim.mjs cli <lenh...>` (cwd bat ky; workspace = .agents/..) chay cong CLI cua plugin (bin/harness) bang process.execPath + duong dan tuyet doi, khong PATH.
+//   Loi (khong thay plugin / spawn loi): mot dong HKERR (HK-AGY-002, severity error, fix_command) + exit 1; ma thoat CLI duoc giu nguyen.
+// Tu chua: khi tim duoc plugin ma .agents/harness-agy.local.json thieu/lech -> ghi lai (best effort).
 // Fail-open: khong thay plugin / loi -> PreToolUse in {"decision":"allow"}, event khac {}; mot dong HKERR ra stderr; exit 0.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,18 +35,42 @@ export function candidates({ env = process.env, here = HERE, ws = WS, home = os.
   return out;
 }
 
+const FIX = 'harness agy init';
+function hkerr(code, severity, cause, next, safe) {
+  return 'HKERR ' + JSON.stringify({ code, severity, cause, fix_command: FIX, next_step: next, safe, source: '.agents/harness-agy-shim.mjs' }) + '\n';
+}
 function fail(cause) {
-  process.stderr.write('HKERR ' + JSON.stringify({ code: 'HK-AGY-001', severity: 'warn', cause, fix_command: 'harness agy init', next_step: 'hook agy bo qua (fail-open); chay harness agy init trong du an', safe: true, source: '.agents/harness-agy-shim.mjs' }) + '\n');
+  process.stderr.write(hkerr('HK-AGY-001', 'warn', cause, 'hook agy bo qua (fail-open); chay harness agy init trong du an', true));
   process.stdout.write(FALLBACK);
   process.exit(0);
 }
+function healLocal(root) {
+  try {
+    const f = path.join(HERE, 'harness-agy.local.json');
+    const want = path.resolve(root.trim());
+    const cur = readJson(f);
+    if (!cur || cur.pluginRoot !== want) fs.writeFileSync(f, JSON.stringify({ pluginRoot: want }, null, 2) + '\n');
+  } catch { /* chi la tu chua, bo qua */ }
+}
+function runCli(args) {
+  const root = candidates().find(valid);
+  if (!root) { process.stderr.write(hkerr('HK-AGY-002', 'error', 'khong tim thay plugin harness-kit (env/harness-agy.local.json/installed_plugins.json)', 'cai plugin harness-kit (/plugin install harness-kit@harness-kit-marketplace) roi chay lai', false)); process.exit(1); }
+  healLocal(root);
+  const env = { ...process.env, HARNESS_PLUGIN_DIR: path.resolve(root.trim()) };
+  if (!(env.CLAUDE_PROJECT_DIR || '').trim()) env.CLAUDE_PROJECT_DIR = WS;
+  const r = spawnSync(process.execPath, [path.join(root.trim(), 'bin', 'harness'), ...args], { stdio: 'inherit', env, windowsHide: true });
+  if (r.error) { process.stderr.write(hkerr('HK-AGY-002', 'error', String(r.error.message).slice(0, 200), 'kiem node va plugin harness-kit', false)); process.exit(1); }
+  process.exit(r.status === null ? 1 : r.status);
+}
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  if (EVENT === 'cli') runCli(process.argv.slice(3));
   let input = '';
   try { input = fs.readFileSync(0, 'utf8'); } catch { /* khong co stdin */ }
   if (!/^[A-Za-z]+$/.test(EVENT)) fail('su kien khong hop le: ' + EVENT.slice(0, 40));
   const root = candidates().find(valid);
   if (!root) fail('khong tim thay plugin harness-kit (env/harness-agy.local.json/installed_plugins.json)');
+  healLocal(root);
   const env = { ...process.env, HARNESS_PLUGIN_DIR: path.resolve(root.trim()) };
   if (!(env.CLAUDE_PROJECT_DIR || '').trim()) env.CLAUDE_PROJECT_DIR = WS;
   try { (await import(pathToFileURL(path.join(root.trim(), 'harness', 'core', 'io', 'paths.mjs')).href)).applyWorkspaceEnv(env, env.CLAUDE_PROJECT_DIR); } catch { /* plugin mode mac dinh */ }

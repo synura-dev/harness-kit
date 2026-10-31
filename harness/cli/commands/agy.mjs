@@ -13,7 +13,11 @@ const PLUGIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 
 export const HOOK_KEY = 'harness-kit';
 export const SHIM = 'harness-agy-shim.mjs';
 export const LOCAL = 'harness-agy.local.json';
-export const RULES = Object.freeze(['command(harness)']);
+export const RULES = Object.freeze(['command(node ./.agents/harness-agy-shim.mjs)', 'command(harness)']);
+/** Lenh CLI cho agy trong brief/rules mau: khong PATH, khong launcher (shim sinh boi harness agy init). */
+export const CLI_PREFIX = `node ./.agents/${SHIM} cli`;
+export const cliHint = (cmd = '<domain> [lenh]') => `${CLI_PREFIX} ${cmd}`;
+export const FIX_COMMAND = 'harness agy init';
 const PRE_MATCH = 'run_command|write_file|edit_file';
 const POST_MATCH = 'run_command|write_file|edit_file|read_file|view_file|call_mcp_tool|send_message|invoke_subagent|mcp_.*';
 
