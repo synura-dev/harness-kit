@@ -95,6 +95,20 @@ test('plugin thieu -> exit 3 kem huong dan', () => {
   const r = runExternal(get(good), 'good', [], { coreDir: path.join(tmp, 'khong-co-plugin') });
   expect(r.code).toBe(3);
   expect(r.stderr).toContain('plugin');
+  const j = JSON.parse(r.stderr.split('\n')[0].replace(/^HKERR /, ''));
+  expect(j).toMatchObject({ code: 'HK_EXT_MISSING_CORE', severity: 'error', safe: true, source: 'ext:good/good' });
+  expect(j.fix_command).toBeTruthy(); expect(j.next_step).toBeTruthy(); expect(j.cause).toContain('missing-core');
+  expect(r.stderr.split('\n')[1]).toContain('ext good/good: missing-core');
+});
+
+test('ext-fail: HKERR dong dau + audit co code/fix_command/next_step, exit giu nguyen', async () => {
+  const r = runExternal(get(thrower), 'thrower');
+  expect(r.code).toBe(EXIT.FAIL);
+  expect(r.stderr.startsWith('HKERR {')).toBe(true);
+  expect(JSON.parse(r.stderr.split('\n')[0].slice(6)).code).toBe('HK_EXT_EXIT');
+  const ev = (await audit()).filter((e) => e.status === 'ext-fail' && e.source === 'ext:thrower').pop();
+  expect(ev.data).toMatchObject({ code: 'HK_EXT_EXIT', reason: 'exit' });
+  expect(ev.data.fix_command).toBeTruthy(); expect(ev.data.next_step).toBeTruthy();
 });
 
 test('external loi khong lam hong core: throw, treo, rac, khong main, manifest hong', async () => {

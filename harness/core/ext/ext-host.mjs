@@ -6,6 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { auditExt, ctxCompatible, CTX_VERSION, hash8, normalizeDataEntries } from './ctx.mjs';
 import { manifestDomains } from './manifest-domains.mjs';
+import { hkerrLine } from '../io/paths.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const HARNESS_DIR = path.resolve(HERE, '..', '..');
@@ -71,13 +72,32 @@ export function loadExternals(list, { coreDomains = {}, limits = {} } = {}) {
  * Chay 1 domain external trong tien trinh con. KHONG nem. -> { code, stdout, stderr, status }.
  * opts: timeoutS, maxBytes, coreDir (mac dinh harness/ nay; thieu -> exit 3), workspace, json (kiem stdout la JSON).
  */
+/** Hop dong loi cho tung ly do ext-fail: { code, fix_command, next_step, safe }. */
+export function extErr(status, ext, domain, { timeoutS = EXT_LIMITS.timeoutS, maxBytes = EXT_LIMITS.maxBytes } = {}) {
+  const id = ext && ext.id;
+  const T = {
+    'missing-core': ['HK_EXT_MISSING_CORE', 'claude plugin install harness-kit', 'cai plugin harness-kit (hoac dat HARNESS_DIR tro toi harness/) roi chay lai'],
+    'bad-entry': ['HK_EXT_BAD_ENTRY', `harness ext list`, `sua "entry" trong manifest.json cua ext ${id} roi chay: harness ext approve ${id}`],
+    timeout: ['HK_EXT_TIMEOUT', `harness ${domain} --timeout-s ${timeoutS * 2}`, 'tang --timeout-s hoac thu hep pham vi lenh'],
+    'output-overflow': ['HK_EXT_OVERFLOW', `harness ${domain} --help`, `output vuot ${maxBytes} byte: loc/thu hep output (them bo loc, gioi han dong)`],
+    'bad-output': ['HK_EXT_BAD_OUTPUT', `harness ${domain} --raw`, `ext ${id} phai in JSON hop le khi --json; xem output bang --raw`],
+    exit: ['HK_EXT_EXIT', `harness ${domain} --raw`, `xem stderr cua ext ${id}; sua loi trong ext roi chay lai`],
+    'spawn-error': ['HK_EXT_SPAWN', 'harness doctor', 'chay harness doctor kiem node/plugin'],
+    'host-error': ['HK_EXT_HOST', 'harness doctor', 'chay harness doctor; neu lap lai, bao loi plugin'],
+  };
+  const [code, fix_command, next_step] = T[status] || ['HK_EXT_FAIL', 'harness doctor', 'chay harness doctor'];
+  return { code, fix_command, next_step, safe: true };
+}
+
 export function runExternal(ext, domain, argv = [], opts = {}) {
   const t0 = Date.now();
   const timeoutS = opts.timeoutS || EXT_LIMITS.timeoutS;
   const maxBytes = opts.maxBytes || EXT_LIMITS.maxBytes;
   const fail = (code, status, why, extra = {}) => {
-    auditExt(ext.id, { ok: false, event: 'run', status: 'ext-fail', target: domain, ms: Date.now() - t0, error: `${status}: ${why}`, data: { exit: code, reason: status } });
-    return { code, status, stdout: extra.stdout || '', stderr: `ext ${ext.id}/${domain}: ${status}: ${why}\n${extra.stderr || ''}`.slice(0, 2000) };
+    const k = extErr(status, ext, domain, { timeoutS, maxBytes });
+    auditExt(ext.id, { ok: false, event: 'run', status: 'ext-fail', target: domain, ms: Date.now() - t0, error: `${status}: ${why}`, data: { exit: code, reason: status, code: k.code, fix_command: k.fix_command, next_step: k.next_step } });
+    const line = hkerrLine(k.code, `${status}: ${why}`, { severity: 'error', fix_command: k.fix_command, next_step: k.next_step, safe: k.safe, source: `ext:${ext.id}/${domain}` });
+    return { code, status, stdout: extra.stdout || '', stderr: `${line}\next ${ext.id}/${domain}: ${status}: ${why}. Tiep: ${k.next_step}\n${extra.stderr || ''}`.slice(0, 2000) };
   };
   try {
     const coreDir = opts.coreDir || HARNESS_DIR;

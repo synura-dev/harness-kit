@@ -168,6 +168,9 @@ export function applyWorkspaceEnv(env, projectDir) {
   return { marker, set };
 }
 // Mot dong loi theo hop dong (HKERR <json>) ra stderr; khong bao gio nem.
-export function hkerr(code, cause, { severity = 'warn', fix_command = 'harness doctor', next_step = 'chay harness doctor', safe = true, source = '' } = {}) {
-  try { process.stderr.write('HKERR ' + JSON.stringify({ code, severity, cause: String(cause).slice(0, 300), fix_command, next_step, safe, source }) + '\n'); } catch { /* fail-open */ }
+export function hkerrLine(code, cause, { severity = 'warn', fix_command = 'harness doctor', next_step = 'chay harness doctor', safe = true, source = '' } = {}) {
+  return 'HKERR ' + JSON.stringify({ code, severity, cause: String(cause).slice(0, 300), fix_command, next_step, safe, source });
+}
+export function hkerr(code, cause, o = {}) {
+  try { process.stderr.write(hkerrLine(code, cause, o) + '\n'); } catch { /* fail-open */ }
 }
