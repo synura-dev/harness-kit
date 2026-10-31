@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { workspaceRoot, toPosix, readJson } from '../../core/io/paths.mjs';
+import { workspaceRoot, toPosix, readJson, dataDir, codeRoot } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { auditRoot } from '../../core/audit/audit-write.mjs';
@@ -29,7 +29,7 @@ const ctx = (o = {}) => {
   const hub = path.resolve(o.hubRoot || workspaceRoot());
   const evo = path.resolve(o.dataRoot || rootFor('evolve'));
   const audits = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);
-  return { hub, evo, audits, vault: path.resolve(o.vaultRoot || rootFor('memory')) };
+  return { hub, evo, audits, vault: path.resolve(o.vaultRoot || rootFor('memory')), base: path.resolve(o.dataBase || dataDir()) };
 };
 const appendLog = (c, rec) => { try { fs.mkdirSync(c.evo, { recursive: true }); fs.appendFileSync(path.join(c.evo, 'applied.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...rec }) + '\n'); } catch {} };
 
@@ -110,8 +110,11 @@ export async function findCandidates(o = {}) {
   return { items, total: items.length, scanned, days, threshold, truncated };
 }
 
-import { classifyTarget, same, layoutOf } from './policy.mjs';
-export { classifyTarget };
+import { classifyTarget as classifyRaw, same, layoutOf as layoutRaw } from './policy.mjs';
+// Policy luon nhan goc du lieu/evolve/vault THUC (ctx) de suy dich mac dinh: <dataDir>/<evolve>/skills, <dataDir>/<memory>/fact.
+const polOpts = (o = {}) => { const c = ctx(o); return { ...o, hubRoot: c.hub, dataBase: c.base, dataRoot: c.evo, vaultRoot: c.vault }; };
+export const classifyTarget = (target, kind, o = {}) => classifyRaw(target, kind, polOpts(o));
+const layoutOf = (o = {}) => layoutRaw(polOpts(o), ctx(o).hub);
 
 // ---- proposals ----
 const pFile = (c, id) => path.join(c.evo, 'proposals', `${id}.json`);
@@ -175,7 +178,8 @@ function writeTarget(kind, pol, buf, c, o, tag) {
     const tmp = path.join(c.evo, 'tmp', `${assertSafeId(tag)}-${crypto.randomBytes(4).toString('hex')}.md`);
     fs.mkdirSync(path.dirname(tmp), { recursive: true });
     fs.writeFileSync(tmp, buf);
-    const gw = o.gatewayCmd || [process.execPath, path.join(c.hub, 'harness', 'cli', 'harness.mjs')];
+    // Cong knowledge nam o goc MA (plugin/repo), khong o workspace (du an thuong/hub khong co harness/).
+    const gw = o.gatewayCmd || [process.execPath, path.join(codeRoot(), 'harness', 'cli', 'harness.mjs')];
     const r = spawnSync(gw[0], [...gw.slice(1), 'knowledge', 'put', '--id', pol.knowledgeId, '--kind', 'fact', '--body-file', tmp, '--replace', '--root', c.vault],
       { cwd: c.hub, encoding: 'utf8', timeout: LIMITS.gatewayTimeoutMs, windowsHide: true });
     fs.rmSync(tmp, { force: true });
@@ -214,7 +218,7 @@ export function check(id, o = {}) {
 
 // ---- apply / rollback ----
 const verDir = (c, ver) => path.join(c.evo, 'versions', assertSafeId(ver));
-const manualHelp = (p) => `Dich ${p.change && p.change.target} chi nguoi sua tay. Noi dung de xuat: data/knowledge/evolve/proposals/${p.id}.json (truong change.after); bang chung: fp=${p.evidence && p.evidence.fp}, ${p.evidence && p.evidence.count} lan.`;
+const manualHelp = (p, c) => `Dich ${p.change && p.change.target} chi nguoi sua tay. Noi dung de xuat: ${toPosix(pFile(c, p.id))} (truong change.after); bang chung: fp=${p.evidence && p.evidence.fp}, ${p.evidence && p.evidence.count} lan.`;
 
 /** Ap co version. Khong tin file de xuat: phan loai lai dich, kiem sha(after)/before, TU CHAY LAI oracle tren dung buffer se ghi. */
 export function apply(id, o = {}) {
@@ -222,9 +226,9 @@ export function apply(id, o = {}) {
   const p = loadProposal(id, o);
   const refuse = (code, reason, extra = {}) => { appendLog(c, { op: 'apply', id, ok: false, reason }); return { ok: false, code, reason, ...extra }; };
   const pol = classifyTarget(p.change && p.change.target, p.kind, o);
-  if (pol.forbidden) return refuse(3, `tu choi (ke ca co --approve): ${pol.reason}`, { manual: manualHelp(p) });
+  if (pol.forbidden) return refuse(3, `tu choi (ke ca co --approve): ${pol.reason}`, { manual: manualHelp(p, c) });
   if (!o.approve) return refuse(2, 'can nguoi duyet: chay lai voi --approve');
-  if (!pol.ok) return refuse(3, `tu choi: ${pol.reason}`, { manual: manualHelp(p) });
+  if (!pol.ok) return refuse(3, `tu choi: ${pol.reason}`, { manual: manualHelp(p, c) });
   if (p.status === 'applied') return refuse(4, `da ap (ver ${p.ver})`);
   const afterBuf = afterOf(p);
   if (!afterBuf || afterBuf.length > LIMITS.maxAfterBytes) return refuse(4, 'change.after khong hop le/qua lon');

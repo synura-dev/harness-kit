@@ -1,11 +1,13 @@
-// Policy dich cho vong tien hoa: chuan hoa (Windows), cam tuong minh, realpath (junction/symlink), allowlist DENY-BY-DEFAULT.
+// Policy dich cho vong tien hoa: chuan hoa (Windows), cam tuong minh, realpath trong goc du lieu (junction/symlink), allowlist DENY-BY-DEFAULT.
 import fs from 'node:fs';
 import path from 'node:path';
-import { workspaceRoot, isInside, REPO_DIR, toPosix } from '../../core/io/paths.mjs';
+import { workspaceRoot, isInside, REPO_DIR, toPosix, dataDir } from '../../core/io/paths.mjs';
 import { loadConfig } from '../../core/config/config.mjs';
 
 // ---- policy dich: DENY-BY-DEFAULT ----
-// Chi ghi duoc: skill moi harness/skills/**/*.md, fact qua cong knowledge. Moi thu khac tu choi. FORBIDDEN chi de bao "chi sua tay" ro rang.
+// Dich la duong dan LOGIC tuong doi GOC DU LIEU (dataDir: <du an>/.harness/data | <hub>/data | HUB_DATA_DIR), khong tuong doi workspace.
+// Chi ghi duoc: skill de xuat <evolve>/skills/<ten>/**.md (cho nguoi duyet; KHONG tu ghi .claude/skills, .agents/skills hay plugin),
+// fact <memory>/fact/<id>.md (ghi qua cong knowledge). Moi thu khac tu choi. FORBIDDEN chi de bao "chi sua tay" ro rang.
 const FORBIDDEN = [
   [/^harness\/constrain(\/|$)/, 'nhom Han che (constrain)'],
   [/^harness\/hooks(\/|$)/, 'ma hook'],
@@ -16,15 +18,29 @@ const FORBIDDEN = [
   [/^\.claude(\/|$)/, '.claude (settings/agents)'],
   [/^\.agents(\/|$)/, '.agents (hooks/agents)'],
   [/^\.git(\/|$)/, '.git'],
+  [/^config(\/|$)/, 'config/'],
 ];
-// Vi tri cho phep ghi la CAU HINH (tool 'evolve', lop plugin/may; lop du an khong ha duoc). Mac dinh = bo cuc hien tai. Cam tuong minh o tren luon thang.
-const DEFAULT_LAYOUT = Object.freeze({ skillsDir: 'harness/skills', factDir: 'data/memory/fact' });
+// Vi tri cho phep ghi (tuong doi goc du lieu) la CAU HINH (tool 'evolve'). Mac dinh suy tu vi tri du lieu evolve/memory thuc.
+// Cam tuong minh + realpath trong goc du lieu + ngoai plugin root luon thang.
+const FALLBACK_LAYOUT = Object.freeze({ skillsDir: 'evolve/skills', factDir: 'memory/fact' });
 const SAFE_DIR = /^[a-z0-9][a-z0-9._-]*(\/[a-z0-9][a-z0-9._-]*)*$/;
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const okDir = (v) => typeof v === 'string' && SAFE_DIR.test(v.toLowerCase()) && !v.split('/').includes('..');
+/** Goc du lieu cho policy: o.dataBase > dataDir(). */
+export const dataBaseOf = (o = {}) => path.resolve(o.dataBase || dataDir());
+function defaultLayout(o, base) {
+  const sub = (abs, tail, fb) => {
+    if (!abs) return fb;
+    const r = toPosix(path.relative(base, path.resolve(abs)));
+    return r && !r.startsWith('..') && !path.isAbsolute(r) && okDir(`${r}/${tail}`) ? `${r}/${tail}`.toLowerCase() : fb;
+  };
+  return { skillsDir: sub(o.dataRoot, 'skills', FALLBACK_LAYOUT.skillsDir), factDir: sub(o.vaultRoot, 'fact', FALLBACK_LAYOUT.factDir) };
+}
 export function layoutOf(o = {}, root) {
+  const def = defaultLayout(o, dataBaseOf(o));
   let raw = o.layout;
-  if (!raw) { try { raw = loadConfig('evolve', { root, defaults: DEFAULT_LAYOUT }).config; } catch { raw = null; } }
-  const pick = (k) => (raw && typeof raw[k] === 'string' && SAFE_DIR.test(raw[k]) && !raw[k].split('/').includes('..') ? raw[k].toLowerCase() : DEFAULT_LAYOUT[k]);
+  if (!raw) { try { raw = loadConfig('evolve', { root, defaults: {} }).config; } catch { raw = null; } }
+  const pick = (k) => (raw && okDir(raw[k]) ? raw[k].toLowerCase() : def[k]);
   return { skillsDir: pick('skillsDir'), factDir: pick('factDir') };
 }
 function buildAllow(layout) {
@@ -71,27 +87,31 @@ function realpathDeep(abs) {
 const relKey = (root, abs) => { if (!isInside(abs, root)) return null; const r = toPosix(path.relative(root, abs)); return r && !r.startsWith('..') ? r : null; };
 export const same = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
-/** {ok, forbidden, reason, rel, abs, knowledgeId}. Chuan hoa -> cam -> realpath (bat junction/symlink) -> allowlist. */
+const hubOf = (o) => path.resolve(o.hubRoot || workspaceRoot());
+/** {ok, forbidden, reason, rel, abs, knowledgeId}. Chuan hoa -> cam -> realpath trong goc du lieu (bat junction/symlink) -> cam theo vi tri that (du lieu/workspace/plugin root) -> allowlist. */
 export function classifyTarget(target, kind, o = {}) {
-  const c = { hub: path.resolve(o.hubRoot || workspaceRoot()) };
   const n = normalizeTarget(target);
   if (n.error) return { ok: false, forbidden: false, reason: n.error };
   const forb = (key) => FORBIDDEN.find(([re]) => re.test(key));
   let f = forb(n.key);
   if (f) return { ok: false, forbidden: true, reason: `dich cam: ${f[1]} (${n.key})`, rel: n.rel };
-  const hubReal = realOrNull(c.hub);
-  if (!hubReal) return { ok: false, forbidden: false, reason: 'hub khong ton tai', rel: n.rel };
-  const abs = path.join(hubReal, ...n.rel.split('/'));
+  const baseReal = realpathDeep(dataBaseOf(o));
+  if (!baseReal) return { ok: false, forbidden: false, reason: 'goc du lieu khong xac dinh', rel: n.rel };
+  const abs = path.join(baseReal, ...n.rel.split('/'));
   const real = realpathDeep(abs);
   if (!real) return { ok: false, forbidden: false, reason: 'khong xac dinh duoc realpath', rel: n.rel };
-  const realRel = relKey(hubReal, real);
-  if (realRel == null) return { ok: false, forbidden: false, reason: `realpath ngoai hub (junction/symlink?): ${n.rel}`, rel: n.rel };
+  const realRel = relKey(baseReal, real);
+  if (realRel == null) return { ok: false, forbidden: false, reason: `realpath ngoai goc du lieu (junction/symlink?): ${n.rel}`, rel: n.rel };
   if (!same(realRel, n.rel)) return { ok: false, forbidden: false, reason: `realpath lech dich (junction/symlink?): ${n.rel} -> ${realRel}`, rel: n.rel };
+  // Goc du lieu co the bi tro (HUB_DATA_DIR) vao workspace/plugin: cam theo vi tri that so voi workspace va plugin root (chi phan du lieu cua plugin).
+  const hubReal = realOrNull(hubOf(o));
+  const hubRel = hubReal ? relKey(hubReal, real) : null;
   const repoReal = realOrNull(path.resolve(REPO_DIR));
   const repoRel = repoReal ? relKey(repoReal, real) : null;
-  f = forb(realRel.toLowerCase()) || (repoRel != null ? forb(repoRel.toLowerCase()) : null);
+  f = forb(realRel.toLowerCase()) || (hubRel != null ? forb(hubRel.toLowerCase()) : null) || (repoRel != null ? forb(repoRel.toLowerCase()) : null);
   if (f) return { ok: false, forbidden: true, reason: `dich cam: ${f[1]} (${realRel})`, rel: n.rel };
-  const hit = buildAllow(layoutOf(o, c.hub)).find(([re]) => re.test(n.key));
+  if (repoRel != null && !/^(\.harness\/)?data\//i.test(repoRel)) return { ok: false, forbidden: true, reason: `dich cam: plugin root (${repoRel})`, rel: n.rel };
+  const hit = buildAllow(layoutOf(o, hubOf(o))).find(([re]) => re.test(n.key));
   if (!hit) return { ok: false, forbidden: false, reason: `dich ngoai allowlist (deny-by-default): ${n.rel}`, rel: n.rel };
   if (!hit[1].includes(kind)) return { ok: false, forbidden: false, reason: `kind ${kind} khong duoc ghi vao ${n.rel}`, rel: n.rel };
   const knowledgeId = kind === 'fact' ? path.posix.basename(n.key, '.md') : null;

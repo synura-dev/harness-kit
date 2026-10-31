@@ -43,7 +43,7 @@ export async function render(o) {
   }
   if (o.cmd === 'propose') {
     const p = await propose(need(), o);
-    const s = `de xuat ${p.id}: ${p.kind} -> ${p.change.target} (${p.status}${p.policy.ok ? '' : `: ${p.policy.reason}`})\nbang chung: fp=${p.evidence.fp || '-'} x${p.evidence.count} | ${p.evidence.sample.slice(0, 120)}\ntiep: evolve check ${p.id}`;
+    const s = `de xuat ${p.id}: ${p.kind} -> ${p.change.target} (tuong doi goc du lieu; ${p.status}${p.policy.ok ? '' : `: ${p.policy.reason}`})\nbang chung: fp=${p.evidence.fp || '-'} x${p.evidence.count} | ${p.evidence.sample.slice(0, 120)}\ntiep: evolve check ${p.id}`;
     return { code: 0, summary: s, data: p };
   }
   if (o.cmd === 'check') {
