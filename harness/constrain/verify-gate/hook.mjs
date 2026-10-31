@@ -37,7 +37,7 @@ export const DEFAULTS = {
     '^(?:npm|pnpm|yarn|bun)\\s+(?:run(?:-script)?\\s+)?deploy(?::[\\w-]+)?(?:\\s|$)',
     '^["\']?(?:[^\\s"\']*[\\\\/])?deploy[\\w.-]*\\.(?:sh|ps1|bat|cmd)["\']?(?:\\s|$)',
     '^(?:bash|sh|zsh|pwsh|powershell(?:\\.exe)?|node|bun|python3?)\\s+(?:-\\S+\\s+)*["\']?(?:[^\\s"\']*[\\\\/])?deploy[\\w.-]*\\.(?:sh|ps1|bat|cmd|mjs|cjs|js|ts|py)\\b',
-    `^(?:${RT}\\s+)?\\S*harness\\.mjs["']?\\s+(?:\\S+\\s+)*?["']?release["']?(?![\\w.-])${REL_SAFE}`,
+    `^(?:(?:${RT}\\s+)?\\S*harness\\.mjs|harness(?:\\.cmd|\\.exe)?)["']?\\s+(?:\\S+\\s+)*?["']?release["']?(?![\\w.-])${REL_SAFE}`,
     `^${RT}\\s+(?:\\S+\\s+)*?["']?(?:\\S*[\\\\/])?release[\\\\/]cli\\.mjs["']?(?![\\w.-])${REL_SAFE}`,
     '^(?:node|bun)\\s+.*(?:\\bimport\\s*\\(|\\brequire\\s*\\(|\\bfrom\\s+)\\s*["\'`][^"\'`\\n]*(?:release[\\\\/](?:cli|steps|scripts|remote)|\\.{1,2}[\\\\/](?:cli|steps|scripts))\\.mjs',
     '^ssh\\s.*\\b(?:reload|restart)\\b', '^pm2\\s+(?:reload|restart|start|deploy)\\b', '^systemctl\\s+(?:reload|restart|start)\\b',
