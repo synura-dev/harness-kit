@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { put, get, query, check, prune, safeFile, writeNew } from './vault.mjs';
+import { put, get, query, check, prune, safeFile, writeNew, renameRetry } from './vault.mjs';
 import { parse, stringify } from './frontmatter.mjs';
 import { validate, findSecret, metaText, isWebSource } from './schema.mjs';
 import { run } from './cli.mjs';
@@ -279,4 +279,12 @@ test('check --probe: file tay co probe ngoai allowlist -> LOI schema, KHONG chay
   expect(c.probe.ran).toBe(0);
   expect(c.probe.errors.some((e) => e.id === 'evil')).toBe(true);
   expect(fs.existsSync(path.join(root, 'pwned.txt'))).toBe(false);
+});
+
+test('renameRetry: win32 EPERM tam thoi -> thu lai thanh cong; loi khac/nen tang khac nem ngay; co tran', () => {
+  const err = (code) => Object.assign(new Error(code), { code });
+  let n = 0; renameRetry('a', 'b', { platform: 'win32', rename: () => { if (++n < 3) throw err('EPERM'); } }); expect(n).toBe(3);
+  n = 0; expect(() => renameRetry('a', 'b', { platform: 'linux', rename: () => { n++; throw err('EPERM'); } })).toThrow('EPERM'); expect(n).toBe(1);
+  n = 0; expect(() => renameRetry('a', 'b', { platform: 'win32', rename: () => { n++; throw err('ENOENT'); } })).toThrow('ENOENT'); expect(n).toBe(1);
+  n = 0; expect(() => renameRetry('a', 'b', { platform: 'win32', tries: 4, rename: () => { n++; throw err('EBUSY'); } })).toThrow('EBUSY'); expect(n).toBe(4);
 });

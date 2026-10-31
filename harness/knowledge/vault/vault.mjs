@@ -62,10 +62,23 @@ function locate(root, id, kind) {
   return out;
 }
 
+/** Windows: rename de len file dang bi tien trinh khac mo (indexer/AV/doc song song) nem EPERM/EBUSY/EACCES tam thoi.
+ *  Thu lai ngan co tran (RENAME_TRIES lan, tong <= ~RENAME_BUDGET_MS); nen tang khac hoac loi khac nem ngay. */
+const RENAME_TRIES = 8, RENAME_BUDGET_MS = 500, RENAME_RETRY = new Set(['EPERM', 'EBUSY', 'EACCES']);
+export function renameRetry(from, to, { tries = RENAME_TRIES, budgetMs = RENAME_BUDGET_MS, platform = process.platform, rename = fs.renameSync } = {}) {
+  const t0 = Date.now();
+  for (let i = 1; ; i++) {
+    try { return rename(from, to); } catch (e) {
+      if (platform !== 'win32' || !RENAME_RETRY.has(e.code) || i >= tries || Date.now() - t0 >= budgetMs) throw e;
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Math.min(10 * i, 80));
+    }
+  }
+}
+
 function writeAtomic(f, text) {
   fs.mkdirSync(path.dirname(f), { recursive: true });
-  const tmp = `${f}.${process.pid}.${Date.now()}.tmp`;
-  try { fs.writeFileSync(tmp, text, { flag: 'wx' }); fs.renameSync(tmp, f); } catch (e) { try { fs.rmSync(tmp, { force: true }); } catch {} throw e; }
+  const tmp = `${f}.${process.pid}.${Date.now()}.${Math.random().toString(36).slice(2, 8)}.tmp`;
+  try { fs.writeFileSync(tmp, text, { flag: 'wx' }); renameRetry(tmp, f); } catch (e) { try { fs.rmSync(tmp, { force: true }); } catch {} throw e; }
 }
 
 /** Tao file moi nguyen tu, KHONG ghi de: tmp + hard link (EEXIST neu dich da co; chay dung tren NTFS/Windows).
