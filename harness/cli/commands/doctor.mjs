@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ver } from '../../core/runtime/proc-list.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
-import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks, isPluginMode } from '../../core/io/paths.mjs';
+import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks, isPluginMode, workspaceMarker } from '../../core/io/paths.mjs';
 
 if (process.argv.includes('--adapters')) {
   const { buildReport, formatAdaptersTable } = await import('../../core/agy/adapters-report.mjs');
@@ -48,9 +48,12 @@ line(duck ? true : null, 'duckdb', duck || 'tuy chon, khong co');
 const HUB_ROOT = workspaceRoot();
 // workspace mode: workspace (CLAUDE_PROJECT_DIR/hub) khac plugin root -> loi harness nam o plugin, khong trong workspace
 const WS_MODE = path.resolve(HUB_ROOT).toLowerCase() !== path.resolve(REPO_DIR).toLowerCase();
+// du an thuong (BARE): workspace mode + khong co dau hieu hub (config/{workspace,hub}/default.json) -> bo cac kiem gia dinh hub
+const BARE = WS_MODE && !workspaceMarker(HUB_ROOT);
 const hub = resolveHub();
 console.log(`[info] hubDir = ${hub.hubDir} (nguon: ${hub.source})`);
-if (!isInside(REPO_DIR, hub.hubDir)) console.log(`[warn] repo (${REPO_DIR}) nam ngoai hubDir; kiem tra HUB_DIR/config/paths.local.json`);
+if (BARE) console.log('[skip] hubDir/arch/adapter manifest: du an thuong (khong dau hieu hub), bo kiem gia dinh hub');
+else if (!isInside(REPO_DIR, hub.hubDir)) console.log(`[warn] repo (${REPO_DIR}) nam ngoai hubDir; kiem tra HUB_DIR/config/paths.local.json`);
 for (const b of findBadLinks(path.join(HUB_ROOT, '.claude', 'skills'), HUB_ROOT)) {
   line(false, `link .claude/skills/${b.name} ${b.problem === 'hong' ? 'hong' : 'tro ngoai hubDir'}`, `${b.target}; chay: node harness/tools/sync.mjs`);
 }
@@ -190,7 +193,7 @@ try {
 } catch (e) { console.log('[warn] manifest check loi:', e.message); }
 try {
   const { buildReport } = await import('../../core/agy/adapters-report.mjs');
-  for (const m of buildReport(HUB_ROOT).warnings) warn('adapters', m);
+  if (!BARE) for (const m of buildReport(HUB_ROOT).warnings) warn('adapters', m);
 } catch (e) { console.log('[warn] adapters check loi:', e.message); }
 try {
   const { checkRegistry } = await import(new URL('../../core/checks/manifest-check.mjs', import.meta.url).href);
@@ -200,7 +203,7 @@ try {
   const { checkLegacyWrites } = await import(new URL('../../core/registry/data-registry.mjs', import.meta.url).href);
   for (const m of checkLegacyWrites()) warn('data', m);
 } catch (e) { console.log('[warn] legacy-write check loi:', e.message); }
-try {
+if (!BARE) try {
   const { syncArchitecture } = await import(new URL('../../core/registry/plugin-registry.mjs', import.meta.url).href);
   const ar = syncArchitecture(HUB_ROOT, false);
   // workspace mode: khoi generated thuoc ARCHITECTURE cua plugin; workspace khong bat buoc co marker

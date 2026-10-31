@@ -130,3 +130,19 @@ test('doctor: tong warnings = tong cac dong [check] (gom nhom khac)', async () =
   const per = [...out.matchAll(/^\[check\] [^:]+: (\d+)/gm)].reduce((s, m) => s + Number(m[1]), 0);
   expect(sum).toBe(per);
 });
+
+test('doctor: du an thuong (khong dau hieu hub) -> bo kiem gia dinh hub; co dau hieu hub -> van bao', () => {
+  const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'docbare-'));
+  fs.writeFileSync(path.join(bare, '.env'), 'SECRET=1');
+  const o1 = runDoctor(bare).stdout;
+  expect(o1).toContain('[skip] hubDir/arch/adapter manifest');
+  expect(o1).not.toMatch(/nam ngoai hubDir|ARCHITECTURE\.md khong doc duoc|manifest\.json cua hook nao/);
+  expect(o1).toMatch(/\[checks\] warnings=0 errors=0/);
+  const hubf = fs.mkdtempSync(path.join(os.tmpdir(), 'dochub-'));
+  fs.mkdirSync(path.join(hubf, 'config', 'hub'), { recursive: true });
+  fs.writeFileSync(path.join(hubf, 'config', 'hub', 'default.json'), '{}');
+  const o2 = runDoctor(hubf).stdout;
+  expect(o2).not.toContain('[skip] hubDir/arch/adapter manifest');
+  expect(o2).toMatch(/nam ngoai hubDir/);
+  expect(o2).toMatch(/ARCHITECTURE\.md khong doc duoc/);
+}, 60000);
