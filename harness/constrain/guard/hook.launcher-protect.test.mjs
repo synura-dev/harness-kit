@@ -24,8 +24,14 @@ test('file tools: file khac khong bi chan', () => {
 });
 
 test('Bash: lenh ghi/xoa/di chuyen bi chan', () => {
-  for (const c of ['echo x > bin/harness.mjs', 'sed -i s/a/b/ bin/harness.mjs', 'cp x bin\\harness.mjs', 'Set-Content config/launcher.local.json hi', 'git checkout -- bin/harness.mjs', 'cat config/launcher.local.json']) {
+  for (const c of ['echo x > bin/harness.mjs', 'sed -i s/a/b/ bin/harness.mjs', 'cp x bin\\harness.mjs', 'Set-Content config/launcher.local.json hi', 'git checkout -- bin/harness.mjs', 'cat x > config/launcher.local.json', 'cat config/launcher.local.json > o.json', 'rm config/launcher.local.json', 'mv a launcher.local.json', 'cat a | tee config/launcher.local.json', 'sort -o launcher.local.json x', 'git diff --output=launcher.local.json', 'node -e "require(\'fs\').writeFileSync(\'config/launcher.local.json\',\'{}\')"', 'cat config/launcher.local.json; rm x', 'echo $(cat launcher.local.json)']) {
     assert.ok(denied(bash(c)), c);
+  }
+});
+
+test('Bash: lenh chi doc nhac ten launcher duoc qua', () => {
+  for (const c of ['ls bin/harness.mjs', 'git diff -- bin/harness.mjs', 'git log --oneline -- bin/harness.mjs', 'cat config/launcher.local.json', 'cat config/launcher.local.json | head -5', 'ls config/launcher.local.json', 'git diff -- config/launcher.local.json', 'git show HEAD:config/launcher.local.json', 'rg pluginRoot config/launcher.local.json', 'grep -n x bin/harness.mjs']) {
+    assert.equal(denied(bash(c)), false, c);
   }
 });
 

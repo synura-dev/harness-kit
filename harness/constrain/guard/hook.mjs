@@ -168,7 +168,7 @@ export function evaluate(cmd, cfg) {
   if (typeof cmd !== 'string' || !cmd.trim()) return null;
   if (EXT_CONFIG_RE.test(cmd) || (EXT_CMD_RE.test(cmd) && !isReadOnlyCmd(cmd))) return { id: 'ext-config-protect', reason: EXT_REASON };
   if (cmd.length > (cfg.maxCommandChars ?? 100000)) return { id: 'command-too-long', reason: 'Lenh qua dai (> maxCommandChars), khong the kiem; chia nho. / Command too long to inspect; split it.' };
-  if (LAUNCHER_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: LAUNCHER_REASON };
+  if (LAUNCHER_CMD_RE.test(cmd) && !(isReadOnlyCmd(cmd) && !/\s(?:-o|--output)(?:[\s=]|$)/i.test(cmd))) return { id: 'launcher-protect', reason: LAUNCHER_REASON }; // doc launcher (cat/ls/git diff...) duoc qua; ghi/redirect/rm/node van chan
   if (PLUGIN_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: PLUGIN_REASON };
   const ncmd = cmd.replace(/\\\r?\n|\x60\r?\n/g, ' '); // noi dong (\ hoac backtick + xuong dong) truoc khi so khop
   const aliases = (cfg.remoteHostAliases || []).map(esc).join('|');
