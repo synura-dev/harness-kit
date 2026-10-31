@@ -68,3 +68,33 @@ test('audit chi ghi id luat + hash lenh (khong lo duong dan)', () => {
   assert.match(t, /ext-config-protect/);
   assert.ok(!t.includes('local.json'));
 });
+
+test('van ban tro nhac lenh ext (commit message, echo) duoc qua; lenh that va bien the thuc thi van chan', async () => {
+  const { evaluate, stripInertText } = await import('./hook.mjs');
+  const cfg = { denyPatterns: [], allowlist: [] };
+  const id = (c) => evaluate(c, cfg)?.id;
+  for (const c of [
+    'git commit -m "fix: guard chan harness ext register x khi chay that" -- a.mjs',
+    "git commit -m 'docs: node bin/harness.mjs ext approve foo' && git log -1",
+    'git -c user.name=a commit -q -m "sua config/ext/local.json qua cong" -- x',
+    "echo 'harness ext register x'",
+    'printf "%s\\n" "harness.mjs ext approve y"',
+    'git tag -a v1 -m "harness ext register"',
+  ]) assert.equal(id(c), undefined, c);
+  for (const c of [
+    'harness ext register x',
+    'node bin/harness.mjs ext register x',
+    'node "E:/p/bin/harness.mjs" ext approve x',
+    'git commit -m "ok"; harness ext register x',
+    "git commit -m 'ok' && node bin/harness.mjs ext approve x",
+    "echo 'harness ext register x' | sh",
+    'echo "$(harness ext register x)"',
+    'echo \\"; harness ext register x; echo \\"',
+    'echo `harness ext register x`',
+    "eval 'harness ext register x'",
+    "echo '{}' > config/ext/local.json",
+    "git commit -m 'unclosed harness ext register x",
+  ]) assert.equal(id(c), 'ext-config-protect', c);
+  assert.equal(stripInertText('git commit -m "a b" -- f'), 'git commit -m "" -- f');
+  assert.equal(stripInertText('node -e "x"'), 'node -e "x"');
+});

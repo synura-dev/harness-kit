@@ -49,6 +49,25 @@ const EXT_CMD_RE = new RegExp(String.raw`\bharness(?:\.mjs)?["']?\s+ext\s+(?:reg
 const READ_SEG_RE = /^\s*(?:git\s+(?:-c\s+\S+\s+)*(?:diff|log|show|blame|grep|status)|cat|rg|grep|egrep|fgrep|head|tail|less|more|type|Get-Content|gc|wc|ls|Select-String|sls|sort|uniq|nl)\b/i;
 /** Lenh chi doc: khong co ; & < > backtick $( ; moi doan pipe deu la lenh doc. */
 const isReadOnlyCmd = (cmd) => !/[;&<>`\n]|\$\(/.test(cmd) && cmd.split('|').every((s) => READ_SEG_RE.test(s));
+// Van ban tro (message commit/tag, echo/printf) nhac ten lenh ext khong phai LENH: bo chuoi trich dan cua cac lenh nay truoc khi so EXT_*.
+// Chi bo khi chuoi khong the thuc thi: lenh co $( / backtick / <( / eval / iex / pipe vao shell-interpreter thi GIU NGUYEN (van chan).
+const INERT_LEAD_RE = /^(?:git\s+(?:-c\s+\S+\s+)*(?:commit|tag|notes)|echo|printf|Write-Output|Write-Host)\b/i;
+const EXEC_RISK_RE = /\\["']|\$\(|\x60|<\(|\b(?:eval|iex|Invoke-Expression|source)\b|\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh|fish|pwsh|powershell|cmd|node|bun|deno|python\d?|perl|ruby|xargs|\.)(?![\w-])/i;
+export function stripInertText(cmd) {
+  if (typeof cmd !== 'string' || EXEC_RISK_RE.test(cmd)) return cmd;
+  let out = '', seg = '', q = null, buf = '';
+  for (const ch of cmd) {
+    if (q) {
+      if (ch === q) { out += INERT_LEAD_RE.test(seg.trimStart()) ? q + q : q + buf + q; seg += q + q; q = null; buf = ''; }
+      else buf += ch;
+      continue;
+    }
+    if (ch === '"' || ch === "'") { q = ch; continue; }
+    out += ch;
+    seg = /[;&|\n()]/.test(ch) ? '' : seg + ch;
+  }
+  return q ? cmd : out; // quote khong dong: giu nguyen (khong doan)
+}
 const EXT_REASON = 'Cam sua dang ky extension (lop may) hoac ext register/approve tu agent; chi nguoi dung o TTY. / Extension registry is protected; the human must run it in a TTY.';
 const PACK_KEYS =new Set(['remoteHostAliases', 'sensitiveFileNames', 'denyPatterns', 'allowlist']);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
@@ -171,7 +190,8 @@ const rx = (s) => { try { return new RegExp(s, 'i'); } catch { return null; } };
 /** -> {id, reason} cua mau dau tien khop, hoac null. */
 export function evaluate(cmd, cfg) {
   if (typeof cmd !== 'string' || !cmd.trim()) return null;
-  if (EXT_CONFIG_RE.test(cmd) || (EXT_CMD_RE.test(cmd) && !isReadOnlyCmd(cmd))) return { id: 'ext-config-protect', reason: EXT_REASON };
+  const extCmd = stripInertText(cmd);
+  if (EXT_CONFIG_RE.test(extCmd) || (EXT_CMD_RE.test(extCmd) && !isReadOnlyCmd(cmd))) return { id: 'ext-config-protect', reason: EXT_REASON };
   if (cmd.length > (cfg.maxCommandChars ?? 100000)) return { id: 'command-too-long', reason: 'Lenh qua dai (> maxCommandChars), khong the kiem; chia nho. / Command too long to inspect; split it.' };
   if (LAUNCHER_CMD_RE.test(cmd) && !(isReadOnlyCmd(cmd) && !/\s(?:-o|--output)(?:[\s=]|$)/i.test(cmd))) return { id: 'launcher-protect', reason: LAUNCHER_REASON }; // doc launcher (cat/ls/git diff...) duoc qua; ghi/redirect/rm/node van chan
   if (PLUGIN_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: PLUGIN_REASON };
