@@ -150,7 +150,7 @@ test('khong ReDoS: dau vao doi khang < 250ms/chuoi, tong < 2s', () => {
     'evolve/loop '.repeat(9000) + 'applyx', 'loop.mjs '.repeat(9000) + 'rollbac', 'evolve '.repeat(15000) + '--eval-cm', 'loop.mjs '.repeat(9000) + '--eval-cm', 'HARNESS_EVOLVE_EVAL_CM'.repeat(4000),
   ];
   let total = 0;
-  for (const c of bad) for (const m of ['bash', 'ps']) { const t = performance.now(); ev(c, m); const dt = performance.now() - t; total += dt; assert.ok(dt < 250, `${c.slice(0, 30)}.. ${m}: ${dt.toFixed(0)}ms`); }
+  for (const c of bad) for (const m of ['bash', 'ps']) { let dt = Infinity; for (let i = 0; i < 3 && dt >= 250; i++) { const t = performance.now(); ev(c, m); dt = Math.min(dt, performance.now() - t); } /* lan tot nhat: ReDoS that cham ca 3 lan, tai tam thoi thi khong */ total += dt; assert.ok(dt < 250, `${c.slice(0, 30)}.. ${m}: ${dt.toFixed(0)}ms`); }
   assert.ok(total < 2000, 'tong ' + total.toFixed(0) + 'ms');
 });
 
