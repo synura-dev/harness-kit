@@ -1,12 +1,12 @@
 {
-  "name": "agent-guard-kit-marketplace",
-  "description": "Marketplace mot plugin: agent-guard-kit",
+  "name": "harness-kit-marketplace",
+  "description": "Marketplace mot plugin: harness-kit",
   "owner": {
     "name": "Phat Huynh"
   },
   "plugins": [
     {
-      "name": "agent-guard-kit",
+      "name": "harness-kit",
       "source": "./",
       "description": "Lop rang buoc tat dinh cho agent."
     }

@@ -1,6 +1,6 @@
 ---
 name: harness
-description: Dung cong CLI cua agent-guard-kit de doc du lieu/audit va chay doctor. Dung khi can xem audit, kiem tra cau hinh guard, hoac tra lenh harness.
+description: Dung cong CLI cua harness-kit de doc du lieu/audit va chay doctor. Dung khi can xem audit, kiem tra cau hinh guard, hoac tra lenh harness.
 ---
 
 Chay qua cong duy nhat: `node "${CLAUDE_PLUGIN_ROOT}/harness/cli/harness.mjs" [<domain> [lenh]]`.
