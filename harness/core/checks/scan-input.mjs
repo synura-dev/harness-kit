@@ -8,8 +8,8 @@ import { strayReason } from './clutter-check.mjs';
 const SCAN_LIMITS = Object.freeze({ maxFiles: 3000, maxBytes: 512 * 1024, timeoutMs: 8000 });
 
 const SKIP = new Set(['node_modules', '.git', 'fixtures', '__fixtures__']);
-const ROOTS = ['harness', 'config', 'docs', '.claude/agents', '.agents', 'data'];
-const TEXT = /\.(mjs|cjs|js|ts|json|md)$/i;
+const ROOTS = ['harness', 'hooks', 'bin', 'config', 'docs', '.claude/agents', '.agents', 'data'];
+const TEXT = /\.(mjs|cjs|js|ts|json|md)$|^harness$/i; // ^harness$: CLI bin/harness khong duoi
 const rel = (base, p) => relative(base, p).replace(/\\/g, '/');
 
 /** .gitignore don gian -> ignored(path). Ho tro: #, !, /, dir/, *, **, ?. Cha bi ignore thi con cung ignore. */

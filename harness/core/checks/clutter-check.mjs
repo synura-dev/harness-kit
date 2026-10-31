@@ -189,6 +189,8 @@ export function checkStray(entries) {
 const ENTRY_NAMES = new Set(['main', 'run']);
 const isEntryFile = (c) => /^#!/.test(c) || /process\.argv\[1\]|import\.meta\.main|\bisMain\b/.test(c);
 const isCode = (p) => /^harness\/.+\.[mc]?js$/.test(p) && !/\.fixture\./.test(p);
+// Diem vao ngoai harness/ (wrapper hook, CLI bin/) chi tinh la noi DUNG export, khong quet export cua chung.
+const isEntry = (p) => /^hooks\/[^/]+\.mjs$/.test(p) || p === 'bin/harness';
 const IDENT = /[A-Za-z_$][\w$]*/g;
 const MARK_UP = new RegExp('\\b(?:TO' + 'DO|FIX' + 'ME)\\b'); // viet hoa de khong khop bien `todo`
 const MARK_CI = new RegExp('\\b(?:tempo' + 'rar(?:y|ily)|ta' + 'm)\\b', 'i');
@@ -219,12 +221,12 @@ export function topFunctions(content) {
 export function scanCode(files, opts = {}) {
   const rules = (opts.dupAllow || DUP_ALLOW).map((x) => (typeof x === 'string' ? { name: x } : x));
   const allowed = (name, paths) => rules.some((r) => r.name === name && (!r.files || paths.every((p) => r.files.includes(p))));
-  const code = (Array.isArray(files) ? files : []).map((f) => ({ path: trimPath(f.path), content: f.content })).filter((f) => typeof f.content === 'string' && isCode(f.path));
+  const code = (Array.isArray(files) ? files : []).map((f) => ({ path: trimPath(f.path), content: f.content })).filter((f) => typeof f.content === 'string' && (isCode(f.path) || isEntry(f.path)));
   const users = new Map(); // ident -> Set(path)
   for (const f of code) for (const id of new Set(f.content.match(IDENT) || [])) { let s = users.get(id); if (!s) users.set(id, (s = new Set())); s.add(f.path); }
   const unused = [], testOnly = [], byName = new Map(), todo = [];
   for (const f of code) {
-    if (isTest(f.path)) continue;
+    if (isTest(f.path) || isEntry(f.path)) continue;
     for (const name of exportNames(f.content)) {
       const others = [...(users.get(name) || [])].filter((p) => p !== f.path);
       if (!others.length) unused.push({ file: f.path, name });

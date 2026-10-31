@@ -145,3 +145,29 @@ export function findBadHookCommands(hooksJsonFile, hub) {
   }
   return out;
 }
+
+// Dau hieu workspace tuy bien (vd hub): du an co file cau hinh tool 'workspace' (ten cu 'hub') o lop du an `<du an>/config/`,
+// tuc chinh file loadConfig('workspace') doc (alias hub<->workspace, core/config/config.mjs). Repo nguon plugin (co .claude-plugin/plugin.json) khong tinh.
+const WORKSPACE_MARKERS = Object.freeze(['config/workspace/default.json', 'config/hub/default.json']);
+export function workspaceMarker(projectDir) {
+  if (typeof projectDir !== 'string' || !projectDir.trim()) return null;
+  const p = path.resolve(projectDir.trim());
+  if (isPluginMode(p)) return null;
+  for (const m of WORKSPACE_MARKERS) { const f = path.join(p, m); try { if (fs.statSync(f).isFile()) return f; } catch { /* khong co */ } }
+  return null;
+}
+// Co dau hieu -> HUB_DATA_DIR=<du an>/data, HARNESS_CONFIG_DIR=<du an>/config; KHONG ghi de bien da dat (sua env tai cho). Tra {marker, set:[bien da dat]}.
+export function applyWorkspaceEnv(env, projectDir) {
+  const marker = workspaceMarker(projectDir);
+  const set = [];
+  if (!marker) return { marker, set };
+  const p = path.resolve(projectDir.trim());
+  for (const [k, v] of [['HUB_DATA_DIR', path.join(p, 'data')], ['HARNESS_CONFIG_DIR', path.join(p, 'config')]]) {
+    if (!(typeof env[k] === 'string' && env[k].trim())) { env[k] = v; set.push(k); }
+  }
+  return { marker, set };
+}
+// Mot dong loi theo hop dong (HKERR <json>) ra stderr; khong bao gio nem.
+export function hkerr(code, cause, { severity = 'warn', fix_command = 'harness doctor', next_step = 'chay harness doctor', safe = true, source = '' } = {}) {
+  try { process.stderr.write('HKERR ' + JSON.stringify({ code, severity, cause: String(cause).slice(0, 300), fix_command, next_step, safe, source }) + '\n'); } catch { /* fail-open */ }
+}

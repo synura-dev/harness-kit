@@ -7,7 +7,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "SessionStart"
             ],
             "timeout": 30
@@ -22,7 +22,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "UserPromptSubmit"
             ],
             "timeout": 4
@@ -38,7 +38,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "PreToolUse"
             ],
             "timeout": 3
@@ -54,7 +54,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "PostToolUse"
             ],
             "timeout": 3
@@ -70,7 +70,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "PostToolUseFailure"
             ],
             "timeout": 3
@@ -86,7 +86,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "PermissionRequest"
             ],
             "timeout": 3
@@ -102,7 +102,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "PermissionDenied"
             ],
             "timeout": 3
@@ -117,7 +117,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "Notification"
             ],
             "timeout": 3
@@ -132,7 +132,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "SubagentStart"
             ],
             "timeout": 3
@@ -147,7 +147,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "Stop"
             ],
             "timeout": 20
@@ -162,7 +162,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "SubagentStop"
             ],
             "timeout": 20
@@ -177,7 +177,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "SessionEnd"
             ],
             "timeout": 5
@@ -192,7 +192,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "WorktreeCreate"
             ],
             "timeout": 45
@@ -207,7 +207,7 @@
             "type": "command",
             "command": "node",
             "args": [
-              "${CLAUDE_PLUGIN_ROOT}/harness/hooks/dispatch/run.mjs",
+              "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "WorktreeRemove"
             ],
             "timeout": 30
