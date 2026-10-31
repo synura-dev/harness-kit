@@ -17,7 +17,7 @@ import { GROUP_ZONES } from '../core/config/contract.mjs';
 import { loadConfig } from '../core/config/config.mjs';
 import { guardWrite } from '../core/io/storage.mjs';
 import { loadDataRegistry, ZONES } from '../core/registry/data-registry.mjs';
-import { dataRoot, ensureDataIgnore } from '../core/io/paths.mjs';
+import { dataRoot, ensureDataIgnore, workspaceRoot } from '../core/io/paths.mjs';
 import { dataPathFor } from '../core/io/storage.mjs';
 
 import { auditRoot } from '../core/audit/audit-write.mjs';
@@ -128,7 +128,9 @@ export function run(argv, root, opts = {}) {
   // External (ctx + tien trinh con, song song extRoots). Chi khi domain khong phai cua core (core thang). opts.externals = [{id, root}] (tam thoi, chua co ext register).
   if (!known && domain && !group) {
     // opts.externals (tuong minh) bo qua dang ky; mac dinh doc lop may qua listRegistered va CHAN neu hash lech/chua duyet.
-    const regOpts = { workspace: root, ...(opts.registry || {}) };
+    // Workspace = goc du an (plugin mode: CLAUDE_PROJECT_DIR), KHONG phai root ma loi: dang ky ext khoa theo workspace (nhu `ext register`).
+    const ws = opts.workspace || workspaceRoot();
+    const regOpts = { workspace: ws, ...(opts.registry || {}) };
     let list, regErr;
     try { list = opts.externals || listRegistered(regOpts); } catch (e) { list = []; regErr = e; }
     // Dang ky lop may hong: fail-closed (khong chay external nao), bao huong dan; ten nhom van xu ly binh thuong ben duoi.
@@ -137,7 +139,7 @@ export function run(argv, root, opts = {}) {
     if (Object.hasOwn(byDomain, domain)) {
       // Tin cay theo id + root tu dang ky (loadExternals da ep m.id === id dang ky); hash dung cay root se chay.
       if (!opts.externals && !isExtensionTrusted(byDomain[domain].id, { ...regOpts, root: byDomain[domain].root })) { const b = blockExternal(byDomain[domain], domain); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
-      const r = runExternal(byDomain[domain], domain, rest0, { timeoutS: opts.timeoutS || c.timeoutS, workspace: root, json: c.json });
+      const r = runExternal(byDomain[domain], domain, rest0, { timeoutS: opts.timeoutS || c.timeoutS, workspace: regOpts.workspace, json: c.json });
       return { code: r.code, stdout: r.stdout, stderr: r.stderr };
     }
     if (!opts.externals && Object.hasOwn(blocked, domain)) { const b = blockExternal(blocked[domain], domain, blocked[domain].reason); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
@@ -219,6 +221,9 @@ const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPat
 if (isMain) {
   const root = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
   const r = run(process.argv.slice(2), root);
+  // External (va ext bi CHAN) tra stdout/stderr da bat (core chay stdio inherit nen rong): phai in ra, khong thi mat output.
+  if (r.stdout) process.stdout.write(r.stdout);
+  if (r.stderr) process.stderr.write(r.stderr);
   if (r.text && !r.stdout && !r.printed && r.code) console.log(r.text);
   process.exit(r.code);
 }
