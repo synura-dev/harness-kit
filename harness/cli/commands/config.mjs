@@ -14,7 +14,7 @@ function isSecretKey(k) {
   return words.some((w) => SECRET_WORDS.has(w) || /(token|secret|password|passwd|apikey|credential)s?$/.test(w));
 }
 // inSecret: dang trong gia tri cua khoa secret -> che moi gia tri la (ke ca mang/object long nhau).
-export function redactConfig(v, inSecret = false) {
+function redactConfig(v, inSecret = false) {
   if (Array.isArray(v)) return v.map((x) => redactConfig(x, inSecret));
   if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, redactConfig(x, inSecret || isSecretKey(k))]));
   return inSecret && v !== null ? '***' : v;
