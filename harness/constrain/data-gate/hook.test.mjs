@@ -94,6 +94,25 @@ test('Bash: cat data/x.json theo che do (enabled chan, disabled qua)', async () 
   assert.ok(denied(await call('Bash', { command: 'cat data/x.json' })));
   assert.deepEqual(await call('Bash', { command: 'cat data/x.json' }, { enabled: false, allow: [] }), {});
 });
+test('thong diep theo ngu canh: plugin mode (.harness/data, harness) va hub co launcher (data/, node bin/harness.mjs)', async () => {
+  const pw = fs.mkdtempSync(path.join(os.tmpdir(), 'dgp-'));
+  fs.mkdirSync(path.join(pw, '.harness', 'data'), { recursive: true });
+  const pe = { CLAUDE_PROJECT_DIR: pw, CLAUDE_PLUGIN_ROOT: '/kit' };
+  const rp = await handle('PreToolUse', { tool_name: 'Read', tool_input: { file_path: path.join(pw, '.harness', 'data', 'x.json') }, cwd: pw }, { cfg, env: pe });
+  assert.ok(denied(rp));
+  assert.match(rp.reason, /\.harness\/data\//);
+  assert.match(rp.reason, /Dung cong: harness data/);
+  assert.doesNotMatch(rp.reason, /bin\/harness\.mjs/);
+  const hw = fs.mkdtempSync(path.join(os.tmpdir(), 'dgh-'));
+  fs.mkdirSync(path.join(hw, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(hw, 'bin', 'harness.mjs'), '');
+  const he = { HUB_DIR: hw };
+  const rh = await handle('PreToolUse', { tool_name: 'Read', tool_input: { file_path: path.join(hw, 'data', 'x.json') }, cwd: hw }, { cfg, env: he });
+  assert.ok(denied(rh));
+  assert.match(rh.reason, /thang data\//);
+  assert.match(rh.reason, /node bin\/harness\.mjs data/);
+  assert.doesNotMatch(rh.reason, /\.harness\/data/);
+});
 test('module shape', () => { assert.equal(mod.id, 'data-gate'); assert.deepEqual(mod.events, ['PreToolUse']); });
 test('real dispatcher end-to-end', () => {
   const run = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'hooks', 'dispatch', 'run.mjs');

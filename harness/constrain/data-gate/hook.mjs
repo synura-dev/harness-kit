@@ -3,14 +3,34 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
-import { dataRoot, isInside } from '../../core/io/paths.mjs';
+import { dataRoot, isInside, isPluginMode, toPosix, workspaceRoot } from '../../core/io/paths.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS = { enabled: true, allow: [] };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('data-gate', { defaults: DEFAULTS, files, env: { HOOK_DATA_GATE_ENABLED: 'enabled' } });
 
-const HINT = 'Dung cong: harness data ls|... (hoac node bin/harness.mjs data ...) hoac observe (co log).';
+/**
+ * Thong diep chan theo ngu canh: thu muc du lieu that (tuong doi workspace) + lenh cong dung.
+ * Workspace co launcher bin/harness.mjs (hub) -> `harness` hoac `node bin/harness.mjs`; plugin mode -> `harness` (bin/ trong PATH);
+ * ban sao khong plugin, khong launcher -> `node harness/cli/harness.mjs`. Khong nem.
+ */
+export function denyReason(ctx = {}) {
+  const env = ctx.env || process.env;
+  let rel = 'data/', cmd = 'harness data ls|...';
+  try {
+    const ws = ctx.workspace || workspaceRoot({ env });
+    const d = dataRoot(null, { env });
+    const r = path.relative(ws, d);
+    rel = (r && !r.startsWith('..') && !path.isAbsolute(r) ? toPosix(r) : toPosix(d)) + '/';
+    const launcher = fs.existsSync(path.join(ws, 'bin', 'harness.mjs'));
+    const plugin = ctx.pluginMode ?? (!!env.CLAUDE_PLUGIN_ROOT || isPluginMode());
+    cmd = launcher ? 'harness data ls|... (hoac node bin/harness.mjs data ...)'
+      : plugin ? 'harness data ls|...'
+      : 'node harness/cli/harness.mjs data ls|...';
+  } catch { /* fail-open: thong diep mac dinh */ }
+  return `data-gate: khong doc/ghi thang ${rel}. Dung cong: ${cmd} hoac observe (co log).`;
+}
 const VERB = /(^|[\s;&|(`])(cat|type|head|tail|less|more|ls|dir|find|grep|rg|sed|awk|tee|rm|del|erase|rd|rmdir|mv|move|ren|cp|copy|xcopy|touch|mkdir|truncate|get-content|gc|set-content|add-content|out-file|remove-item|copy-item|move-item|get-childitem|gci|sort|wc|cut|od|xxd)(\s|$)|>|readfilesync|writefilesync|readdirsync|unlinksync|rmsync|open\(|node\s+-e|node\s+--eval|python/i;
 
 const PRE = String.raw`^(?:\w+=\S*\s+)*(?:(?:timeout|nice)\s+(?:-\S+\s+)*\S+\s+)?(?:node|bun)(?:\.exe)?\s+`;
@@ -147,7 +167,7 @@ export async function handle(event, input, ctx = {}) {
     if (env.HARNESS_GATEWAY === '1') return {};
     const cfg = ctx.cfg ?? load().config;
     if (!cfg.enabled || event !== 'PreToolUse' || !input || typeof input !== 'object') return {};
-    if (check(input, cfg, ctx)) return { decision: 'deny', reason: `data-gate: khong doc/ghi thang data/. ${HINT}` };
+    if (check(input, cfg, ctx)) return { decision: 'deny', reason: denyReason(ctx) };
     return {};
   } catch { return {}; } // fail-open
 }
