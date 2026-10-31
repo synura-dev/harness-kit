@@ -65,3 +65,11 @@ test('key khac thieu entry: canh bao no-path qua stderr, van tra key', () => {
   try { expect(resolveDataRel('zz-khong-co', o).rel).toBe('zz-khong-co'); } finally { process.stderr.write = w; }
   expect(got).toContain('rule=no-path');
 });
+
+test('memory thieu entry: mac dinh memory, khong canh bao no-path', () => {
+  const { o } = mk({ zone: 'workspaces', class: 'log', owner: 'o' });
+  const w = process.stderr.write; let got = '';
+  process.stderr.write = (s) => { got += s; return true; };
+  try { expect(resolveDataRel('memory', o).rel).toBe('memory'); } finally { process.stderr.write = w; }
+  expect(got).not.toContain('rule=no-path');
+});

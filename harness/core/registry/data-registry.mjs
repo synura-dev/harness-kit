@@ -24,7 +24,8 @@ export const CLASS_DEFAULTS = Object.freeze({
 const ENFORCE_MODES = Object.freeze(['off', 'warn', 'enforce']);
 export const DEFAULT_ENFORCE = 'warn';
 /** Duong dan mac dinh khai bao khi registry thieu entry/path (khong roi ve key goc cu). */
-const DEFAULT_PATHS = Object.freeze({ audit: 'system/audit' });
+// Khoa loi luon dung (hook/vault) co duong mac dinh: du an sach khong can dang ky, khong canh bao no-path moi hook.
+const DEFAULT_PATHS = Object.freeze({ audit: 'system/audit', memory: 'memory' });
 const warnedNoPath = new Set();
 
 /** Cac rule canh bao. */
