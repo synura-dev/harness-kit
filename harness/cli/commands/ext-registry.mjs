@@ -7,6 +7,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { isPluginMode, REPO_DIR } from '../../core/io/paths.mjs';
 import { pluginLayerDirs } from '../../core/config/config.mjs';
+import { manifestDomains } from '../../core/ext/manifest-domains.mjs';
 
 const HASH_LIMITS = Object.freeze({ maxFiles: 5000, maxBytes: 32 * 1024 * 1024 });
 // Chi bo .git. node_modules DUOC hash: code import tu node_modules chay voi quyen extension, bo qua thi doi noi dung khong lech.
@@ -125,12 +126,15 @@ export function isExtensionTrusted(id, opts = {}) { try { return extensionStatus
 function scanManifest(rootAbs, coreDomains = new Set()) {
   let m; try { m = JSON.parse(fs.readFileSync(path.join(rootAbs, 'manifest.json'), 'utf8')); } catch (e) { return { error: `doc manifest loi: ${String(e.message).slice(0, 80)}` }; }
   if (!m || typeof m !== 'object' || typeof m.id !== 'string' || !/^[\w.-]+$/.test(m.id)) return { error: 'manifest thieu id hop le' };
-  if (typeof m.entry !== 'string' || !Array.isArray(m.domains) || !m.domains.length) return { error: 'manifest thieu entry/domains' };
+  // Cung luat voi ext-host (loadExternals): `domain` string (manifest hub that) hoac `domains` mang/object.
+  const domains = manifestDomains(m);
+  if (typeof m.entry !== 'string' || !domains.length) return { error: 'manifest thieu entry/domain(s)' };
   const entry = path.resolve(rootAbs, m.entry), rel = path.relative(rootAbs, entry);
   if (m.entry.split(/[\\/]/).includes('..') || !rel || rel.startsWith('..') || path.isAbsolute(rel)) return { error: 'entry ra ngoai root' };
-  const dup = m.domains.map(String).filter((d) => coreDomains.has(d));
+  if (!fs.existsSync(entry)) return { error: `entry khong ton tai: ${m.entry}` };
+  const dup = domains.filter((d) => coreDomains.has(d));
   if (dup.length) return { error: `domain trung core: ${dup.join(',')}` };
-  return { id: m.id, domains: m.domains.map(String) };
+  return { id: m.id, domains };
 }
 
 function audit(id, event, rel, hash) {

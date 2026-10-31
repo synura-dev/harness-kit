@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { auditExt, ctxCompatible, CTX_VERSION, hash8, normalizeDataEntries } from './ctx.mjs';
+import { manifestDomains } from './manifest-domains.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const HARNESS_DIR = path.resolve(HERE, '..', '..');
@@ -19,14 +20,6 @@ export function blockExternal(ext, domain, status = 'drift') {
   return { code: EXIT.BLOCKED, status: 'blocked', stdout: '', stderr: `ext ${ext.id}/${domain}: CHAN (${why}). Kiem tra code roi chay: harness ext approve ${ext.id}\n` };
 }
 
-/** Danh sach domain cua manifest. Chuan: `domain` (string) + tuy chon `domains` dang object {ten: file|{file,...}} (nhu manifest core). Chap nhan them `domains` dang mang string. */
-function manifestDomains(m) {
-  const out = [];
-  if (m && typeof m.domain === 'string' && m.domain) out.push(m.domain);
-  if (m && Array.isArray(m.domains)) out.push(...m.domains.filter((x) => typeof x === 'string' && x));
-  else if (m && m.domains && typeof m.domains === 'object') out.push(...Object.keys(m.domains));
-  return [...new Set(out)];
-}
 
 
 const readJsonSafe =(f) => JSON.parse(fs.readFileSync(f, 'utf8'));
