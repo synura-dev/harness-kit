@@ -11,4 +11,4 @@ Restored (round 2): all 12 formerly excluded tests now run in plugin mode (expli
 
 Also synced from hub: evolve/loop/{policy,loop,cli}.mjs (the export predated layout config and candidates --source; the restored loop test covers them).
 
-Still not seeded (tests only; code is present): harness/tools/play/*.test.mjs (play.test, prune.test) and 2 sync tests (link mode, tools.json broken CLI) - they assume hub data (.agents/playbooks, config/play/default.json, tools.json). Follow-up: give them tmp fixtures, then add.
+Round 3: tools tests now green in plugin mode with tmp fixtures: play.test (fixture hub with .agents/playbooks, run-log path via dataPathFor), prune.test (HARNESS_CONFIG_DIR -> tmp config/play/default.json), sync link-mode and broken tools.json tests (HARNESS_CONFIG_DIR -> fixture config). Assertions unchanged except the run-log location, which now follows the registry. bun test harness/tools: 40 pass, 0 fail.

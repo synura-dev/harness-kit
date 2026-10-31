@@ -1,5 +1,5 @@
 // bun test harness/tools/sync.test.mjs
-import { test, expect } from 'bun:test';
+import { test, expect, afterAll } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -20,8 +20,11 @@ function fixture() {
   fs.copyFileSync(path.join(import.meta.dir, '..', 'core', 'agy', 'agents.mjs'), path.join(root, 'harness', 'core', 'agy', 'agents.mjs'));
   fs.mkdirSync(path.join(root, 'config'), { recursive: true });
   fs.writeFileSync(path.join(root, 'config', 'tools.json'), JSON.stringify({ tools: { claude: { enabled: true } } }));
+  // Tuong minh: doc config tu fixture (plugin mode mac dinh doc lop plugin/may/du an).
+  process.env.HARNESS_CONFIG_DIR = path.join(root, 'config');
   return { root, sk };
 }
+afterAll(() => { delete process.env.HARNESS_CONFIG_DIR; });
 const snap = (dir) => fs.readdirSync(dir, { recursive: true }).sort().map((f) => {
   const p = path.join(dir, f); return f + ':' + (fs.statSync(p).isFile() ? fs.readFileSync(p, 'utf8') : '');
 }).join('\n');
@@ -101,7 +104,7 @@ test('agent .claude/agents viet tay: sync khong sinh/xoa', async () => {
 
 import { spawnSync } from 'node:child_process';
 const SYNC = path.join(import.meta.dir, 'sync.mjs');
-const cli = (args, hub, file = SYNC) => spawnSync('node', [file, ...args], { encoding: 'utf8', timeout: 60000, env: { ...process.env, ...(hub ? { HUB_DIR: hub } : {}) } });
+const cli = (args, hub, file = SYNC) => spawnSync('node', [file, ...args], { encoding: 'utf8', timeout: 60000, env: { ...process.env, ...(hub ? { HUB_DIR: hub, HARNESS_CONFIG_DIR: path.join(hub, 'config') } : {}) } });
 test('cli: --tool sai/thieu gia tri -> exit 2', () => {
   const { root } = fixture();
   expect(cli(['--check', '--tool', 'tenSai'], root).status).toBe(2);

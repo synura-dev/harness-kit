@@ -8,8 +8,29 @@ import { validatePlaybook, loadPlaybook, resolveParams } from './playbook/schema
 import { denyRun } from './playbook/policy.mjs';
 import { resolveSpawn, summarizeOutput } from './playbook/exec.mjs';
 import { runPlaybook, formatResult } from './playbook/run.mjs';
+import { dataPathFor } from '../../core/io/storage.mjs';
 
-const REPO = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const playData = (d) => dataPathFor('play', { repoDir: d });
+// Fixture hub tuong minh (khong phu thuoc hub/plugin mode): .agents/playbooks tao trong tmp. HUB_DIR tro vao do.
+const REPO = (() => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'play-hub-'));
+  const dir = path.join(d, '.agents', 'playbooks');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(d, 'ok.mjs'), 'console.log("ok");\n');
+  const read = (id) => ({ id, run: ['node', 'ok.mjs'], timeout_s: 30, on_fail: 'escalate' });
+  const w = (n, j) => fs.writeFileSync(path.join(dir, n + '.json'), JSON.stringify(j, null, 2));
+  w('verify-commit', {
+    name: 'verify-commit', description: 'fixture: kiem tra roi git add (duong dan cu the) + git commit; buoc mutating chi chay voi --yes.',
+    params: { message: { required: true, pattern: '[^\\r\\n"`$%&|<>^]{1,200}' }, paths: { required: true, list: true, pattern: '(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_./-]*' } },
+    limits: { timeout_s: 120, max_output_bytes: 300000 },
+    steps: [read('check'), { id: 'git-add', run: ['git', 'add', '--', '${paths}'], mutating: true, timeout_s: 30, on_fail: 'escalate' },
+      { id: 'git-commit', run: ['git', 'commit', '-m', '${message}', '--only', '--', '${paths}'], mutating: true, timeout_s: 60, on_fail: 'escalate', summarize: { head: 2, max_lines: 3 } }],
+  });
+  w('worker-lifecycle', { name: 'worker-lifecycle', description: 'fixture', steps: [read('a'), read('b')] });
+  w('weekly-maintenance', { name: 'weekly-maintenance', description: 'fixture (khong mutating)', steps: [read('a'), read('b')] });
+  return d;
+})();
 const mk = () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'play-'));
   // stub: node stub.mjs <exit> <stdoutText> [sleepMs] [bigBytes]
@@ -69,12 +90,13 @@ test('PASS path exit 0, log + runs.jsonl written with model_calls 0', async () =
   expect(exitCode).toBe(0);
   expect(result.status).toBe('PASS');
   expect(result.steps[0]).toMatchObject({ id: 'a', status: 'pass', exit: 0 });
-  expect(result.log).toMatch(/^data\/play\/.+\.json$/);
+  expect(result.log).toBe(path.relative(d, playData(d)).split(path.sep).join('/') + '/' + path.basename(result.log));
+  expect(result.log).toMatch(/\.json$/);
   expect(fs.existsSync(path.join(d, result.log))).toBe(true);
-  const line = JSON.parse(fs.readFileSync(path.join(d, 'data/play/runs.jsonl'), 'utf8').trim().split('\n').pop());
+  const line = JSON.parse(fs.readFileSync(path.join(playData(d), 'runs.jsonl'), 'utf8').trim().split('\n').pop());
   expect(line.model_calls).toBe(0);
   expect(line.duration_ms).toBeGreaterThanOrEqual(0);
-  const txt = fs.readFileSync(path.join(d, 'data/play', result.log.split('/').pop().replace('.json', ''), 'a.txt'), 'utf8');
+  const txt = fs.readFileSync(path.join(playData(d), result.log.split('/').pop().replace('.json', ''), 'a.txt'), 'utf8');
   expect(txt).toContain('hello');
 });
 
@@ -155,7 +177,7 @@ test('output truncation + summarize', async () => {
   expect(result.steps[0].summary).toEqual(['line0', 'ERROR here', 'line28', 'line29']);
   const big = await run(pb([{ id: 'b', run: stub(0, '', 0, 50000) }]), d, { maxOutputBytes: 1000 });
   expect(big.result.truncated).toBe('output');
-  const saved = fs.readFileSync(path.join(d, 'data/play', big.result.log.split('/').pop().replace('.json', ''), 'b.txt'), 'utf8');
+  const saved = fs.readFileSync(path.join(playData(d), big.result.log.split('/').pop().replace('.json', ''), 'b.txt'), 'utf8');
   expect(saved.length).toBeLessThan(1200 + 100);
   expect(summarizeOutput('a\nb\nc\nd\ne\nf\ng', { tail: 10, max_lines: 3 })).toEqual(['e', 'f', 'g']);
 });
@@ -175,7 +197,7 @@ test('when + capture chaining (regex, json_path, lines)', async () => {
   const { result } = await run(p, d);
   expect(result.status).toBe('PASS_WITH_WARNINGS');
   expect(result.steps.map((s) => s.status)).toEqual(['pass', 'pass', 'pass', 'fail', 'pass', 'skip']);
-  const out = fs.readFileSync(path.join(d, 'data/play', result.log.split('/').pop().replace('.json', ''), 'use.txt'), 'utf8');
+  const out = fs.readFileSync(path.join(playData(d), result.log.split('/').pop().replace('.json', ''), 'use.txt'), 'utf8');
   expect(out).toContain('node stub.mjs 0 got abc123 v-7');
   // capture khong khop => fail
   const bad = await run(pb([{ id: 'c', run: stub(0, 'zzz'), capture: { name: 'x', regex: 'id=(\\d+)' } }]), d);
@@ -190,7 +212,7 @@ test('list param expands to separate argv items and validates each', async () =>
   const p = pb([{ id: 'a', run: [...stub(0, 'ok'), '${paths}'] }], { params: { paths: { required: true, list: true, pattern: '(?!.*\\.\\.)[A-Za-z0-9_][A-Za-z0-9_./-]*' } } });
   expect(validatePlaybook(p)).toEqual([]);
   const r = await run(p, d, { params: { paths: 'a.txt,b/c.txt' } });
-  const out = fs.readFileSync(path.join(d, 'data/play', r.result.log.split('/').pop().replace('.json', ''), 'a.txt'), 'utf8');
+  const out = fs.readFileSync(path.join(playData(d), r.result.log.split('/').pop().replace('.json', ''), 'a.txt'), 'utf8');
   expect(out).toContain('node stub.mjs 0 ok a.txt b/c.txt');
   await expect(run(p, d, { params: { paths: 'a.txt,../etc' } })).rejects.toThrow('khong khop');
   await expect(run(p, d, { params: { paths: 'a.txt,-A' } })).rejects.toThrow('khong khop');
@@ -215,7 +237,7 @@ test('shipped playbooks validate; verify-commit refuses git add -A style via den
 });
 
 test('CLI: usage error exit 2, unknown playbook exit 2, dry-run exit 0, compact output <= 25 lines', () => {
-  const play = (...a) => spawnSync(process.execPath, [path.join(REPO, 'harness', 'tools', 'play', 'play.mjs'), ...a], { cwd: REPO, encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: REPO } });
+  const play = (...a) => spawnSync(process.execPath, [path.join(SRC, 'harness', 'tools', 'play', 'play.mjs'), ...a], { cwd: REPO, encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: REPO } });
   expect(play().status).toBe(2);
   expect(play('no-such-playbook').status).toBe(2);
   expect(play('verify-commit', '--param', 'message=x').status).toBe(2); // thieu paths
@@ -325,7 +347,7 @@ test('play list: liet ke playbook co gioi han, parsePlayArgs nhan list', async (
   expect(r.playbooks.map((p) => p.name)).toContain('verify-commit');
   expect(listPlaybooks({ hub: REPO, limits: { maxFiles: 1 } }).truncated).toBe('max_files');
   expect(listPlaybooks({ hub: REPO, limits: { timeoutMs: -1 } }).truncated).toBe('timeout');
-  const cli = spawnSync(process.execPath, [path.join(REPO, 'harness', 'tools', 'play', 'play.mjs'), 'list'], { cwd: REPO, encoding: 'utf8', timeout: 30000, env: { ...process.env, HUB_DIR: REPO } });
+  const cli = spawnSync(process.execPath, [path.join(SRC, 'harness', 'tools', 'play', 'play.mjs'), 'list'], { cwd: REPO, encoding: 'utf8', timeout: 30000, env: { ...process.env, HUB_DIR: REPO } });
   expect(cli.status).toBe(0);
   expect(cli.stdout).toContain('verify-commit');
 });
@@ -342,7 +364,7 @@ test('play.mjs caps --timeout-s and --max-output-bytes', async () => {
 test('prune: dry-run default, --yes deletes only old valid run logs', async () => {
   const { prunePlayRuns } = await import('./playbook/run.mjs');
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'play-prune-'));
-  const dir = path.join(d, 'data', 'play');
+  const dir = playData(d);
   fs.mkdirSync(path.join(dir, '20200101000000-t-abcd'), { recursive: true });
   fs.writeFileSync(path.join(dir, '20200101000000-t-abcd.json'), '{}');
   fs.writeFileSync(path.join(dir, 'runs.jsonl'), '');
