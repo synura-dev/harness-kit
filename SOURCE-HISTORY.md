@@ -7,10 +7,8 @@ History before the cutover lives in the hub repo (`E:\11. Agents`): tag `pre-fli
 ## Seed tests
 The old export dropped `*.test.mjs`. Seed tests were copied from hub `harness/` for every module that exists here (same relative path; no hub imports; a few string fixtures mention project names, harmless).
 
-Excluded because they assume hub mode (this repo is plugin mode: `.claude-plugin/plugin.json` exists) or hub data/config not shipped here:
-- core/config/config, core/io/paths, core/io/safe-id, core/registry/data-registry, core/registry/plugin-registry
-- cli/commands/config, cli/commands/doctor
-- constrain/model-policy/hook, constrain/worktree/hook
-- hooks/dispatch/run, observe/storage/data, evolve/loop/loop
+Restored (round 2): all 12 formerly excluded tests now run in plugin mode (explicit fixtures: repoDir / HARNESS_CONFIG_DIR / registryFile+extDirs / mode-aware expectations) and stay green in hub mode. Excluded count: 0 of the original 12.
 
-Follow-up: make these tests pass explicit repoDir/mode so they run in plugin mode, then restore them from hub tag `pre-flip`.
+Also synced from hub: evolve/loop/{policy,loop,cli}.mjs (the export predated layout config and candidates --source; the restored loop test covers them).
+
+Still not seeded (tests only; code is present): harness/tools/play/*.test.mjs (play.test, prune.test) and 2 sync tests (link mode, tools.json broken CLI) - they assume hub data (.agents/playbooks, config/play/default.json, tools.json). Follow-up: give them tmp fixtures, then add.

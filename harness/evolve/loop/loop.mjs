@@ -88,6 +88,7 @@ export async function findCandidates(o = {}) {
     for (const ev of r.events) {
       const t = Date.parse(ev.ts);
       if (Number.isFinite(t) && (t < fromMs || t > nowMs + DAY)) continue;
+      if (o.source && ev.source !== o.source) continue; // loc theo nguon (vd ext:<id>); mac dinh khong loc
       events.push(ev);
     }
     if (r.truncated) { truncated = r.truncated; break; }
@@ -109,7 +110,7 @@ export async function findCandidates(o = {}) {
   return { items, total: items.length, scanned, days, threshold, truncated };
 }
 
-import { classifyTarget, same } from './policy.mjs';
+import { classifyTarget, same, layoutOf } from './policy.mjs';
 export { classifyTarget };
 
 // ---- proposals ----
@@ -131,12 +132,12 @@ function buildChange(kind, cand, o) {
   const slug = `evolve-${cand.id.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}`;
   const ev = `Bang chung: fp=${cand.fp || '-'}, ${cand.count} lan / ${cand.sessions} phien (${cand.first_ts} .. ${cand.last_ts}), tool=${cand.tool}.\nMau (redacted): ${cand.sample}\n`;
   if (kind === 'skill') {
-    const target = o.target || `harness/skills/${slug}/SKILL.md`;
+    const target = o.target || `${layoutOf(o).skillsDir}/${slug}/SKILL.md`;
     const a = polAbs(target, kind, o);
     if (a && fs.existsSync(a)) throw new Error(`${target} da ton tai`);
     return { target, after: `---\nname: ${slug}\ndescription: Tranh loi lap ${cand.tool} (${cand.fp || cand.id}). Dung khi gap loi khop pattern nay.\n---\n\n${note}\n\n${ev}` };
   }
-  if (kind === 'fact') return { target: `data/memory/fact/${slug}.md`, knowledgeId: slug, after: `${note}\n\n${ev}` };
+  if (kind === 'fact') return { target: `${layoutOf(o).factDir}/${slug}.md`, knowledgeId: slug, after: `${note}\n\n${ev}` };
   throw new Error(`kind la: ${kind} (${KINDS.join('|')})`);
 }
 

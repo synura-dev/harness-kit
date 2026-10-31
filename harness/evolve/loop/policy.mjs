@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { workspaceRoot, isInside, REPO_DIR, toPosix } from '../../core/io/paths.mjs';
+import { loadConfig } from '../../core/config/config.mjs';
 
 // ---- policy dich: DENY-BY-DEFAULT ----
 // Chi ghi duoc: skill moi harness/skills/**/*.md, fact qua cong knowledge. Moi thu khac tu choi. FORBIDDEN chi de bao "chi sua tay" ro rang.
@@ -16,10 +17,22 @@ const FORBIDDEN = [
   [/^\.agents(\/|$)/, '.agents (hooks/agents)'],
   [/^\.git(\/|$)/, '.git'],
 ];
-const ALLOW = [
-  [/^harness\/skills\/[a-z0-9][a-z0-9._-]*\/[a-z0-9][a-z0-9._/-]*\.md$/, ['skill']],
-  [/^data\/memory\/fact\/[a-z0-9][a-z0-9-]*\.md$/, ['fact']],
-];
+// Vi tri cho phep ghi la CAU HINH (tool 'evolve', lop plugin/may; lop du an khong ha duoc). Mac dinh = bo cuc hien tai. Cam tuong minh o tren luon thang.
+const DEFAULT_LAYOUT = Object.freeze({ skillsDir: 'harness/skills', factDir: 'data/memory/fact' });
+const SAFE_DIR = /^[a-z0-9][a-z0-9._-]*(\/[a-z0-9][a-z0-9._-]*)*$/;
+const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+export function layoutOf(o = {}, root) {
+  let raw = o.layout;
+  if (!raw) { try { raw = loadConfig('evolve', { root, defaults: DEFAULT_LAYOUT }).config; } catch { raw = null; } }
+  const pick = (k) => (raw && typeof raw[k] === 'string' && SAFE_DIR.test(raw[k]) && !raw[k].split('/').includes('..') ? raw[k].toLowerCase() : DEFAULT_LAYOUT[k]);
+  return { skillsDir: pick('skillsDir'), factDir: pick('factDir') };
+}
+function buildAllow(layout) {
+  return [
+    [new RegExp('^' + esc(layout.skillsDir) + '/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*\\.md$'), ['skill']],
+    [new RegExp('^' + esc(layout.factDir) + '/[a-z0-9][a-z0-9-]*\\.md$'), ['fact']],
+  ];
+}
 const CASE_FOLD = process.platform === 'win32' || process.platform === 'darwin';
 const RESERVED = /^(con|prn|aux|nul|com\d|lpt\d|conin\$|conout\$)(\..*)?$/i;
 
@@ -78,7 +91,7 @@ export function classifyTarget(target, kind, o = {}) {
   const repoRel = repoReal ? relKey(repoReal, real) : null;
   f = forb(realRel.toLowerCase()) || (repoRel != null ? forb(repoRel.toLowerCase()) : null);
   if (f) return { ok: false, forbidden: true, reason: `dich cam: ${f[1]} (${realRel})`, rel: n.rel };
-  const hit = ALLOW.find(([re]) => re.test(n.key));
+  const hit = buildAllow(layoutOf(o, c.hub)).find(([re]) => re.test(n.key));
   if (!hit) return { ok: false, forbidden: false, reason: `dich ngoai allowlist (deny-by-default): ${n.rel}`, rel: n.rel };
   if (!hit[1].includes(kind)) return { ok: false, forbidden: false, reason: `kind ${kind} khong duoc ghi vao ${n.rel}`, rel: n.rel };
   const knowledgeId = kind === 'fact' ? path.posix.basename(n.key, '.md') : null;

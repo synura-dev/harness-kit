@@ -53,8 +53,11 @@ test('--out: ghi file khi co, tu choi doc mac dinh va file co san neu thieu --fo
   expect(main(['--settings', settingsFile, '--event', 'Stop', '--n', '1', '--out', out, '--force'], quiet)).toBe(0);
   const doc = path.join(HUB, 'docs', 'research', 'hook-latency-baseline.md');
   const before = fs.existsSync(doc) ? fs.readFileSync(doc, 'utf8') : null;
-  expect(() => writeDocOut(doc, 'x', { force: true })).toThrow(/doc mac dinh/);
-  expect(main(['--settings', settingsFile, '--event', 'Stop', '--n', '1', '--out', doc, '--force'], quiet)).toBe(2);
+  expect(() => writeDocOut(doc, 'x', { force: true, protect: doc })).toThrow(/doc mac dinh/);
+  // plugin mode: goc workspace = CLAUDE_PROJECT_DIR (cwd); ep = HUB de doc mac dinh trung doc o tren (hub mode bo qua bien nay)
+  const oldP = process.env.CLAUDE_PROJECT_DIR; process.env.CLAUDE_PROJECT_DIR = HUB;
+  try { expect(main(['--settings', settingsFile, '--event', 'Stop', '--n', '1', '--out', doc, '--force'], quiet)).toBe(2); }
+  finally { if (oldP === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = oldP; }
   expect(fs.existsSync(doc) ? fs.readFileSync(doc, 'utf8') : null).toBe(before);
 });
 

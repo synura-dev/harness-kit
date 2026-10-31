@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve candidates [--days N] [--threshold N] [--limit N] | propose <cid> [--kind skill|fact] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill|fact] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -21,6 +21,7 @@ export function parseArgs(argv) {
     else if (k === '--threshold') o.threshold = posInt(val());
     else if (k === '--limit') o.limit = posInt(val());
     else if (k === '--kind') o.kind = val();
+    else if (k === '--source') o.source = val();
     else if (k === '--target') o.target = val();
     else if (k === '--approve') o.approve = true;
     else if (k === '--force') o.force = true;
