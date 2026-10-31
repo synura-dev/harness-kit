@@ -91,11 +91,17 @@ for (const [cmd, id] of TABLE) {
 
 test('core khong chua du lieu du an', () => {
   assert.deepEqual(cfg.remoteHostAliases, []);
-  assert.ok(!cfg.denyPatterns.some((p) => p.id === 'config-dump'));
+  assert.ok(!/app\\\.js/.test(cfg.denyPatterns.find((p) => p.id === 'config-dump')?.regex || '')); // config-dump chi co mac dinh, khong ten du an
   assert.ok(!/my-host|fourth-host|third-host|other-host|app\.js/.test(fs.readFileSync(path.join(path.dirname(HOOK), 'hook.config.json'), 'utf8')));
 });
 
+test('du an sach (khong cau hinh): config-dump mac dinh trong code van chan .env/khoa/credential', () => {
+  for (const c of ['cat .env', 'cat ./.env', 'type .env.local', 'head -5 config/.env.production', 'cat ~/.ssh/id_rsa', 'cat server.key', 'less certs/tls.pem', 'cat ~/.aws/credentials', 'cat .npmrc', 'Get-Content "C:\\x\\.env"', "bash -c 'cat .env'"]) assert.equal(ev(c), 'config-dump', c);
+  for (const c of ['cat .env.example', 'cat .env.sample', 'cat ./config/.env.template', 'cat README.md', 'cat .envrc', 'cat src/keyboard.js', 'cat .env | sha256sum', 'wc -c .env', 'cat docs/credentials-guide.md', 'git diff .env.example']) assert.equal(ev(c), null, c);
+});
+
 test('goi du an: config-dump + luat rieng + disable + khoa la canh bao', () => {
+  for (const c of ['cat .env', 'cat id_rsa', 'cat .env.sample']) assert.equal(pev(c), c === 'cat .env.sample' ? null : 'config-dump', c); // mac dinh van con khi co ten rieng
   for (const c of ['cat app.js', "ssh my-host 'cat /srv/app/ecosystem.config.js'", 'type .env', 'Get-Content ./config.json', "ssh my-host \"sed -n '1,40p' app.js\"", 'less /srv/x/.env.production']) assert.equal(pev(c), 'config-dump', c);
   for (const c of ["ssh my-host 'cat /srv/app/app.js | sha256sum'", "ssh my-host 'cat /srv/app/ecosystem.config.js | wc -c'", "ssh my-host 'grep -n listen /srv/app/app.js | head -5'"]) assert.equal(pev(c), null, c);
   assert.equal(pev('cat config.js'), 'config-dump');

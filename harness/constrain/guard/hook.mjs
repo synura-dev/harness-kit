@@ -68,12 +68,18 @@ const norm = (rules) => (Array.isArray(rules) ? rules : []).filter(isObj).map((r
 const union = (a, b) => [...new Set([...(a || []), ...(Array.isArray(b) ? b : [])])];
 const ESC = /[.*+?^${}()|[\]\\]/g;
 
-/** Luat config-dump sinh tu sensitiveFileNames (+ .env). */
-function sensitiveRule(names) {
-  if (!names.length) return null;
-  const alt = names.map((n) => String(n).replace(ESC, '\\$&')).join('|');
-  const regex = '\\b(cat|type|Get-Content|gc|less|more|bat|sed\\s+-n|head|tail)\\b[^|;&\\n]*(' + alt + '|(^|[\\\\/\\s\'"])\\.env(\\.\\w+)?\\b)';
-  return { id: 'config-dump', regex, unless: '\\|\\s*(sha256sum|md5sum|shasum|wc)\\b', reason: 'Cam in noi dung file cau hinh/app (co the lo chuoi ket noi). Dung sha256sum/wc/grep -n co gioi han. / Config dump blocked; use sha256sum, wc, bounded grep -n.' };
+/** Tap file nhay cam MAC DINH trong code (defaults over config): luon co, ke ca du an sach khong cau hinh; sensitiveFileNames chi MO RONG.
+ *  .env/.env.* (tru .env.example|.sample|.template|.dist), khoa/chung chi, file credential pho bien. */
+const SENSITIVE_TOKEN = String.raw`\.env(?!\.(?:example|sample|template|dist)(?![\w.-]))(?:\.[\w-]+)*|[\w.-]*\.(?:pem|key|p12|pfx|jks|keystore)|id_(?:rsa|dsa|ecdsa|ed25519)|credentials(?:\.json)?|\.npmrc|\.netrc|\.pgpass|\.git-credentials|secrets?\.(?:json|ya?ml)|service-account[\w.-]*\.json`;
+const SENSITIVE_DEFAULT = String.raw`(?:^|[\\/\s'"=])(?:${SENSITIVE_TOKEN})(?=$|[\s'"|;&)])`;
+const BUILTIN_SENSITIVE = new Set(['.env']); // da phu boi mac dinh (co loai tru .env.example)
+
+/** Luat config-dump: mac dinh trong code + sensitiveFileNames (mo rong). Luon tra ve luat. */
+function sensitiveRule(names = []) {
+  const extra = names.map(String).filter((n) => n && !BUILTIN_SENSITIVE.has(n));
+  const alt = extra.map((n) => n.replace(ESC, '\\$&')).join('|');
+  const regex = String.raw`\b(cat|type|Get-Content|gc|less|more|bat|sed\s+-n|head|tail)\b[^|;&\n]*(` + (alt ? alt + '|' : '') + SENSITIVE_DEFAULT + ')';
+  return { id: 'config-dump', regex, unless: '\\|\\s*(sha256sum|md5sum|shasum|wc)\\b', reason: 'Cam in noi dung file cau hinh/bi mat (.env, khoa, credential...). Dung sha256sum/wc/grep -n co gioi han. / Config/secret dump blocked; use sha256sum, wc, bounded grep -n.' };
 }
 
 /** Qua core loadConfig (D3): loi (files[0]) < may (files[1..], config/guard/local.json; duy nhat tat duoc luat loi) < du an (config/guard/projects/<id>.json, chi PACK_KEYS) < env. Khong suy tu cwd. -> {config, warnings} */
@@ -152,8 +158,7 @@ export function load(files = configFiles(), opts = {}) {
   }
   aliases = union(b.config.remoteHostAliases, cfg.remoteHostAliases); names = union(b.config.sensitiveFileNames, cfg.sensitiveFileNames);
   deny = norm(cfg.denyPatterns).filter((x) => !tomb.has(x.id)); allow = norm(cfg.allowlist).filter((x) => !tomb.has(x.id));
-  const sr = sensitiveRule(names);
-  if (sr) deny = [sr, ...deny.filter((x) => x.id !== 'config-dump')];
+  deny = [sensitiveRule(names), ...deny.filter((x) => x.id !== 'config-dump')];
   cfg = { ...cfg, denyPatterns: deny, allowlist: allow, remoteHostAliases: aliases, sensitiveFileNames: names };
   if (env.GUARD_MODE) cfg.mode = env.GUARD_MODE;
   if (env.GUARD_LOG_FILE) cfg.logFile = env.GUARD_LOG_FILE;
