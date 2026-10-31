@@ -81,10 +81,10 @@ test('doctor: settings khong hook + khong plugin -> MISS canh bao; co --plugin-d
     expect(a.stdout).toContain('hook den tu plugin');
   } else {
     expect(a.stdout).toContain('[MISS] .claude/settings.json hook dispatch');
-    expect(a.stdout).toContain('khong thay plugin agent-guard-kit');
+    expect(a.stdout).toContain('khong thay plugin harness-kit');
   }
   expect(run(['--plugin-dir', 'x']).stdout).not.toContain('[MISS] .claude/settings.json hook dispatch');
-  fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'agent-guard-kit@local': true } }));
+  fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'harness-kit@local': true } }));
   const c = run([]);
   expect(c.stdout).not.toContain('[MISS] .claude/settings.json hook dispatch');
   expect(c.stdout).toContain('hook den tu plugin');

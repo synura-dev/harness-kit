@@ -73,28 +73,47 @@ const pluginDirArg = pdIdx > 0 ? process.argv[pdIdx + 1] : null;
 const pluginLoaded = isPluginMode() || !!process.env.CLAUDE_PLUGIN_ROOT || !!pluginDirArg;
 const enabledGuardPlugin = (() => {
   for (const f of [path.join(HUB_ROOT, '.claude', 'settings.json'), path.join(HUB_ROOT, '.claude', 'settings.local.json'), path.join(os.homedir(), '.claude', 'settings.json')]) {
-    try { const j = JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); if (Object.keys(j.enabledPlugins || {}).some((k) => /agent-guard-kit/.test(k) && j.enabledPlugins[k])) return true; } catch {}
+    try { const j = JSON.parse(fs.readFileSync(f, 'utf8').replace(/^\uFEFF/, '')); if (Object.keys(j.enabledPlugins || {}).some((k) => /(?:harness-kit|agent-guard-kit)/.test(k) && j.enabledPlugins[k])) return true; } catch {}
   }
-  try { if (/agent-guard-kit/.test(fs.readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8'))) return true; } catch {}
+  try { if (/(?:harness-kit|agent-guard-kit)/.test(fs.readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8'))) return true; } catch {}
   return false;
 })();
 const pluginSeen = pluginLoaded || enabledGuardPlugin;
 const dispatchPath = path.join(isPluginMode() ? REPO_DIR : HUB_ROOT, 'harness', 'hooks', 'dispatch', 'run.mjs');
 line(fs.existsSync(dispatchPath), 'hooks/dispatch/run.mjs ton tai');
-const lowerPosix = (s) => String(s).replace(/\\/g, '/').toLowerCase();
+// Launcher (bin/harness.mjs hook <Event>): hook tro launcher thay vi dispatch/run.mjs. Tim plugin theo cung thu tu voi launcher (env -> launcher.local.json -> installed_plugins.json).
+const LAUNCHER_HOOK_RE = /bin[\\/]harness\.mjs"?\s+hook\s+[A-Za-z]+/;
+function findLauncherPlugin() {
+  const rj = (p) => { try { return JSON.parse(fs.readFileSync(p, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
+  const okRoot = (r) => { if (!r) return false; const m = rj(path.join(path.resolve(String(r)), '.claude-plugin', 'plugin.json')); return !!m && ['harness-kit', 'agent-guard-kit', 'harness-plugin'].includes(m.name) && fs.existsSync(path.join(path.resolve(String(r)), 'harness', 'cli', 'harness.mjs')); };
+  const env = process.env.HARNESS_PLUGIN_DIR || process.env.HARNESS_PLUGIN_ROOT;
+  if (env) return okRoot(env) ? { ok: true, how: 'env' } : { ok: false, why: 'HARNESS_PLUGIN_DIR sai/khong hop le' };
+  const loc = rj(path.join(HUB_ROOT, 'config', 'launcher.local.json'));
+  if (loc && loc.pluginRoot) return okRoot(loc.pluginRoot) ? { ok: true, how: 'config/launcher.local.json' } : { ok: false, why: 'launcher.local.json pluginRoot sai/khong tim thay plugin' };
+  const reg = rj(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'));
+  for (const [k, list] of Object.entries((reg && reg.plugins) || {})) if (/^(harness-kit|agent-guard-kit|harness-plugin)@/.test(k) && Array.isArray(list) && list.some((e) => okRoot(e && e.installPath))) return { ok: true, how: 'installed_plugins.json' };
+  return { ok: false, why: 'khong tim thay plugin harness-kit' };
+}
+const lowerPosix =(s) => String(s).replace(/\\/g, '/').toLowerCase();
 const projectSettingsFile = path.join(HUB_ROOT, '.claude', 'settings.json');
 try {
   const txt = fs.readFileSync(projectSettingsFile, 'utf8');
   const st = JSON.parse(txt.charCodeAt(0) === 0xfeff ? txt.slice(1) : txt);
   const cmds = [];
   for (const [ev, arr] of Object.entries(st.hooks || {})) {
-    for (const g of arr || []) for (const h of g.hooks || []) if (h.command && /^\s*node\s/.test(h.command) && /dispatch[\\/]run\.mjs/.test(h.command)) cmds.push([ev, h.command]);
+    for (const g of arr || []) for (const h of g.hooks || []) if (h.command && /^\s*node\s/.test(h.command) && (/dispatch[\\/]run\.mjs/.test(h.command) || LAUNCHER_HOOK_RE.test(h.command))) cmds.push([ev, h.command]);
+  }
+  const launcherCmds = cmds.filter(([, c]) => LAUNCHER_HOOK_RE.test(c));
+  if (launcherCmds.length) {
+    const lp = findLauncherPlugin();
+    line(lp.ok, 'launcher bin/harness.mjs: plugin harness', lp.ok ? `${launcherCmds.length} hook qua launcher, plugin: ${lp.how}` : lp.why + ' (thieu plugin: PreToolUse bi chan exit 2, hook khac exit 3; cai plugin harness-kit, dat HARNESS_PLUGIN_DIR hoac config/launcher.local.json {"pluginRoot"})');
+    line(fs.existsSync(path.join(HUB_ROOT, 'bin', 'harness.mjs')), 'bin/harness.mjs ton tai');
   }
   const expand = (c) => String(c).replace(/\$\{?CLAUDE_PROJECT_DIR\}?|%CLAUDE_PROJECT_DIR%/g, () => HUB_ROOT.split(path.sep).join('/'));
-  const target = (c) => { const m = expand(c).match(/"([^"]*dispatch[\\/]run\.mjs)"|(\S*dispatch[\\/]run\.mjs)/); return m ? path.resolve(HUB_ROOT, m[1] || m[2]) : null; };
+  const target = (c) => { if (LAUNCHER_HOOK_RE.test(c)) return path.join(HUB_ROOT, 'bin', 'harness.mjs'); const m = expand(c).match(/"([^"]*dispatch[\\/]run\.mjs)"|(\S*dispatch[\\/]run\.mjs)/); return m ? path.resolve(HUB_ROOT, m[1] || m[2]) : null; };
   const good = cmds.filter(([, c]) => { const t = target(c); return t && fs.existsSync(t); });
-  if (cmds.length === 0 && pluginSeen) line(null, '.claude/settings.json hook dispatch', 'khong co hook trong settings: hook den tu plugin agent-guard-kit');
-  else if (cmds.length === 0) line(false, '.claude/settings.json hook dispatch', 'canh bao: khong co hook guard trong settings va khong thay plugin agent-guard-kit nap (enabledPlugins/--plugin-dir). Neu da nap plugin bang --plugin-dir cua phien claude, chay doctor kem --plugin-dir <p>; doctor khong tu phat hien duoc truong hop do');
+  if (cmds.length === 0 && pluginSeen) line(null, '.claude/settings.json hook dispatch', 'khong co hook trong settings: hook den tu plugin harness-kit');
+  else if (cmds.length === 0) line(false, '.claude/settings.json hook dispatch', 'canh bao: khong co hook guard trong settings va khong thay plugin harness-kit nap (enabledPlugins/--plugin-dir). Neu da nap plugin bang --plugin-dir cua phien claude, chay doctor kem --plugin-dir <p>; doctor khong tu phat hien duoc truong hop do');
   else line(good.length === cmds.length, `.claude/settings.json hook dispatch`, `${good.length}/${cmds.length} su kien tro toi file dispatch/run.mjs ton tai`);
   try {
     const { hook_events } = await import(new URL('../../observe/audit/defaults.mjs', import.meta.url).href);
@@ -132,7 +151,9 @@ try {
   console.log(build((ev) => `node "$CLAUDE_PROJECT_DIR/harness/hooks/dispatch/run.mjs" ${ev}`));
 } catch (e) { process.exitCode = 1; console.log('[LOI] khong tao duoc khoi hooks (import hook_events tu harness/observe/audit/defaults.mjs):', e.message); }
 // adapter lech nguon (.agents/ -> .claude/, rule agy) + validate cau truc
-try {
+// co dieu kien: workspace khong co adapter nguon (.agents/) thi khong co gi de lech -> bo qua, khong bao MISS adapter
+if (!fs.existsSync(path.join(HUB_ROOT, '.agents'))) console.log('[skip] adapter: workspace khong co .agents/ (khong co nguon adapter)');
+else try {
   const { syncAll } = await import(new URL('../../tools/sync.mjs', import.meta.url).href);
   const res = await syncAll({ root: HUB_ROOT, check: true });
   for (const r of res) {

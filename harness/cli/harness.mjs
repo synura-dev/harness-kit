@@ -3,13 +3,15 @@
 // node harness/cli/harness.mjs <nhom> | --group <nhom> -> domain cua nhom (domain trung ten nhom: domain uu tien)
 // node harness/cli/harness.mjs <domain>       -> index cua domain do
 // node harness/cli/harness.mjs <domain> <args> (hoac "<domain> run") -> spawn CLI cu
-// extRoots (config/hub/default.json): them manifest ngoai harness/ (vd hub/<ten>/manifest.json) -> nhom "Hub (hub/)"; spawn, khong import; domain trung harness: harness thang + bao loi.
+// extRoots (config workspace): them manifest ngoai harness/ (vd <root>/<ten>/manifest.json) -> nhom "Ngoai: <root>/"; spawn, khong import; domain trung harness: harness thang + bao loi.
 // Registry = manifest.json cua tung extension (harness/{cli,plugins,tools,hooks}/.../manifest.json): script/desc/cmds/default. Loi/thieu => fallback toi thieu. Hook khong goi qua shim.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit } from '../core/io/out.mjs';
+import { loadExternals, runExternal, blockExternal } from '../core/ext/ext-host.mjs';
+import { listRegistered, isExtensionTrusted } from './commands/ext-registry.mjs';
 import { loadHarnessRegistry, translateAlias } from '../core/registry/plugin-registry.mjs';
 import { GROUP_ZONES } from '../core/config/contract.mjs';
 import { loadConfig } from '../core/config/config.mjs';
@@ -31,7 +33,7 @@ export function loadRegistryInfo(root) {
   try {
     const hd = path.join(root, 'harness');
     if (fs.existsSync(hd)) {
-      // extRoots (config 'hub'): quet manifest ngoai harness/; domain o do chi SPAWN (khong import). Loi config -> khong co extRoots.
+      // extRoots (config workspace): quet manifest ngoai harness/; domain o do chi SPAWN (khong import). Loi config -> khong co extRoots.
       let extRoots;
       try { extRoots = loadConfig('workspace', { root }).config.extRoots; } catch { /* bo qua */ }
       const reg = loadHarnessRegistry({ harnessDir: hd, hubRoot: root, extRoots });
@@ -51,13 +53,13 @@ export function loadRegistryInfo(root) {
 export function loadDomains(root) { return loadRegistryInfo(root).doms; }
 
 // Nhom = vung (thu muc cap 1 duoi harness/) chua file domain, suy tu duong dan registry; khong hardcode ten domain.
-const GROUP_LABELS = { hub: 'Hub (hub/)', observe: 'Quan sat', constrain: 'Han che', knowledge: 'Tri thuc', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Cu (plugins/tools/hooks)' };
+const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', knowledge: 'Tri thuc', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Cu (plugins/tools/hooks)' };
 const MAIN_GROUPS = ['observe', 'constrain', 'knowledge', 'evolve']; // luon in tieu de, ke ca rong
 const LEGACY_ZONES = new Set(['plugins', 'tools', 'hooks']);
 export const INDEX_MAX_LINES = 40;
 
 export function groupOf(d) {
-  if (d.ext) return String(d.ext).split('/')[0]; // domain tu extRoot (vd hub/): nhom rieng theo goc
+  if (d.ext) return String(d.ext).split('/')[0]; // domain tu extRoot (vd <root>/): nhom rieng theo goc
   const seg = String(d.script || '').split('/');
   const z = seg[0] === 'harness' ? seg[1] : null;
   if (!z) return 'legacy';
@@ -78,7 +80,7 @@ function groupedLines(root, doms, errors, only) {
     const ent = Object.entries(doms).filter(([, d]) => groupOf(d) === g);
     if (!ent.length && !(MAIN_GROUPS.includes(g) || g === only)) continue;
     const extG = ent.length && ent.every(([, d]) => d.ext);
-    L.push(extG ? `== ${GROUP_LABELS[g] || `${g}/`} ==` : `== ${GROUP_LABELS[g] || g} (${g}) ==`);
+    L.push(extG ? `== ${GROUP_LABELS[g] || `Ngoai: ${g}/`} ==` : `== ${GROUP_LABELS[g] || g} (${g}) ==`);
     if (!ent.length) L.push('(chua co domain)');
     L.push(...indexLines(root, Object.fromEntries(ent), null, Infinity));
   }
@@ -123,6 +125,23 @@ export function run(argv, root, opts = {}) {
     domain = al.domain;
   }
   const known = domain && Object.hasOwn(doms, domain) ? doms[domain] : null;
+  // External (ctx + tien trinh con, song song extRoots). Chi khi domain khong phai cua core (core thang). opts.externals = [{id, root}] (tam thoi, chua co ext register).
+  if (!known && domain && !group) {
+    // opts.externals (tuong minh) bo qua dang ky; mac dinh doc lop may qua listRegistered va CHAN neu hash lech/chua duyet.
+    const regOpts = { workspace: root, ...(opts.registry || {}) };
+    let list, regErr;
+    try { list = opts.externals || listRegistered(regOpts); } catch (e) { list = []; regErr = e; }
+    // Dang ky lop may hong: fail-closed (khong chay external nao), bao huong dan; ten nhom van xu ly binh thuong ben duoi.
+    if (regErr && !groupOrder(doms).includes(domain)) { const text = `ext ${domain}: CHAN (exit 66): ${String(regErr.message).slice(0, 400)}`; if (!opts.capture) console.error(text); return { code: 66, stdout: '', stderr: `${text}\n`, text, printed: !opts.capture }; }
+    const { byDomain, blocked = {} } = list.length ? loadExternals(list, { coreDomains: doms }) : { byDomain: {} };
+    if (Object.hasOwn(byDomain, domain)) {
+      // Tin cay theo id + root tu dang ky (loadExternals da ep m.id === id dang ky); hash dung cay root se chay.
+      if (!opts.externals && !isExtensionTrusted(byDomain[domain].id, { ...regOpts, root: byDomain[domain].root })) { const b = blockExternal(byDomain[domain], domain); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
+      const r = runExternal(byDomain[domain], domain, rest0, { timeoutS: opts.timeoutS || c.timeoutS, workspace: root, json: c.json });
+      return { code: r.code, stdout: r.stdout, stderr: r.stderr };
+    }
+    if (!opts.externals && Object.hasOwn(blocked, domain)) { const b = blockExternal(blocked[domain], domain, blocked[domain].reason); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
+  }
   // Ten nhom (khong trung domain) -> liet ke domain cua nhom. Domain luon uu tien; nhom trung ten domain dung --group.
   if (!group && domain && !known && !rest0.length && groupOrder(doms).includes(domain)) group = domain;
   const autoRun = known && !rest0.length && known.default === 'run' && available(root, known);

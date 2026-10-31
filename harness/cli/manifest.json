@@ -4,13 +4,22 @@
   "layer": "core",
   "entry": "harness.mjs",
   "domain": "harness",
-  "domains": {},
+  "domains": {
+    "ext": {
+      "file": "commands/ext-cmd.mjs",
+      "desc": "dang ky extension lop may (hash ghim, ask/TTY)",
+      "cmds": "register <path> | approve <id> | list | verify",
+      "default": "index"
+    }
+  },
   "files": {
     "helpers": [
       "commands/doctor.mjs",
       "commands/worktree.mjs",
       "commands/proc-watch.mjs",
-      "commands/config.mjs"
+      "commands/config.mjs",
+      "commands/ext-registry.mjs",
+      "ext-runner.mjs"
     ]
   },
   "tests": [
@@ -18,7 +27,8 @@
     "commands/adapters.test.mjs",
     "commands/worktree.test.mjs",
     "commands/proc-watch.test.mjs",
-    "commands/config.test.mjs"
+    "commands/config.test.mjs",
+    "commands/ext-registry.test.mjs"
   ],
   "config": {
     "defaults": null,
