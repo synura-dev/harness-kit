@@ -18,8 +18,8 @@ test('HUB_DATA_DIR: runs/play/audit cung nam duoi do', async () => {
   process.env.HUB_DATA_DIR = path.resolve('/tmp-x-data');
   try {
     const base = path.resolve('/tmp-x-data');
-    // plugin mode: registry plugin dat runs o zone system
-    const zone = isPluginMode() ? 'system' : '';
+    // Registry plugin dong bo voi hub: runs khong co entry -> duong dan phang ca hai mode.
+    const zone = '';
     expect(runsDir('/whatever')).toBe(path.join(base, zone, 'runs'));
     expect(dataRoot('play', { repoDir: '/whatever' })).toBe(path.join(base, 'play'));
   } finally {

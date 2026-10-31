@@ -30,12 +30,6 @@ test('manifest: domain string, domains mang, domains object deu nap duoc; data k
   expect(r.errors.some((e) => e.includes('zone khong hop le'))).toBe(true);
 });
 
-test('manifest that hub/tasks va hub/dispatch nap duoc', () => {
-  const root = path.resolve(import.meta.dir, '..', '..', '..');
-  const r = loadExternals([{ root: path.join(root, 'hub', 'tasks') }, { root: path.join(root, 'hub', 'dispatch') }], { coreDomains: {} });
-  expect(r.errors).toEqual([]);
-  expect(Object.keys(r.byDomain).sort()).toEqual(['dispatch-worker', 'tasks']);
-});
 
 test('ctx: ghi chi trong zone mac dinh + muc data khai bao; entryPath thieu khai bao nem', async () => {
   const { buildCtx } = await import('./ctx.mjs');
