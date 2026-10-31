@@ -83,7 +83,8 @@ test('check skill: bo qua oracle (ghi ro), KHONG tao/doi file that', async () =>
   const r = check(p.id, o);
   expect(r.status).toBe('checked');
   expect(r.check.ok).toBe(true);
-  expect(r.check.oracle).toMatch(/skipped/);
+  expect(r.check.oracle).toBe('skipped (khong co dich config de eval)');
+  expect(r.check.verdict).toBe('skipped');
   expect(fs.existsSync(skillAbs(p))).toBe(false);
   expect(fs.existsSync(path.join(o.dataRoot, 'tmp')) ? fs.readdirSync(path.join(o.dataRoot, 'tmp')).filter((n) => n.startsWith('check-')) : []).toEqual([]);
 });
@@ -369,6 +370,9 @@ test('E2E du an sach (khong harness/): CLI candidates -> propose -> check (SKIPP
     expect(p.change.target).toMatch(/^evolve\/skills\/evolve-[a-z0-9-]+\/SKILL\.md$/);
     const ck = spawnSync(process.execPath, [path.join(HERE, 'cli.mjs'), 'check', p.id], { env, cwd: proj, encoding: 'utf8', timeout: 30000 });
     expect(ck.status).toBe(0);
+    expect(ck.stdout).toContain('SKIPPED');
+    expect(ck.stdout).not.toContain('PASS');
+    expect(ck.stdout).toContain('oracle: skipped (khong co dich config de eval)');
     const ap = js(run('apply', p.id, '--approve'));
     expect(ap.ok).toBe(true);
     const abs = path.join(data, ...p.change.target.split('/'));

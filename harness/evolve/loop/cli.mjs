@@ -49,7 +49,9 @@ export async function render(o) {
   if (o.cmd === 'check') {
     const p = check(need(), o);
     const ck = p.check;
-    const s = `check ${p.id}: ${ck.ok ? 'PASS' : 'LOAI'}${ck.reason ? ` - ${ck.reason}` : ''}\noracle=${ck.oracle || '-'}`;
+    // Oracle bo qua -> nhan SKIPPED (khong PASS): chi qua kiem policy/sha, chua eval that; van cho apply (exit 0), apply tu kiem lai.
+    const label = !ck.ok ? 'LOAI' : ck.verdict === 'skipped' ? 'SKIPPED (policy+sha ok, chua eval; co the apply --approve sau khi nguoi doc noi dung)' : 'PASS';
+    const s = `check ${p.id}: ${label}${ck.reason ? ` - ${ck.reason}` : ''}\noracle: ${ck.oracle || '-'}`;
     return { code: ck.ok ? 0 : 1, summary: s, data: p };
   }
   if (o.cmd === 'apply') {

@@ -198,7 +198,9 @@ function restoreTarget(kind, pol, buf, c, o, tag) {
 }
 
 // ---- oracle: evolve chi de xuat skill/fact (ngoai config/) nen khong co gi de eval tren ban sao config; oracle luon bo qua (ghi ro). ----
-const runOracle = (kind, afterBuf) => ({ ok: true, reason: null, oracle: `skipped: ${kind} ngoai config/, evolve khong con dich config`, after_sha: sha(afterBuf) });
+// ok=true nghia la "qua cac kiem policy/sha, khong co eval de chay" (apply phu thuoc ok + after_sha); verdict='skipped' de KHONG goi la PASS.
+export const ORACLE_SKIPPED = 'skipped (khong co dich config de eval)';
+const runOracle = (kind, afterBuf) => ({ ok: true, verdict: 'skipped', reason: null, oracle: ORACLE_SKIPPED, kind, after_sha: sha(afterBuf) });
 
 const afterOf = (p) => (p && p.change && typeof p.change.after === 'string' ? Buffer.from(p.change.after, 'utf8') : null);
 
