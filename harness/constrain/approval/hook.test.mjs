@@ -137,7 +137,7 @@ test('thieu config guard: canh bao reuse-missing, force push roi ve ask (guard v
   finally { fs.rmSync(h, { recursive: true, force: true }); }
 });
 
-test('khong ReDoS: dau vao doi khang < 250ms/chuoi, tong < 2s', () => {
+test('khong ReDoS: dau vao doi khang < 250ms/chuoi, tong < 2s', { timeout: 60000 }, () => {
   const bad = [
     'git ' + 'a '.repeat(20000) + 'push', 'ssh ' + 'x'.repeat(90000), 'ssh ' + 'a '.repeat(40000), 'npm ' + 'run '.repeat(20000) + 'deploy', 'deploy'.repeat(15000),
     '/'.repeat(90000) + 'deploy.sh', 'node ' + '-x '.repeat(30000) + 'migrat', 'migrat'.repeat(15000) + '.mjs', 'bash ' + 'a'.repeat(90000), 'kubectl ' + 'a '.repeat(40000),
@@ -163,7 +163,7 @@ test('khong ReDoS: dau vao doi khang < 250ms/chuoi, tong < 2s', () => {
   }
   if (total >= 2000) { ctlTotal = 0; for (const c of bad) for (const m of ['bash', 'ps']) ctlTotal += best(control(c), m, 0); }
   assert.ok(total < 2000 || total < RATIO * Math.max(ctlTotal, 1), 'tong ' + total.toFixed(0) + 'ms, doi chung ' + ctlTotal.toFixed(0) + 'ms');
-}, 60000);
+});
 
 test('hook that: JSON stdin -> stdout + ghi audit type=gate', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-audit-'));
