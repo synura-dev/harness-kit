@@ -10,6 +10,12 @@
       "desc": "dang ky extension lop may (hash ghim, ask/TTY)",
       "cmds": "register <path> | approve <id> | list | verify",
       "default": "index"
+    },
+    "agy": {
+      "file": "commands/agy.mjs",
+      "desc": "hook agy qua plugin: sinh/gop .agents/hooks.json + shim (khong launcher); rule allow de xuat",
+      "cmds": "init [--check] [--dir <p>] | rules [--print|--apply]",
+      "default": "index"
     }
   },
   "files": {
@@ -19,7 +25,8 @@
       "commands/proc-watch.mjs",
       "commands/config.mjs",
       "commands/ext-registry.mjs",
-      "ext-runner.mjs"
+      "ext-runner.mjs",
+      "commands/agy.mjs"
     ]
   },
   "tests": [
@@ -28,7 +35,8 @@
     "commands/worktree.test.mjs",
     "commands/proc-watch.test.mjs",
     "commands/config.test.mjs",
-    "commands/ext-registry.test.mjs"
+    "commands/ext-registry.test.mjs",
+    "commands/agy.test.mjs"
   ],
   "config": {
     "defaults": null,

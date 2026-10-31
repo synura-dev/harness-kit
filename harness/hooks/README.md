@@ -26,6 +26,7 @@ Mẫu nhóm, giá trị `adapters` và cách thêm CLI: xem [../README.md](../RE
 
 ## Quy tắc
 - Quy ước command: agy chạy hook với cwd = `.agents/`, nên command luôn là `../harness/...`. Claude dùng `$CLAUDE_PROJECT_DIR`. Hook agy không dựa vào `process.cwd()`.
+- Dự án dùng plugin (không launcher): `harness agy init` gộp khoá `harness-kit` vào `.agents/hooks.json` với command `node ./harness-agy-shim.mjs <Event>` và chép shim `dispatch/agy-shim.mjs` vào `.agents/` (portable, commit được); gốc plugin theo máy ghi ở `.agents/harness-agy.local.json` (gitignored), dự phòng `installed_plugins.json`. Lý do không dùng biến/`~`: chạy thật agy 1.4.12 (2026-10-31) KHÔNG mở rộng `%USERPROFILE%`, `$HOME`, `~`, `${env:...}`, giữ nguyên dấu `"` và nuốt `\` trong command (node báo `Cannot find module '.agents\"C:\Users\huynhhkprobe.mjs"'`). Command không chứa ngoặc kép hay đường dẫn tuyệt đối.
 - Hook phải fail-open (lỗi nội bộ -> `{}`, exit 0), trừ guard có chủ đích chặn.
 - Mỗi module có config JSON + giá trị mặc định (`DEFAULTS`) trong code; chạy được khi config thiếu/hỏng. File JSON chỉ là lớp ghi đè (`*.config.local.json` cho ghi đè cục bộ, đã gitignore).
 - Thiết kế theo hành vi tổng quát (event -> hành động qua config), không hard-code một mục đích cụ thể.
