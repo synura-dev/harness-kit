@@ -1,6 +1,6 @@
 ---
 name: harness-dev-loop
-description: Vòng phát triển nhiều agent song song, rút từ số liệu chạy thật: chia gói, trần song song, brief, trần lượt, commit từng mục, tự sửa rồi hoàn tác, full suite một lần, reviewer độc lập. Dùng khi lập kế hoạch hoặc chạy một đợt việc nhiều bước.
+description: "Vòng phát triển nhiều agent song song, rút từ số liệu chạy thật: chia gói, trần song song, brief, trần lượt, commit từng mục, tự sửa rồi hoàn tác, full suite một lần, reviewer độc lập. Dùng khi lập kế hoạch hoặc chạy một đợt việc nhiều bước."
 ---
 
 # Harness dev loop

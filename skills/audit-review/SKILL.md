@@ -1,6 +1,6 @@
 ---
 name: audit-review
-description: End-of-day or on-demand review of the hub audit log: repeated errors, token use, slow agents, maxTurns hits, unbounded commands, path-guessing permission prompts, main editing code. Use when asked to review audit, errors, tokens, or the day's work.
+description: "End-of-day or on-demand review of the hub audit log: repeated errors, token use, slow agents, maxTurns hits, unbounded commands, path-guessing permission prompts, main editing code. Use when asked to review audit, errors, tokens, or the day's work."
 ---
 
 # Audit review

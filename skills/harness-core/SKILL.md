@@ -1,6 +1,6 @@
 ---
 name: harness-core
-description: Logic cốt lõi của harness: vai trò tay chân, cổng CLI, cây dữ liệu zone/class, đăng ký công cụ, guard/approval/data-gate, audit/observe, doctor. Dùng khi cần đọc/ghi dữ liệu harness, thêm một tool mới, hoặc tra lệnh harness.
+description: "Logic cốt lõi của harness: vai trò tay chân, cổng CLI, cây dữ liệu zone/class, đăng ký công cụ, guard/approval/data-gate, audit/observe, doctor. Dùng khi cần đọc/ghi dữ liệu harness, thêm một tool mới, hoặc tra lệnh harness."
 ---
 
 # Harness core
