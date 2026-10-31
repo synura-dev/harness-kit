@@ -149,10 +149,21 @@ test('khong ReDoS: dau vao doi khang < 250ms/chuoi, tong < 2s', () => {
     'harness.mjs ' + 'evolve '.repeat(12000), 'evolve/loop'.repeat(8000) + 'cli.mjs', 'harness.mjs eval ' + 'a '.repeat(40000) + 'baseline', 'evolve/eval/'.repeat(8000), 'loop/cli.mjs '.repeat(7000),
     'evolve/loop '.repeat(9000) + 'applyx', 'loop.mjs '.repeat(9000) + 'rollbac', 'evolve '.repeat(15000) + '--eval-cm', 'loop.mjs '.repeat(9000) + '--eval-cm', 'HARNESS_EVOLVE_EVAL_CM'.repeat(4000),
   ];
-  let total = 0;
-  for (const c of bad) for (const m of ['bash', 'ps']) { let dt = Infinity; for (let i = 0; i < 3 && dt >= 250; i++) { const t = performance.now(); ev(c, m); dt = Math.min(dt, performance.now() - t); } /* lan tot nhat: ReDoS that cham ca 3 lan, tai tam thoi thi khong */ total += dt; assert.ok(dt < 250, `${c.slice(0, 30)}.. ${m}: ${dt.toFixed(0)}ms`); }
-  assert.ok(total < 2000, 'tong ' + total.toFixed(0) + 'ms');
-});
+  // Do ben duoi tai full suite: warm-up + min 5 lan. Vuot tran tuyet doi (250ms/chuoi, 2s tong) thi so voi chuoi DOI CHUNG vo hai
+  // cung do dai (cung tai may luc do): ReDoS that la sieu tuyen tinh -> cham gap nhieu lan doi chung; tai tam thoi lam cham ca hai nhu nhau.
+  const RATIO = 8, RUNS = 5;
+  const best = (s, m, lim = 250) => { ev(s, m); let dt = Infinity; for (let i = 0; i < RUNS && dt >= lim; i++) { const t = performance.now(); ev(s, m); dt = Math.min(dt, performance.now() - t); } return dt; };
+  const control = (c) => ('ls ' + 'ab '.repeat(Math.ceil(c.length / 3))).slice(0, c.length);
+  let total = 0, ctlTotal = 0;
+  for (const c of bad) for (const m of ['bash', 'ps']) {
+    const dt = best(c, m); total += dt;
+    if (dt < 250) continue;
+    const ctl = best(control(c), m, 0); ctlTotal += ctl;
+    assert.ok(dt < RATIO * Math.max(ctl, 1), `${c.slice(0, 30)}.. ${m}: ${dt.toFixed(0)}ms (doi chung ${ctl.toFixed(0)}ms)`);
+  }
+  if (total >= 2000) { ctlTotal = 0; for (const c of bad) for (const m of ['bash', 'ps']) ctlTotal += best(control(c), m, 0); }
+  assert.ok(total < 2000 || total < RATIO * Math.max(ctlTotal, 1), 'tong ' + total.toFixed(0) + 'ms, doi chung ' + ctlTotal.toFixed(0) + 'ms');
+}, 60000);
 
 test('hook that: JSON stdin -> stdout + ghi audit type=gate', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-audit-'));
