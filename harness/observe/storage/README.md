@@ -1,6 +1,6 @@
 # Storage (data/ layout, canonical doc)
 
-Lua chon: `data/README.md` nam trong vung deny (`Read|Write|Edit(/data/**)` trong settings, deny thang allow nen khong allowlist duoc). Noi dung layout chuan nam O DAY; `data/README.md` chi nen la con tro toi file nay (nguoi dung tu sua tay neu muon).
+Lua chon: `data/README.md` nam trong vung deny (`Read|Edit(/data/**)` trong settings, deny thang allow nen khong allowlist duoc). Noi dung layout chuan nam O DAY; `data/README.md` chi nen la con tro toi file nay (nguoi dung tu sua tay neu muon).
 
 ## Layout chuan
 `data/<domain>/<tool>/<date=YYYY-MM-DD|run-id>/...`. Duong dan qua `dataPath()` (`harness/core/io/storage.mjs`). Moi `<domain>` phai co trong `registry.json` (owner, retentionDays).

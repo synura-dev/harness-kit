@@ -96,6 +96,12 @@ function findLauncherPlugin() {
   for (const [k, list] of Object.entries((reg && reg.plugins) || {})) if (/^(harness-kit|agent-guard-kit|harness-plugin)@/.test(k) && Array.isArray(list) && list.some((e) => okRoot(e && e.installPath))) return { ok: true, how: 'installed_plugins.json' };
   return { ok: false, why: 'khong tim thay plugin harness-kit' };
 }
+/** Rule Write(...) trong permissions.{allow,deny,ask} -> [{kind, rule, fix}] (fix = Edit(...)). Thuan. */
+function writeRules(st) {
+  const out = [];
+  for (const kind of ["deny", "allow", "ask"]) for (const r of (st && st.permissions && Array.isArray(st.permissions[kind]) ? st.permissions[kind] : [])) if (String(r).startsWith('Write(')) out.push({ kind, rule: r, fix: "Edit" + String(r).slice(5) });
+  return out;
+}
 const lowerPosix =(s) => String(s).replace(/\\/g, '/').toLowerCase();
 const projectSettingsFile = path.join(HUB_ROOT, '.claude', 'settings.json');
 try {
@@ -105,6 +111,8 @@ try {
   for (const [ev, arr] of Object.entries(st.hooks || {})) {
     for (const g of arr || []) for (const h of g.hooks || []) if (h.command && /^\s*node\s/.test(h.command) && (/dispatch[\\/]run\.mjs/.test(h.command) || LAUNCHER_HOOK_RE.test(h.command))) cmds.push([ev, h.command]);
   }
+  // Claude Code bo qua rule Write(...) trong permissions (tool ghi/sua file khop rule Edit(...)) -> rule Write khong co tac dung.
+  for (const r of writeRules(st)) warn("settings", `.claude/settings.json permissions.${r.kind} "${r.rule}": Claude bo qua Write(...); doi thanh "${r.fix}"`);
   const launcherCmds = cmds.filter(([, c]) => LAUNCHER_HOOK_RE.test(c));
   if (launcherCmds.length) {
     const lp = findLauncherPlugin();
@@ -130,8 +138,9 @@ try {
   else line(false, '.claude/settings.json', 'khong doc/parse duoc (' + (e.code || e.message) + ')');
 }
 
-// hooks block built from hook_events (audit/defaults.mjs), command path computed from this hub
-try {
+// hooks block built from hook_events (audit/defaults.mjs), command path computed from this hub. Plugin da nap: hook den tu plugin, khong in khoi mau.
+if (pluginSeen) console.log("[skip] khoi hook mau settings.json: plugin harness-kit da nap (hook den tu plugin, khong dan vao settings)");
+else try {
   const defaultsUrl = new URL('../../observe/audit/defaults.mjs', import.meta.url);
   const { hook_events } = await import(defaultsUrl.href);
   if (!hook_events || typeof hook_events !== 'object') throw new Error('defaults.mjs khong export hook_events');

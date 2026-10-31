@@ -89,6 +89,16 @@ test('doctor: settings khong hook + khong plugin -> MISS canh bao; co --plugin-d
   expect(c.stdout).not.toContain('[MISS] .claude/settings.json hook dispatch');
   expect(c.stdout).toContain('hook den tu plugin');
 });
+test('doctor: plugin nap -> khong in khoi hook mau; deny Write(...) -> canh bao doi Edit(...)', () => {
+  const r = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-wr-'));
+  fs.mkdirSync(path.join(r, '.claude'));
+  fs.writeFileSync(path.join(r, '.claude', 'settings.json'), JSON.stringify({ enabledPlugins: { 'harness-kit@local': true }, permissions: { deny: ['Read(/data/**)', 'Write(/data/**)'] } }));
+  const out = spawnSync('node', [DOCTOR], { encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: r, HOME: r, USERPROFILE: r } }).stdout;
+  expect(out).toContain('[skip] khoi hook mau settings.json');
+  expect(out).not.toContain('Khoi hook tham khao');
+  expect(out).toContain('permissions.deny "Write(/data/**)": Claude bo qua Write(...); doi thanh "Edit(/data/**)"');
+  fs.rmSync(r, { recursive: true, force: true });
+}, 60000);
 test('doctor: echo dispatch/run.mjs bi tu choi; cwd khac cung ket qua; hooks.json hong -> [LOI]', async () => {
   const hub = await fixHub(true);
   const sp = path.join(hub, '.claude', 'settings.json');
