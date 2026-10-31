@@ -10,12 +10,16 @@ export const DEFAULTS = { enabled: true, allow: [] };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('data-gate', { defaults: DEFAULTS, files, env: { HOOK_DATA_GATE_ENABLED: 'enabled' } });
 
-const HINT = 'Dung cong: node harness/cli/harness.mjs data ls|... hoac observe (co log).';
+const HINT = 'Dung cong: harness data ls|... (hoac node bin/harness.mjs data ...) hoac observe (co log).';
 const VERB = /(^|[\s;&|(`])(cat|type|head|tail|less|more|ls|dir|find|grep|rg|sed|awk|tee|rm|del|erase|rd|rmdir|mv|move|ren|cp|copy|xcopy|touch|mkdir|truncate|get-content|gc|set-content|add-content|out-file|remove-item|copy-item|move-item|get-childitem|gci|sort|wc|cut|od|xxd)(\s|$)|>|readfilesync|writefilesync|readdirsync|unlinksync|rmsync|open\(|node\s+-e|node\s+--eval|python/i;
 
 const PRE = String.raw`^(?:\w+=\S*\s+)*(?:(?:timeout|nice)\s+(?:-\S+\s+)*\S+\s+)?(?:node|bun)(?:\.exe)?\s+`;
 // script dau (doi so dau sau co) phai la duong dan harness/ (nhay hoac khong); segment co $( ` redirect khong duoc mien tru
-const GATE_RUN = new RegExp(PRE + String.raw`(?!-e\b|--eval|-p\b|--print)(?:--?[\w-]+(?:=\S+)?\s+)*(?:"[^"]*harness/[^"]*"|'[^']*harness/[^']*'|[^\s"']*harness/\S*)(?:\s|$)`, 'i');
+// cong cua plugin: bin/harness(.mjs) (node bin/harness.mjs, node "<plugin>/bin/harness", node ${CLAUDE_PLUGIN_ROOT}/bin/harness)
+const BIN = String.raw`bin/harness(?:\.mjs)?`;
+const GATE_RUN = new RegExp(PRE + String.raw`(?!-e\b|--eval|-p\b|--print)(?:--?[\w-]+(?:=\S+)?\s+)*(?:"[^"]*(?:harness/[^"]*|${BIN})"|'[^']*(?:harness/[^']*|${BIN})'|[^\s"']*(?:harness/\S*|${BIN}))(?:\s|$)`, 'i');
+// lenh `harness <domain>` tu bin/ cua plugin (PATH)
+const GATE_BIN = /^(?:\w+=\S*\s+)*(?:(?:timeout|nice)\s+(?:-\S+\s+)*\S+\s+)?harness(?:\.cmd|\.exe)?(?:\s|$)/i;
 const GATE_TEST = new RegExp(PRE + String.raw`(?:--test|test)\s+(?:"[^"]*harness/|'[^']*harness/|[^\s"']*harness/)`, 'i');
 const NODE_ANY = new RegExp(PRE, 'i');
 const TAINT =/\$\(|`|[<>]/;
@@ -103,7 +107,7 @@ function bashRefsData(cmd, cwd, cfg, ctx = {}, depth = 0) {
     if (cd) { const t = tokens(cd[1]).find((x) => !/^\/d$/i.test(x) && !/^-\w$/.test(x)); if (t) cur = path.resolve(cur || process.cwd(), t); continue; }
     const w = WRAP.exec(s);
     if (w && bashRefsData(w[2] ?? w[3] ?? w[4] ?? '', cur, cfg, ctx, depth + 1)) return true;
-    if (!TAINT.test(s.replace(/\d*>&\d|\d*>>?\s*(?:\/dev\/null|nul)\b/gi, '')) &&(GATE_RUN.test(s) || GATE_TEST.test(s))) continue; // cong / script / test harness
+    if (!TAINT.test(s.replace(/\d*>&\d|\d*>>?\s*(?:\/dev\/null|nul)\b/gi, '')) && (GATE_RUN.test(s) || GATE_TEST.test(s) || GATE_BIN.test(s))) continue; // cong / script / test harness
     if (NODE_ANY.test(s) && tokens(s).some((t) => hit(t))) return true; // node/bun script ngoai harness nhan duong dan data/
     if (TEXTUAL.test(s)) s = stripQuoted(s); // noi dung message/echo khong phai duong dan
     if (GITPATH.test(s)) { // git thao tac/doc duong dan: chan neu token resolve vao dataDir

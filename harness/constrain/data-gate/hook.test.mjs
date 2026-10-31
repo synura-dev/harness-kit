@@ -84,6 +84,16 @@ test('HARNESS_GATEWAY=1, disabled, fail-open', async () => {
   assert.deepEqual(await handle('PreToolUse', null, { cfg, env }), {});
   assert.deepEqual(await handle('PreToolUse', { tool_name: 'Read' }, { cfg: null === 1, env }), {});
 });
+test('Bash: cong plugin (harness, bin/harness) duoc qua, doc thang data van chan', async () => {
+  for (const c of ['harness data', 'harness data ls', 'harness data ls | head -20', 'timeout 60 harness data ls 2>&1 | tail -5', 'harness.cmd data stat', 'node bin/harness.mjs data', 'node bin/harness.mjs data ls', 'bun bin/harness.mjs data ls', 'node "E:/06. Projects/harness-kit/bin/harness" data ls', 'node E:/kit/bin/harness data ls', 'node ${CLAUDE_PLUGIN_ROOT}/bin/harness data ls', 'node "${CLAUDE_PLUGIN_ROOT}/bin/harness" data scan', 'node harness/cli/harness.mjs data ls', 'cd x && harness data ls'])
+    assert.ok(!denied(await call('Bash', { command: c })), c);
+  for (const c of ['cat data/x.json', 'ls data/', 'rg foo data/', 'rm data/x.json', 'mv data/x.json y', 'harness data ls && cat data/x.json', 'node bin/harness.mjs data ls; rm data/x.json', 'harness data $(cat data/x.json)', 'node bin/harness.mjs data > data/x.json', 'node bin/other.mjs data/x.json', 'node bin/harness-evil.mjs data/x.json', 'harnessx data/x.json; cat data/x.json'])
+    assert.ok(denied(await call('Bash', { command: c })), c);
+});
+test('Bash: cat data/x.json theo che do (enabled chan, disabled qua)', async () => {
+  assert.ok(denied(await call('Bash', { command: 'cat data/x.json' })));
+  assert.deepEqual(await call('Bash', { command: 'cat data/x.json' }, { enabled: false, allow: [] }), {});
+});
 test('module shape', () => { assert.equal(mod.id, 'data-gate'); assert.deepEqual(mod.events, ['PreToolUse']); });
 test('real dispatcher end-to-end', () => {
   const run = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'hooks', 'dispatch', 'run.mjs');
