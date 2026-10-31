@@ -3,7 +3,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { dataRoot, workspaceRoot, isPluginMode, codeRoot } from '../io/paths.mjs';
+import { dataRoot, workspaceRoot, isPluginMode, REPO_DIR } from '../io/paths.mjs';
 import { loadConfig } from '../config/config.mjs';
 
 /** Cac vung cap 1 cua data/. */
@@ -102,6 +102,8 @@ function normEntry(e, ws) {
  * data[] cho phep them `legacy` (ten cu cap 1). Muc sai bi bo. owner = <extRoot>/<ten>.
  */
 const MANIFEST_SCAN_MAX = 40;
+/** caps trong data[] manifest: chi maxFiles/maxDepth so nguyen duong; khac -> bo. */
+const capsOf = (c) => { if (!isObj(c)) return null; const o = {}; for (const k of ['maxFiles', 'maxDepth']) if (Number.isInteger(c[k]) && c[k] > 0) o[k] = c[k]; return Object.keys(o).length ? o : null; };
 export function manifestDataEntries(extDir, ownerPrefix = path.basename(extDir)) {
   const out = {};
   let names = [];
@@ -121,7 +123,7 @@ export function manifestDataEntries(extDir, ownerPrefix = path.basename(extDir))
         const rel = [...(e.zone ? [e.zone] : []), ...segs].join('/');
         const key = e.tool ? String(e.tool) : segs[segs.length - 1];
         if (out[key]) continue;
-        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), target: rel, path: rel, ...(e.legacy ? { legacy: String(e.legacy) } : {}) };
+        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), ...(capsOf(e.caps) ? { caps: capsOf(e.caps) } : {}), target: rel, path: rel, ...(e.legacy ? { legacy: String(e.legacy) } : {}) };
       } catch { /* bo muc sai */ }
     }
   }
@@ -129,15 +131,24 @@ export function manifestDataEntries(extDir, ownerPrefix = path.basename(extDir))
 }
 
 const extRootsMemo = new Map();
-/** Thu muc ext (tuyet doi) theo config workspace.extRoots (tuong doi goc ma/workspace). opts.extDirs ghi de (test). Loi -> rong. */
-function extDirsFor(base, opts) {
+/**
+ * Thu muc ext (tuyet doi) theo config workspace.extRoots, LUON tuong doi goc workspace (base) ca hai mode: hub mode config doc tu
+ * <hub>/config; plugin mode tu lop plugin + lop may (lop du an bi chan extRoots), nhung ext van nam trong workspace, khong trong plugin.
+ * opts.extDirs ghi de (test). Loi -> rong.
+ */
+function extDirsFor(base, codeDir, opts) {
   if (Array.isArray(opts.extDirs)) return opts.extDirs.map((d) => ({ abs: d, prefix: path.basename(d) }));
-  if (!extRootsMemo.has(base)) {
+  const env = opts.env || process.env;
+  const mk = [base, codeDir, env.CLAUDE_PLUGIN_DATA || '', env.HARNESS_CONFIG_DIR || ''].join('\0');
+  if (!extRootsMemo.has(mk)) {
     let roots = [];
-    try { const r = loadConfig('workspace', { root: base, env: opts.env || process.env }).config.extRoots; if (Array.isArray(r)) roots = r.filter((x) => typeof x === 'string' && x && !path.isAbsolute(x) && !x.split(/[\\/]/).includes('..')); } catch { /* khong co */ }
-    extRootsMemo.set(base, roots);
+    // Plugin mode, lop plugin/may khong khai extRoots -> doc <workspace>/config/workspace|hub (cung file hub mode dung). Chi de PHAN LOAI
+    // data (doc manifest data[], khong chay ma ext); chay ma ext van qua dang ky lop may + hash. Hub mode: lan doc dau da la file nay.
+    const cfgOf = (e) => { try { const r = loadConfig('workspace', { root: base, env: e, repoDir: codeDir }).config.extRoots; return Array.isArray(r) && r.length ? r : null; } catch { return null; } };
+    try { const r = cfgOf(env) || (isPluginMode(codeDir) ? cfgOf({ ...env, HARNESS_CONFIG_DIR: path.join(base, 'config') }) : null); if (Array.isArray(r)) roots = r.filter((x) => typeof x === 'string' && x && !path.isAbsolute(x) && !x.split(/[\\/]/).includes('..')); } catch { /* khong co */ }
+    extRootsMemo.set(mk, roots);
   }
-  return extRootsMemo.get(base).map((r) => ({ abs: path.join(base, r), prefix: toPosix(r) }));
+  return extRootsMemo.get(mk).map((r) => ({ abs: path.join(base, r), prefix: toPosix(r) }));
 }
 
 /** Hop nhat registry.json (+ config/data/workspaces/*.json). Loi doc -> registry rong (fail-open, failed=true). */
@@ -145,12 +156,15 @@ export function loadDataRegistry(opts = {}) {
   const env = opts.env || process.env;
   const hub = workspaceRoot(opts);
   const dir = dataRoot(undefined, opts);
-  const file = opts.registryFile || path.join(isPluginMode() ? codeRoot() : hub, 'harness', 'observe', 'storage', 'registry.json');
+  // opts.pluginDir: goc ma plugin (test gia lap plugin mode); mac dinh REPO_DIR. Khong dung opts.repoDir (= goc workspace o cac caller).
+  const codeDir = opts.pluginDir || REPO_DIR;
+  const plug = isPluginMode(codeDir);
+  const file = opts.registryFile || path.join(plug ? codeDir : hub, 'harness', 'observe', 'storage', 'registry.json');
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   let names = [];
   try { names = fs.readdirSync(wsDir).filter((n) => n.endsWith('.json') && !n.endsWith('.example.json')).sort(); } catch {}
-  const extBase = isPluginMode() ? codeRoot() : hub;
-  const extDirs = extDirsFor(extBase, opts);
+  // Goc extRoots = workspace ca hai mode (truoc day plugin mode lay codeRoot() -> quet <plugin>/hub khong ton tai, mat muc manifest hub).
+  const extDirs = extDirsFor(hub, codeDir, opts);
   const ck = [file, mtimeOf(file), extDirs.map((d) => d.abs).join(';'), wsDir, ...names.map((n) => n + ':' + mtimeOf(path.join(wsDir, n))), dir, env.HARNESS_DATA_ENFORCE || ''].join('\n');
   if (!opts.noCache && cache.has(ck)) return cache.get(ck);
   const reg = { enforce: DEFAULT_ENFORCE, entries: {}, reserved: [], dataDir: dir, failedFiles: [] };
@@ -258,7 +272,8 @@ export function resolveDataRel(key, opts = {}) {
 /** Cap nhat entry co phys path === from (registry.json hoac workspaces/<ws>.json): path=to, legacy=from (ve lai legacy cu thi bo legacy). Tra {key,file}|null. */
 export function setEntryPath(from, to, opts = {}) {
   const hub = workspaceRoot(opts);
-  const file = opts.registryFile || path.join(isPluginMode() ? codeRoot() : hub, 'harness', 'observe', 'storage', 'registry.json');
+  const codeDir = opts.pluginDir || REPO_DIR;
+  const file = opts.registryFile || path.join(isPluginMode(codeDir) ? codeDir : hub, 'harness', 'observe', 'storage', 'registry.json');
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   const norm = (x) => toPosix(x).replace(/\/+$/, '');
   const apply = (v) => {

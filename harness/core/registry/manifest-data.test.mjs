@@ -43,6 +43,32 @@ test('registry.json thang khi trung key; thieu hub dir van chay', () => {
   expect(Object.keys(r2.entries)).toEqual(['tasks']);
 });
 
+test('plugin mode: extRoots (lop plugin) quet duoi goc WORKSPACE, khong duoi thu muc plugin', () => {
+  // Plugin gia: .claude-plugin/plugin.json + config/workspace/default.json extRoots ["hub"]; workspace = tmp (co hub/). Khong dat extDirs.
+  const plug = fs.mkdtempSync(path.join(tmp, 'plug-'));
+  fs.mkdirSync(path.join(plug, '.claude-plugin'), { recursive: true });
+  fs.writeFileSync(path.join(plug, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'kit-test' }));
+  fs.mkdirSync(path.join(plug, 'config', 'workspace'), { recursive: true });
+  fs.writeFileSync(path.join(plug, 'config', 'workspace', 'default.json'), JSON.stringify({ extRoots: ['hub'] }));
+  fs.writeFileSync(reg, JSON.stringify({ enforce: 'warn', entries: { audit: { zone: 'system', class: 'log', owner: 'x', path: 'system/audit' } } }));
+  const env = { HUB_DIR: tmp, HUB_DATA_DIR: dd, CLAUDE_PLUGIN_DATA: path.join(tmp, 'pdata'), CLAUDE_PROJECT_DIR: tmp };
+  const r = loadDataRegistry({ pluginDir: plug, registryFile: reg, env, noCache: true, workspacesDir: path.join(tmp, 'nows') });
+  expect(Object.keys(r.entries).sort()).toEqual(['audit', 'runs', 'tasks']);
+  expect(r.entries.runs).toMatchObject({ zone: 'system', path: 'system/runs', owner: 'hub/dispatch' });
+  // Khong co hub/ trong workspace -> chi registry (khong quet <plugin>/hub).
+  const r2 = loadDataRegistry({ pluginDir: plug, registryFile: reg, env: { ...env, HUB_DIR: plug }, noCache: true, workspacesDir: path.join(tmp, 'nows') });
+  expect(Object.keys(r2.entries)).toEqual(['audit']);
+});
+
+test('caps trong data[] manifest duoc giu (so nguyen duong), sai bi bo', () => {
+  const d = fs.mkdtempSync(path.join(tmp, 'caps-'));
+  fs.mkdirSync(path.join(d, 'a'));
+  fs.writeFileSync(path.join(d, 'a', 'manifest.json'), JSON.stringify({ id: 'a', data: [{ zone: 'external', path: 'a-home', class: 'durable', tool: 'a-home', caps: { maxFiles: 20000, maxDepth: 12 } }, { zone: 'external', path: 'b', tool: 'b', caps: { maxFiles: -1 } }] }));
+  const e = manifestDataEntries(d, 'hub');
+  expect(e['a-home']).toMatchObject({ zone: 'external', path: 'external/a-home', caps: { maxFiles: 20000, maxDepth: 12 } });
+  expect(e.b.caps).toBeUndefined();
+});
+
 test('zone workspaces tu co workspace = id manifest', () => {
   const d = fs.mkdtempSync(path.join(tmp, 'wsx-'));
   fs.mkdirSync(path.join(d, 'jobx'));
