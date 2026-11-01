@@ -23,3 +23,16 @@ Cho agy: chay `harness agy init` mot lan trong du an (sinh `.agents/hooks.json`,
 - Workspace tuy bien (vd hub): du an co `config/workspace/default.json` hoac `config/hub/default.json` (file cau hinh tool `workspace`, ten cu `hub`) -> hook (`hooks/run.mjs`) va CLI `harness` dat `HUB_DATA_DIR=<du an>/data`, `HARNESS_CONFIG_DIR=<du an>/config` (khong ghi de bien da dat; repo nguon plugin khong tinh). Loi suy workspace/wrapper: fail-open + mot dong `HKERR {...}` ra stderr (HK-HOOK-001/002).
 - Guard chi o muc no luc tot nhat (hook fail-open); nen tu them deny trong settings cua du an.
 - Khong bat cung luc voi dispatcher cung loai trong .claude/settings.json (hook chay doi).
+
+## Changelog
+
+### 0.2.0
+- Shim `harness` cho shell user: thu muc co dinh `%USERPROFILE%\.harness-kit\bin` (khong con `%LOCALAPPDATA%`); doctor canh bao (`[warn]`) khi chay trong goi MSIX hoac shim nam duoi LOCALAPPDATA/APPDATA.
+- Dinh tuyen du lieu theo workspace qua hook cua hub (`workspaceFor` / `listNodes`); registry dung manifest cua tool; `config/data/workspaces/*.json` deprecated (van doc, canh bao `deprecated-config`).
+- `runs.jsonl` (ghi moi lan chay) va lenh `harness data query`.
+- `harness data scan`: phat hien workspace mo coi (orphan-ws).
+- `harness data archive`.
+- `harness register --project` yeu cau extension da duoc duyet (ext trust).
+
+### 0.1.1
+- Gom sua cong duyet release, frontmatter skill, shim agy cli.
