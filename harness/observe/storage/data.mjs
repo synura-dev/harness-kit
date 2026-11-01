@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadConfig } from '../../core/config/config.mjs';
+import { loadNodeHook } from '../../core/io/node-hook.mjs';
 import { spawnSync } from 'node:child_process';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
@@ -373,15 +374,12 @@ export async function run(argv = process.argv.slice(2)) {
       // Provider/owner roots tu config workspace (projectResolver: module export resolveProject; ownerRoots). Thieu -> bo qua.
       let hc = {}; try { hc = loadConfig('workspace', { root: workspaceRoot() }).config || {}; } catch {}
       let resolveProject, resolverFailed = false;
-      if (hc.projectResolver) {
-        // Ma thuc thi: chi nhap tu goc tin cay (plugin mode: goc ma plugin; hub: goc hub), khong '..'/tuyet doi ra ngoai.
-        const trusted = isPluginMode() ? codeRoot() : workspaceRoot();
-        const fail = (why) => { resolverFailed = true; console.error(formatWarn({ rule: 'project-resolver', path: String(hc.projectResolver), detail: why, fix: 'sua config projectResolver (trong goc tin cay) hoac bo khoa' })); };
-        try {
-          const abs = path.resolve(trusted, String(hc.projectResolver));
-          if (String(hc.projectResolver).split(/[\\/]/).includes('..') || !isInside(abs, trusted)) fail('projectResolver ra ngoai goc tin cay, bo');
-          else { const pm = await import(pathToFileURL(abs).href); resolveProject = (id) => { const { project } = pm.resolveProject(id); return project && project.path ? { path: project.path } : null; }; }
-        } catch (e) { fail('import projectResolver loi: ' + String(e && e.message || e).slice(0, 120)); }
+      {
+        // Ma thuc thi: goc tin cay = goc workspace (ca plugin mode), khong '..'/tuyet doi ra ngoai, chi nap khi ext chua resolver da duyet hash (core/io/node-hook.mjs).
+        // register --project can resolver du khi HUB_DATA_DIR dat (hook ghi du lieu thi bo qua, o day khong).
+        const nh = loadNodeHook({ env: { ...process.env, HUB_DATA_DIR: '' }, root: workspaceRoot() });
+        if (nh.source === 'error') resolverFailed = true;
+        else if (nh.mod && typeof nh.mod.resolveProject === 'function') resolveProject = (id) => { const { project } = nh.mod.resolveProject(id); return project && project.path ? { path: project.path } : null; };
       }
       const out = await fn(r.filter((x) => x !== '--json'), { root, reg, o, hubRoot: workspaceRoot(), dataDir: root, resolverFailed, resolveProject, ownerRoots: hc.ownerRoots, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
       for (const l of out.lines || []) console.log(l);

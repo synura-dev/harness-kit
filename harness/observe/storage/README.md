@@ -5,6 +5,17 @@ Lua chon: `data/README.md` nam trong vung deny (`Read|Edit(/data/**)` trong sett
 ## Layout chuan
 `data/<domain>/<tool>/<date=YYYY-MM-DD|run-id>/...`. Duong dan qua `dataPath()` (`harness/core/io/storage.mjs`). Moi `<domain>` phai co trong `registry.json` (owner, retentionDays).
 
+## Hop dong workspace data (data-workspaces, P0)
+Muc dich: du lieu tool theo NUT (du an/repo) nhom vao WORKSPACE (nhieu nut co the chung mot workspace). Plugin generic: khong chua chuoi `projects/`, khong biet hub.
+- **Duong dan**: `data/workspaces/<ws>/<tool>/` ; artifact theo nut `data/workspaces/<ws>/<tool>/<node>/[<run-id>|date=YYYY-MM-DD]/...` ; ban ghi chung `data/workspaces/<ws>/<tool>/runs.jsonl` (append-only).
+- **Hook** (module resolver, khoa config `projectResolver`, vd hub `hub/projects/projects-registry.mjs`): ngoai `resolveProject(id)` co san, export them `workspaceFor(id) -> ws|null` va `listNodes() -> [{id, workspace}]`. `ws` va `id` phai la ten don `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}` (khong '/', '\\', '..'); sai -> bo + canh bao `data-warn rule=resolver`, dung node id.
+- **Mac dinh**: khong hook (repo khac, loi, bi tu choi) -> `workspaceFor(node)` = node id, `listNodes()` = [].
+- **HUB_DATA_DIR** dat (test/sandbox) -> bo qua hook hoan toan.
+- **Tin cay hook** (`harness/core/io/node-hook.mjs`): goc tin cay = goc workspace (ca plugin mode, khong phai codeRoot); duong dan resolver khai bao trong config (default/may, hoac `<workspace>/config/{hub,workspace}/default.json`) phai nam trong goc workspace, khong '..'; chi nap khi ext da dang ky chua file do co hash da duyet (ext-registry `listRegistered` + `isExtensionTrusted`). Lech/chua duyet -> khong nap, canh bao 1 lan, fail-open ve mac dinh. Nap dong bo (require), cache theo process.
+- **API chung**: `workspaceFor(node, opts?)`, `listNodes(opts?)` (khong bao gio nem), `loadNodeHook`, `resolveResolverPath`, `resetNodeHook` tu `harness/core/io/node-hook.mjs`.
+- **Khai bao tool MOT lan** (manifest ext `data[]` hoac registry.json plugin): `{ "zone":"workspaces", "tool":"<tool>", "class":"log|cache|artifact|durable", "retentionDays"?, "caps"?, "legacy"? }`. KHONG khai bao `path`/`workspace`/`project`: mau `workspaces/*/<tool>`.
+- **runs.jsonl** (truong co dinh): `ts, run, node, tool, cmd, status(running|ok|fail|unknown), ref?, env?, artifacts[], durMs, summary(<=200)`. Truong la bi bo + canh bao; cam output tho/email/key/gia tri env.
+
 ## Lenh (qua cong, co log vao data/audit/gateway/)
 - `node harness/cli/harness.mjs data ls [domain]` liet ke file/kich thuoc.
 - `data stat` tong quan + so muc ngoai registry.
