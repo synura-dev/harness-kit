@@ -13,7 +13,7 @@ Idempotent: chay lai thi build bo qua (hash khop). `--adopt` chi thay thu muc kh
 
 ## user-shim (hook SessionStart)
 
-Moi phien: dam bao lenh `harness` dung duoc tu PowerShell/cmd/bash cua user. MOT thu muc co dinh cho ca may: Windows `%LOCALAPPDATA%\harness-kit\bin` (`harness.cmd` + `harness` cho Git Bash), POSIX `~/.local/bin`.
+Moi phien: dam bao lenh `harness` dung duoc tu PowerShell/cmd/bash cua user. MOT thu muc co dinh cho ca may: Windows `%USERPROFILE%\.harness-kit\bin` (`harness.cmd` + `harness` cho Git Bash), POSIX `~/.local/bin`. KHONG dung `%LOCALAPPDATA%`: Claude desktop la app MSIX nen ghi `%LOCALAPPDATA%` tu tien trinh con (Bash tool, hook) bi chuyen huong vao `Packages\Claude_*\LocalCache\Local\`, shell that khong thay; goc `%USERPROFILE%` khong bi ao hoa. Muc PATH user cu `%LOCALAPPDATA%\harness-kit\bin` duoc thay tai cho bang thu muc moi (migrate) va shim cu bi xoa. Doctor canh bao (kem dong PowerShell chay trong terminal that: `node "<plugin>\bin\harness" install --shim`) neu thu muc shim nam duoi `%LOCALAPPDATA%`/`%APPDATA%` hoac tien trinh chay trong goi MSIX (ghi HKCU tu trong goi cung co the bi ao hoa).
 - Shim = `node -e <js> -- args`, chon ban moi nhat (so sanh so) trong `<config>/plugins/cache/<mkt>/harness-kit/` luc chay; nang cap plugin khong can ghi lai.
 - PATH user: thieu thi noi vao cuoi mot lan. Windows: `reg add HKCU\Environment /v Path /t REG_EXPAND_SZ` (giu `%VAR%`, khong setx vi cat 1024 ky tu) roi phat WM_SETTINGCHANGE; POSIX: mot dong co marker trong `~/.profile` (macOS `~/.zprofile`). Doc PATH user loi -> khong ghi, chi bao.
 - Xoa shim CUA TA (co dong `harness-kit user shim`) o thu muc khac tren PATH va `%APPDATA%\npm` (cho cu) -> chi mot ban tren may.

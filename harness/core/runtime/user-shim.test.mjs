@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { SHIM_MARK, renderShims, pluginCacheDir, userPathDirs, defaultShimDir, planShim, applyShim, shimStatus, onPath, ensureUserPath, strayShims, syncUserShim } from './user-shim.mjs';
+import { legacyShimDir, msixInfo, virtualizedDir, realTerminalLine, SHIM_MARK, renderShims, pluginCacheDir, userPathDirs, defaultShimDir, planShim, applyShim, shimStatus, onPath, ensureUserPath, strayShims, syncUserShim } from './user-shim.mjs';
 
 // KHONG test nao duoc ghi PATH that: Windows luon truyen regPath + setUserPath gia; POSIX dung home tam.
 let tmp;
@@ -86,9 +86,47 @@ test('planShim/applyShim: tao, idempotent, cap nhat shim cua ta, tu choi file la
 });
 
 test('defaultShimDir: thu muc co dinh theo nen', () => {
-  expect(defaultShimDir({ platform: 'win32', env: { LOCALAPPDATA: 'C:\\L' } })).toBe('C:\\L\\harness-kit\\bin');
-  expect(defaultShimDir({ platform: 'win32', env: {}, home: 'C:\\U' })).toBe('C:\\U\\AppData\\Local\\harness-kit\\bin');
+  // Windows: %USERPROFILE%\.harness-kit\bin, KHONG %LOCALAPPDATA% (MSIX ao hoa)
+  expect(defaultShimDir({ platform: 'win32', home: 'C:\\U' })).toBe('C:\\U\\.harness-kit\\bin');
   expect(defaultShimDir({ platform: 'linux', home: '/home/u' })).toBe('/home/u/.local/bin');
+  expect(legacyShimDir({ platform: 'win32', env: { LocalAppData: 'C:\\L' } })).toBe('C:\\L\\harness-kit\\bin');
+  expect(legacyShimDir({ platform: 'win32', env: {}, home: 'C:\\U' })).toBe('C:\\U\\AppData\\Local\\harness-kit\\bin');
+  expect(legacyShimDir({ platform: 'linux', home: '/home/u' })).toBeNull();
+});
+
+test('msixInfo / virtualizedDir / shimStatus.risk: nhan ra goc bi MSIX ao hoa va in dong chay trong terminal that', () => {
+  const env = { LOCALAPPDATA: 'C:\\U\\AppData\\Local' };
+  expect(msixInfo({ platform: 'linux' }).msix).toBe(false);
+  expect(msixInfo({ platform: 'win32', env, execPath: 'C:\\Program Files\\WindowsApps\\Claude_1\\app\\claude.exe' }).msix).toBe(true);
+  expect(msixInfo({ platform: 'win32', env, execPath: 'C:\\node\\node.exe', readdir: () => { throw new Error('ENOENT'); } }).msix).toBe(false);
+  const pk = 'C:\\U\\AppData\\Local\\Packages';
+  const via = { platform: 'win32', env, execPath: 'C:\\node\\node.exe', readdir: () => ['Foo_1', 'Claude_pzs8sxrjxfjjc'], exists: (f) => f === `${pk}\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local\\harness-kit` };
+  expect(msixInfo(via).msix).toBe(true);
+  // cung ket qua khi env.LOCALAPPDATA da la duong dan ao hoa trong goi
+  expect(msixInfo({ ...via, env: { LOCALAPPDATA: `${pk}\\Claude_pzs8sxrjxfjjc\\LocalCache\\Local` } }).msix).toBe(true);
+  expect(virtualizedDir('C:\\U\\AppData\\Local\\harness-kit\\bin', { platform: 'win32', env })).toBe(true);
+  expect(virtualizedDir('C:\\U\\.harness-kit\\bin', { platform: 'win32', env })).toBe(false);
+  expect(virtualizedDir('/x', { platform: 'linux', env })).toBe(false);
+  const cache = fakeCache(['0.1.1']);
+  const base = { platform: 'win32', env, home: 'C:\\U', regPath: 'C:\\x', cacheDir: cache, pluginRoot: path.join(cache, '0.1.1'), readdir: () => [] };
+  expect(shimStatus(base).risk).toBeNull();
+  expect(shimStatus({ ...base, home: 'C:\\U\\AppData\\Local' }).risk.why).toContain('MSIX');
+  expect(shimStatus({ ...base, execPath: 'C:\\Program Files\\WindowsApps\\Claude_1\\claude.exe' }).risk.why).toContain('WindowsApps');
+  expect(realTerminalLine('C:\\P\\harness-kit\\0.1.2')).toBe('node "' + path.join('C:\\P\\harness-kit\\0.1.2', 'bin', 'harness') + '" install --shim');
+});
+
+test('ensureUserPath migrate: muc %LOCALAPPDATA%\\harness-kit\\bin duoc thay tai cho (giu thu tu, %VAR% khac), dir moi san co thi chi bo muc cu', () => {
+  const calls = [];
+  const set = (v) => { calls.push(v); return null; };
+  const env = { LOCALAPPDATA: 'C:\\L', USERPROFILE: 'C:\\U', PATH: 'C:\\Windows;C:\\L\\harness-kit\\bin' };
+  const dir = 'C:\\U\\.harness-kit\\bin';
+  const o = { platform: 'win32', env, home: 'C:\\U', setUserPath: set };
+  expect(ensureUserPath(dir, { ...o, regPath: '%USERPROFILE%\\go\\bin;%LOCALAPPDATA%\\harness-kit\\bin;C:\\x' }).migrate).toBe(true);
+  expect(calls.pop()).toBe('%USERPROFILE%\\go\\bin;C:\\U\\.harness-kit\\bin;C:\\x');
+  expect(ensureUserPath(dir, { ...o, regPath: `C:\\a;${dir};C:\\L\\harness-kit\\bin\\;C:\\b` }).state).toBe('added');
+  expect(calls.pop()).toBe(`C:\\a;${dir};C:\\b`);
+  expect(ensureUserPath(dir, { ...o, regPath: 'C:\\L\\harness-kit\\bin', apply: false })).toEqual({ state: 'planned', where: 'HKCU\\Environment Path', migrate: true });
+  expect(calls).toEqual([]);
 });
 
 test('userPathDirs: mo rong %VAR% khong phan biet hoa thuong', () => {
@@ -98,14 +136,14 @@ test('userPathDirs: mo rong %VAR% khong phan biet hoa thuong', () => {
 test('ensureUserPath Windows: noi them cuoi, giu %VAR%, khong ghi khi da co (ke ca dang %VAR%) / dry-run / doc loi', () => {
   const calls = [];
   const set = (v) => { calls.push(v); return null; };
-  const env = { LOCALAPPDATA: 'C:\\L', PATH: 'C:\\Windows' };
-  const dir = 'C:\\L\\harness-kit\\bin';
-  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: '%LOCALAPPDATA%\\harness-kit\\bin\\;C:\\x', setUserPath: noWrite }).state).toBe('present');
+  const env = { LOCALAPPDATA: 'C:\\L', USERPROFILE: 'C:\\U', PATH: 'C:\\Windows' };
+  const dir = 'C:\\U\\.harness-kit\\bin';
+  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: '%USERPROFILE%\\.harness-kit\\bin\\;C:\\x', setUserPath: noWrite }).state).toBe('present');
   expect(ensureUserPath(dir, { platform: 'win32', env: { ...env, PATH: dir }, setUserPath: noWrite }).state).toBe('present');
   expect(ensureUserPath(dir, { platform: 'win32', env, regPath: 'C:\\x', setUserPath: noWrite, apply: false }).state).toBe('planned');
   expect(ensureUserPath(dir, { platform: 'win32', env, regPath: null, setUserPath: noWrite }).state).toBe('error');
   expect(ensureUserPath(dir, { platform: 'win32', env, regPath: '%USERPROFILE%\\go\\bin;C:\\x\\;;', setUserPath: set }).state).toBe('added');
-  expect(calls).toEqual(['%USERPROFILE%\\go\\bin;C:\\x\\;C:\\L\\harness-kit\\bin']);
+  expect(calls).toEqual(['%USERPROFILE%\\go\\bin;C:\\x\\;C:\\U\\.harness-kit\\bin']);
   expect(ensureUserPath(dir, { platform: 'win32', env, regPath: 'C:\\x', setUserPath: () => 'reg add loi: x' })).toEqual({ state: 'error', where: 'HKCU\\Environment Path', error: 'reg add loi: x' });
 });
 
@@ -127,7 +165,7 @@ test('syncUserShim: ghi shim + PATH + xoa shim cu cua ta (khong dung file la); l
   const home = mk('home');
   const old = mk('Roaming', 'npm');
   const other = mk('other');
-  const target = path.join(tmp, 'Local', 'harness-kit', 'bin');
+  const target = path.join(home, '.harness-kit', 'bin');
   applyShim(planShim({ dir: old, cacheDir: '/cu' }));
   fs.writeFileSync(path.join(other, process.platform === 'win32' ? 'harness.cmd' : 'harness'), 'cua user');
   const calls = [];
@@ -164,8 +202,8 @@ test('strayShims: chi lay file co marker o thu muc khac dich', () => {
   const a = mk('a'); const b = mk('b');
   applyShim(planShim({ dir: a, cacheDir: '/c' }));
   applyShim(planShim({ dir: b, cacheDir: '/c' }));
-  const env = { PATH: [a, b].join(sep) };
-  const out = strayShims(a, { env });
+  const env = { PATH: [a, b].join(sep), LOCALAPPDATA: path.join(tmp, 'Local') }; // home/LOCALAPPDATA tam: thu muc cu that cua may khong lot vao
+  const out = strayShims(a, { env, home: tmp });
   expect(out.length).toBeGreaterThan(0);
   expect(out.every((f) => f.startsWith(b))).toBe(true);
 });

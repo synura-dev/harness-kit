@@ -151,13 +151,15 @@ try {
 
 // Shim `harness` cho shell cua user (hook SessionStart build/user-shim tu duy tri): thieu/lech/chua tren PATH -> canh bao mem kem lenh sua.
 if (pluginSeen) try {
-  const { shimStatus, pluginCacheDir } = await import('../../core/runtime/user-shim.mjs');
+  const { shimStatus, pluginCacheDir, realTerminalLine } = await import('../../core/runtime/user-shim.mjs');
   const s = shimStatus({ cacheDir: pluginCacheDir(REPO_DIR), pluginRoot: REPO_DIR });
   const fix = 'hook SessionStart tu sua o phien sau, hoac chay: harness install --shim';
   if (s.state === 'missing') warn('shim', `chua co shim \`harness\` (${s.file}): PowerShell/cmd/bash ngoai Claude khong goi duoc harness -> ${fix}`);
   else if (s.state === 'stale') warn('shim', `shim ${s.file} lech ban hien tai -> ${fix}`);
   else if (s.state === 'nopath') warn('shim', `${s.dir} chua co tren PATH user -> ${fix}`);
   else if (s.state === 'foreign') warn('shim', `${s.file} khong do harness-kit sinh -> xem roi chay: harness install --shim --force`);
+  // Claude desktop (MSIX) ao hoa ghi %LOCALAPPDATA%/%APPDATA% cua tien trinh con -> shim/PATH co the chi ton tai trong goi, shell that khong thay.
+  if (s.risk) warn('shim', `${s.risk.why}: shim/PATH ghi tu trong Claude co the khong toi duoc shell that -> chay trong PowerShell/cmd THAT (ngoai Claude): ${realTerminalLine(REPO_DIR)}`);
 } catch { /* fail-open */ }
 
 // hooks block built from hook_events (audit/defaults.mjs), command path computed from this hub. Plugin da nap: hook den tu plugin, khong in khoi mau.
