@@ -8,7 +8,8 @@ import { dataPathFor as rawDataPathFor, guardWrite, writeJson, readJson, appendJ
 import { emit, parseCommon } from '../io/out.mjs';
 import { queryRecords, appendRecords } from '../io/jsonl-store.mjs';
 import { runsDir, runsReadDirs, logPath, safeId } from '../io/safe-id.mjs';
-import { dataReadRoots, ZONES, CLASSES } from '../registry/data-registry.mjs';
+import { dataReadRoots, ZONES, CLASSES, pickNodeRead, formatWarn } from '../registry/data-registry.mjs';
+import { workspaceFor, isSafeWs } from '../io/node-hook.mjs';
 import * as worktree from '../runtime/worktree.mjs';
 import { loadAgents } from '../agy/agents.mjs';
 import { writeEnvelope, auditRoot } from '../audit/audit-write.mjs';
@@ -51,6 +52,8 @@ export function auditExt(extId, ev = {}, opts = {}) {
  * Chuan hoa manifest.data: [{path|zone, class, retentionDays?, tool}] -> [{key, abs, zone, rel, class, retentionDays, tool}].
  * zone+path => <dataRoot>/<zone>/<path>; chi path => <dataRoot>/<path>; chi zone => <dataRoot>/<zone>/<extId>. Muc sai bi bo, tra kem errors.
  */
+/** data[].legacy: ten cu (tuong doi data/), segment an toan, khong '..'; sai -> null. */
+const legacyOf = (l) => { if (typeof l !== 'string' || !l || path.isAbsolute(l)) return null; const s = l.split(/[\\/]/).filter(Boolean); return s.length && !s.some((x) => x === '.' || x === '..') ? s.join('/') : null; };
 export function normalizeDataEntries(list, extId, dRoot = dataRoot()) {
   const out = []; const errors = [];
   if (!Array.isArray(list)) return { entries: out, errors };
@@ -60,11 +63,18 @@ export function normalizeDataEntries(list, extId, dRoot = dataRoot()) {
       if (e.zone !== undefined && !ZONES.includes(e.zone)) throw new Error('zone khong hop le');
       if (e.class !== undefined && !CLASSES.includes(e.class)) throw new Error('class khong hop le');
       if (e.path === undefined && e.zone === undefined) throw new Error('can path hoac zone');
+      if (e.path === undefined && e.zone === 'workspaces') {
+        // Mau workspaces/*/<tool> (khong path): thieu tool => loi, khong ghi nham vao workspaces/<extId>.
+        const tl = e.tool === undefined ? '' : String(e.tool);
+        if (!isSafeWs(tl)) throw new Error('zone workspaces khong path can tool an toan');
+        out.push({ key: tl, abs: path.join(dRoot, 'workspaces'), pattern: true, zone: 'workspaces', rel: `workspaces/*/${tl}`, class: e.class || null, retentionDays: e.retentionDays ?? null, tool: tl, legacy: legacyOf(e.legacy) });
+        continue;
+      }
       const segs = (e.path === undefined ? [extId] : String(e.path).split(/[\\/]/)).filter(Boolean);
       if (!segs.length || segs.some((x) => x === '.' || x === '..') || path.isAbsolute(String(e.path ?? ''))) throw new Error('path khong hop le');
       const rel = [...(e.zone ? [e.zone] : []), ...segs].join('/');
       const tool = e.tool ? String(e.tool) : segs[segs.length - 1];
-      out.push({ key: tool, abs: path.join(dRoot, ...rel.split('/')), zone: e.zone || null, rel, class: e.class || null, retentionDays: e.retentionDays ?? null, tool });
+      out.push({ key: tool, abs: path.join(dRoot, ...rel.split('/')), zone: e.zone || null, rel, class: e.class || null, retentionDays: e.retentionDays ?? null, tool, legacy: legacyOf(e.legacy) });
     } catch (err) { errors.push(String(err.message)); }
   }
   return { entries: out, errors };
@@ -111,19 +121,45 @@ export function buildCtx({ extId, extRoot = null, workspace = null, caps = ['wor
   // Du lieu khai bao trong manifest (data[]): ngoai zone mac dinh, ghi duoc CHI trong cac muc nay. HARNESS_EXT_ALLOW_WRITE (nguoi van hanh, ';' ngan cach) cho them duong dan tuyet doi tuong minh.
   const declared = normalizeDataEntries(data, id).entries;
   const extra = String(process.env.HARNESS_EXT_ALLOW_WRITE || '').split(';').map((x) => x.trim()).filter((x) => x && path.isAbsolute(x)).map((x) => path.resolve(x));
-  const roots = () => [zoneRoot(), ...declared.map((d) => d.abs), ...extra];
-  const inZone = (f) => { const p = path.resolve(f); return roots().some((z) => p === z || isInside(p, z)); };
+  const roots = () => [zoneRoot(), ...declared.filter((d) => !d.pattern).map((d) => d.abs), ...extra];
+  // Muc mau: chi duoc ghi trong workspaces/<ws an toan>/<tool da khai bao>/..., KHONG ca workspaces/.
+  const patTools = declared.filter((d) => d.pattern).map((d) => d.tool);
+  const inPattern = (p) => { if (!patTools.length) return false; const rel = path.relative(path.join(dataRoot(), 'workspaces'), p); if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return false; const s = rel.split(path.sep); return s.length >= 2 && isSafeWs(s[0]) && patTools.includes(s[1]); };
+  const inZone = (f) => { const p = path.resolve(f); return roots().some((z) => p === z || isInside(p, z)) || inPattern(p); };
   const zonePath = (...parts) => {
     const out = path.join(zoneRoot(), ...parts.flatMap((p) => String(p).split(/[\\/]/).filter(Boolean)));
     if (!inZone(out) || parts.some((p) => String(p).split(/[\\/]/).includes('..'))) throw new Error('duong dan thoat khoi zone ext');
     return out;
   };
   const needZone = (f) => { if (!inZone(f)) throw new Error(`ghi ngoai zone workspaces/${id}/ va cac muc data khai bao bi chan`); };
-  const entryPath = (key, ...parts) => {
+  const legacyWarn = new Set();
+  const warnLegacy = (key, rel, fix) => { if (legacyWarn.has(key)) return; legacyWarn.add(key); try { process.stderr.write(formatWarn({ rule: 'legacy-read', path: rel, key, detail: 'doc tu duong dan cu', fix }) + '\n'); } catch {} };
+  // entryPath(key, ...parts[, {node, shared, mode:'read'|'write'}]): muc mau workspaces/*/<tool> can node; artifact theo nut <ws>/<tool>/<node>/..., ban ghi chung (shared) <ws>/<tool>/...
+  // mode 'read': neu chua co duong dan moi thi doc legacy (cap <node>/ chua co hoac data[].legacy) kem canh bao 1 lan/key. Ghi luon duong dan moi.
+  const entryPath = (key, ...rest) => {
+    let o = {};
+    if (rest.length && rest[rest.length - 1] && typeof rest[rest.length - 1] === 'object') o = rest.pop();
     const d = declared.find((x) => x.key === key);
     if (!d) throw new Error(`ext ${id}: chua khai bao data '${key}' trong manifest`);
-    if (parts.some((p) => String(p).split(/[\\/]/).includes('..'))) throw new Error('duong dan thoat khoi muc data');
-    return path.join(d.abs, ...parts.flatMap((p) => String(p).split(/[\\/]/).filter(Boolean)));
+    if (rest.some((p) => String(p).split(/[\\/]/).includes('..'))) throw new Error('duong dan thoat khoi muc data');
+    const segs = rest.flatMap((p) => String(p).split(/[\\/]/).filter(Boolean));
+    const dr = dataRoot();
+    if (d.pattern) {
+      if (o.node === undefined || o.node === null) throw new Error(`ext ${id}: data '${key}' theo mau ${d.rel}: can {node}`);
+      const node = String(o.node);
+      if (!isSafeWs(node)) throw new Error(`node khong hop le: ${node}`);
+      const base = `workspaces/${workspaceFor(node, workspace ? { root: workspace } : {})}/${d.tool}`;
+      const r = { rel: o.shared ? base : `${base}/${node}`, legacyRels: [...(o.shared ? [] : [base]), ...(d.legacy ? [d.legacy] : [])] };
+      let use = r.rel;
+      if (o.mode === 'read') { const p = pickNodeRead(r, segs, dr); use = p.rel; if (p.legacy) warnLegacy(key, p.rel, `ghi moi vao ${r.rel}`); }
+      return path.join(dr, ...use.split('/'), ...segs);
+    }
+    const out = path.join(d.abs, ...segs);
+    if (o.mode === 'read' && d.legacy && !fs.existsSync(out)) {
+      const lo = path.join(dr, ...d.legacy.split('/'), ...segs);
+      if (fs.existsSync(lo)) { warnLegacy(key, d.legacy, `harness data mv ${d.legacy} ${d.rel} --yes`); return lo; }
+    }
+    return out;
   };
   const tag = (r) => ({ ...r, source: src });
   const ctx = {

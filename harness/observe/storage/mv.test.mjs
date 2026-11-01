@@ -104,3 +104,22 @@ test('scan: duplicate khi ton tai ca moi va legacy; thu muc zone cap 1 duoc chap
   s = scanZones({ root: c.dd, reg, repoRoot: null, write: false });
   expect(s.warnings.some((w) => w.rule === 'duplicate')).toBe(true);
 });
+
+test('mv: md5 lech + rollback rename that bai -> loi voi duong dan chinh xac, khong noi da rename nguoc', async () => {
+  const c = mk();
+  const realRename = fs.renameSync;
+  let n = 0;
+  fs.renameSync = (a, b) => {
+    n++;
+    if (n === 1) { realRename(a, b); fs.writeFileSync(path.join(b, 'extra.txt'), 'x'); return; }
+    const e = new Error('EPERM: nope'); e.code = 'EPERM'; throw e;
+  };
+  let r;
+  try { r = await mvCmd([FROM, TO, '--yes'], c); } finally { fs.renameSync = realRename; }
+  expect(r.code).not.toBe(0);
+  const out = r.lines.join('\n');
+  expect(out).toMatch(/rollback rename THAT BAI \(EPERM\)/);
+  expect(out).toContain(path.join(c.dd, TO));
+  expect(out).toContain(path.join(c.dd, FROM));
+  expect(out).not.toMatch(/da rename nguoc/);
+});

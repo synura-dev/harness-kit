@@ -3,8 +3,9 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { dataRoot, workspaceRoot, isPluginMode, REPO_DIR } from '../io/paths.mjs';
+import { dataRoot, workspaceRoot, isPluginMode, REPO_DIR, isInside } from '../io/paths.mjs';
 import { loadConfig } from '../config/config.mjs';
+import { workspaceFor, isSafeWs } from '../io/node-hook.mjs';
 
 /** Cac vung cap 1 cua data/. */
 export const ZONES = Object.freeze(['system', 'knowledge', 'workspaces', 'external', '_inbox']);
@@ -29,7 +30,7 @@ const DEFAULT_PATHS = Object.freeze({ audit: 'system/audit', memory: 'memory', e
 const warnedNoPath = new Set();
 
 /** Cac rule canh bao. */
-const WARN_RULES = Object.freeze(['unregistered', 'missing-field', 'over-caps', 'retention', 'stray', 'clutter', 'legacy-read', 'duplicate']);
+const WARN_RULES = Object.freeze(['unregistered', 'missing-field', 'over-caps', 'retention', 'stray', 'clutter', 'legacy-read', 'duplicate', 'deprecated-config', 'deprecated-path', 'orphan-ws']);
 
 /** Duong cache scan (tuong doi dataDir). */
 export const SCAN_CACHE_REL = '.state/data-scan.json';
@@ -72,6 +73,14 @@ export const SCAN_CACHE_REL = '.state/data-scan.json';
 
 const toPosix = (x) => String(x).replace(/\\/g, '/');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+/** Tra cuu CHI own property (ten thu muc constructor/toString/__proto__ khong duoc coi la da dang ky). */
+const own = (o, k) => (o && typeof k === 'string' && Object.hasOwn(o, k) ? o[k] : undefined);
+/** legacy rel an toan (nhu ctx legacyOf): khong tuyet doi, khong '.'/'..'/o dia. -> 'a/b' | null */
+const safeLegacy = (l) => {
+  if (typeof l !== 'string' || !l || path.isAbsolute(l) || /^[A-Za-z]:/.test(l)) return null;
+  const s = toPosix(l).split('/').filter(Boolean);
+  return s.length && !s.some((x) => x === '.' || x === '..') ? s.join('/') : null;
+};
 /** Doc JSON (bo BOM); loi -> null. Dung chung cho loader va register. */
 export const readJ = (file) => { try { const t = fs.readFileSync(file, 'utf8'); return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t); } catch { return null; } };
 /** Ghi nguyen tu: tmp cung thu muc roi rename. */
@@ -83,11 +92,39 @@ export function writeAtomic(file, text) {
 const mtimeOf = (f) => { try { return fs.statSync(f).mtimeMs; } catch { return 0; } };
 const cache = new Map();
 const regWarned = new Set();
+/** Dau van tay thu muc workspace (cache key): them/bo thu muc ws, tool moi => registry dan xuat doi. */
+function wsStamp(dir) {
+  const top = path.join(dir, 'workspaces');
+  let names = []; try { names = fs.readdirSync(top).sort().slice(0, 100); } catch { return '-'; }
+  return mtimeOf(top) + ':' + names.map((n) => mtimeOf(path.join(top, n))).join(',');
+}
+const MAX_DERIVE_WS = 200;
+/** Entry cu the cho thu muc workspaces/<ws>/<tool> dang co, theo mau khai bao trong manifest (reg.patterns). Khong ghi de entry da co. */
+function deriveWorkspaceEntries(reg, dir) {
+  const top = path.join(dir, 'workspaces');
+  let wss = []; try { wss = fs.readdirSync(top, { withFileTypes: true }).filter((d) => d.isDirectory() && isSafeWs(d.name)).map((d) => d.name).sort().slice(0, MAX_DERIVE_WS); } catch { return; }
+  for (const ws of wss) {
+    let tools = []; try { tools = fs.readdirSync(path.join(top, ws), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).slice(0, 100); } catch { continue; }
+    for (const t of tools) {
+      const p = own(reg.patterns, t); const key = `workspaces/${ws}/${t}`;
+      if (!p || own(reg.entries, key)) continue;
+      const { pattern, ...rest } = p;
+      reg.entries[key] = normEntry({ ...rest, workspace: ws, path: key, target: key, derived: true }, ws);
+    }
+  }
+}
 /** registry thieu/hong -> moi write ok:true (fail-open); canh bao ro 1 lan/file/tien trinh de khong im lang. */
 function warnRegistryOnce(file) {
   if (regWarned.has(file)) return;
   regWarned.add(file);
   try { process.stderr.write(formatWarn({ rule: 'registry-missing', path: file, detail: 'registry.json thieu/hong: moi ghi data duoc cho qua (khong kiem registry)', fix: 'cai/khoi phuc harness/observe/storage/registry.json trong goc ma' }) + '\n'); } catch {}
+}
+
+/** config/data/workspaces/*.json = cach cu (hub bo o H2): van doc, canh bao 1 dong/file/tien trinh. */
+function warnDeprecatedConfig(file) {
+  if (regWarned.has('dep:' + file)) return;
+  regWarned.add('dep:' + file);
+  try { process.stderr.write(formatWarn({ rule: 'deprecated-config', path: toPosix(file), key: path.basename(file, '.json'), detail: 'config/data/workspaces/*.json da loi thoi (registry dan xuat tu manifest tool + thu muc ws)', fix: 'khai bao tool trong manifest data[] (zone workspaces, tool, class) roi xoa file' }) + '\n'); } catch {}
 }
 
 function normEntry(e, ws) {
@@ -119,12 +156,19 @@ export function manifestDataEntries(extDir, ownerPrefix = path.basename(extDir))
         if (e.zone !== undefined && !ZONES.includes(e.zone)) continue;
         if (e.class !== undefined && !CLASSES.includes(e.class)) continue;
         if (e.path === undefined && e.zone === undefined) continue;
+        if (e.path === undefined && e.zone === 'workspaces') {
+          // Mau workspaces/*/<tool>: KHONG path/workspace. Thieu tool / tool khong an toan -> bo (khong ghi nham vao workspaces/<ext-id>).
+          const tl = e.tool === undefined ? '' : String(e.tool);
+          if (!isSafeWs(tl) || out[tl]) continue;
+          out[tl] = { zone: 'workspaces', tool: tl, pattern: `workspaces/*/${tl}`, ...(e.class ? { class: e.class } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), ...(capsOf(e.caps) ? { caps: capsOf(e.caps) } : {}), ...(e.legacy ? { legacy: String(e.legacy) } : {}) };
+          continue;
+        }
         const segs = (e.path === undefined ? [id] : String(e.path).split(/[\\/]/)).filter(Boolean);
         if (!segs.length || segs.some((x) => x === '.' || x === '..') || path.isAbsolute(String(e.path ?? ''))) continue;
         const rel = [...(e.zone ? [e.zone] : []), ...segs].join('/');
         const key = e.tool ? String(e.tool) : segs[segs.length - 1];
         if (out[key]) continue;
-        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), ...(capsOf(e.caps) ? { caps: capsOf(e.caps) } : {}), target: rel, path: rel, ...(e.legacy ? { legacy: String(e.legacy) } : {}) };
+        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), ...(capsOf(e.caps) ? { caps: capsOf(e.caps) } : {}), target: rel, path: rel, ...(e.legacy ? { legacy: String(e.legacy) } : {}), ...(e.zone === 'workspaces' ? { deprecatedPath: true } : {}) };
       } catch { /* bo muc sai */ }
     }
   }
@@ -166,9 +210,9 @@ export function loadDataRegistry(opts = {}) {
   try { names = fs.readdirSync(wsDir).filter((n) => n.endsWith('.json') && !n.endsWith('.example.json')).sort(); } catch {}
   // Goc extRoots = workspace ca hai mode (truoc day plugin mode lay codeRoot() -> quet <plugin>/hub khong ton tai, mat muc manifest hub).
   const extDirs = extDirsFor(hub, codeDir, opts);
-  const ck = [file, mtimeOf(file), extDirs.map((d) => d.abs).join(';'), wsDir, ...names.map((n) => n + ':' + mtimeOf(path.join(wsDir, n))), dir, env.HARNESS_DATA_ENFORCE || ''].join('\n');
+  const ck = [wsStamp(dir), file, mtimeOf(file), extDirs.map((d) => d.abs).join(';'), wsDir, ...names.map((n) => n + ':' + mtimeOf(path.join(wsDir, n))), dir, env.HARNESS_DATA_ENFORCE || ''].join('\n');
   if (!opts.noCache && cache.has(ck)) return cache.get(ck);
-  const reg = { enforce: DEFAULT_ENFORCE, entries: {}, reserved: [], dataDir: dir, failedFiles: [] };
+  const reg = { enforce: DEFAULT_ENFORCE, entries: {}, patterns: Object.create(null), reserved: [], dataDir: dir, failedFiles: [] };
   try {
     const j = readJ(file);
     if (!isObj(j)) throw new Error('registry');
@@ -177,14 +221,18 @@ export function loadDataRegistry(opts = {}) {
     if (isObj(j.entries)) for (const [k, v] of Object.entries(j.entries)) if (isObj(v)) reg.entries[k] = normEntry(v);
     // Muc tu manifest external (extRoots): registry.json thang neu cung key (cho phep ghi de / chuyen dan).
     for (const d of extDirs) for (const [k, v] of Object.entries(manifestDataEntries(d.abs, d.prefix))) if (!reg.entries[k]) reg.entries[k] = normEntry(v);
+    // Entry mau (workspaces/*/<tool>) tach khoi entries: chi cu the hoa theo thu muc ws dang co hoac luc ghi (resolveEntry/resolveDataRel).
+    for (const [k, v] of Object.entries(reg.entries)) if (v.pattern) { reg.patterns[v.tool || k] = v; delete reg.entries[k]; }
     for (const n of names) {
+      warnDeprecatedConfig(path.join(wsDir, n));
       const w = readJ(path.join(wsDir, n));
       if (!isObj(w)) { reg.failedFiles.push(path.join(wsDir, n)); reg.failed = true; continue; }
       const ws = typeof w.workspace === 'string' ? w.workspace : n.slice(0, -5);
       const src = isObj(w.entries) ? w.entries : w;
       for (const [k, v] of Object.entries(src)) if (isObj(v) && !k.startsWith('_') && k !== 'workspace') reg.entries[k.includes('/') ? k : `workspaces/${ws}/${k}`] = normEntry({ tool: k.includes('/') ? undefined : k, ...(k.includes('/') ? {} : { path: k }), ...v }, ws);
     }
-  } catch { reg.entries = {}; reg.failed = true; reg.failedFiles.push(file); warnRegistryOnce(file); }
+    if (Object.keys(reg.patterns).length) deriveWorkspaceEntries(reg, dir);
+  } catch { reg.entries = {}; reg.patterns = Object.create(null); reg.failed = true; reg.failedFiles.push(file); warnRegistryOnce(file); }
   if (!opts.noCache) cache.set(ck, reg);
   return reg;
 }
@@ -201,8 +249,12 @@ export function resolveEntry(abs, opts = {}) {
     if ((rel === p || rel.startsWith(p + '/')) && (!best || p.length > best.len)) best = { key: k, entry: e, len: p.length };
   }
   if (best) return { key: best.key, entry: best.entry };
+  if (segs[0] === 'workspaces' && segs.length >= 3 && isSafeWs(segs[1]) && own(reg.patterns, segs[2])) {
+    const { pattern, ...rest } = own(reg.patterns, segs[2]); const pth = `workspaces/${segs[1]}/${segs[2]}`;
+    return { key: pth, entry: normEntry({ ...rest, workspace: segs[1], path: pth, target: pth, derived: true }, segs[1]) };
+  }
   const tries = ZONES.includes(segs[0]) ? [segs.slice(0, 3).join('/'), segs.slice(0, 2).join('/'), segs[1], segs[2]] : [segs[0]];
-  for (const k of tries) if (k && reg.entries[k]) return { key: k, entry: reg.entries[k] };
+  for (const k of tries) if (k && own(reg.entries, k)) return { key: k, entry: reg.entries[k] };
   return { key: ZONES.includes(segs[0]) && segs[1] ? segs.slice(0, 2).join('/') : segs[0], entry: null };
 }
 
@@ -215,7 +267,7 @@ export function checkWrite(abs, opts = {}) {
     const rel = toPosix(path.relative(dataRoot(undefined, opts), abs));
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { ok: true };
     const segs = rel.split('/');
-    if (reg.reserved.includes(segs[0]) && !reg.entries[segs[0]]) return { ok: true };
+    if (reg.reserved.includes(segs[0]) && !own(reg.entries, segs[0])) return { ok: true };
     let mode = ENFORCE_MODES.includes(env.HARNESS_DATA_ENFORCE) ? env.HARNESS_DATA_ENFORCE : reg.enforce;
     if (mode === 'off') return { ok: true };
     const { key, entry } = resolveEntry(abs, { ...opts, registry: reg });
@@ -252,7 +304,24 @@ export function formatWarn(w) {
  */
 export function resolveDataRel(key, opts = {}) {
   const reg = opts.registry || loadDataRegistry(opts);
-  const e = reg.entries[key];
+  const pat = own(reg.patterns, key);
+  if (pat) {
+    // Entry mau workspaces/*/<tool>: can opts.node. Khong node -> needsNode (KHONG doan duong dan, khong ghi nham cho).
+    const tool = pat.tool || key;
+    if (opts.node === undefined || opts.node === null) return { rel: `workspaces/*/${tool}`, legacyRel: null, legacyRels: [], readRel: `workspaces/*/${tool}`, usingLegacy: false, exists: { new: false, legacy: false }, pattern: true, needsNode: true };
+    const node = String(opts.node);
+    if (!isSafeWs(node)) throw new Error(`node khong hop le: ${node}`);
+    const ws = workspaceFor(node, opts);
+    const base = `workspaces/${ws}/${tool}`;
+    const rel = opts.shared ? base : `${base}/${node}`;
+    // Doc cu: cap <node>/ chua co (artifact cu nam o <tool>/...) roi `legacy` khai bao trong manifest.
+    const lg = safeLegacy(pat.legacy);
+    const legacyRels = [...(opts.shared ? [] : [base]), ...(lg ? [lg] : [])];
+    const rt = dataRoot(undefined, opts);
+    const exs = (r) => { try { return fs.existsSync(path.join(rt, ...r.split('/'))); } catch { return false; } };
+    return { rel, legacyRel: legacyRels[0] || null, legacyRels, readRel: rel, usingLegacy: false, exists: { new: exs(rel), legacy: legacyRels.some(exs) }, pattern: true, needsNode: false, node, ws };
+  }
+  const e = own(reg.entries, key);
   let base = e && e.path;
   if (!base) {
     base = DEFAULT_PATHS[key];
@@ -262,7 +331,7 @@ export function resolveDataRel(key, opts = {}) {
     }
   }
   const rel = toPosix(base).replace(/\/+$/, '');
-  const legacyRel = e && e.legacy ? toPosix(e.legacy).replace(/\/+$/, '') : null;
+  const legacyRel = e && e.legacy ? safeLegacy(e.legacy) : null;
   const root = dataRoot(undefined, opts);
   const ex = (r) => { try { return !!r && fs.existsSync(path.join(root, r)); } catch { return false; } };
   const exists = { new: ex(rel), legacy: ex(legacyRel) };
@@ -277,15 +346,18 @@ export function setEntryPath(from, to, opts = {}) {
   const file = opts.registryFile || path.join(isPluginMode(codeDir) ? codeDir : hub, 'harness', 'observe', 'storage', 'registry.json');
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   const norm = (x) => toPosix(x).replace(/\/+$/, '');
+  let prev;
   const apply = (v) => {
+    prev = v.legacy;
     v.path = to;
-    if (opts.dropLegacy) delete v.legacy;
+    if (opts.restoreLegacy) { if (opts.restoreLegacy.had) v.legacy = opts.restoreLegacy.value; else delete v.legacy; }
+    else if (opts.dropLegacy) delete v.legacy;
     else if (v.legacy !== undefined && norm(v.legacy) === norm(to)) delete v.legacy; else v.legacy = from;
   };
   const j = readJ(file);
   if (isObj(j) && isObj(j.entries)) {
     for (const [k, v] of Object.entries(j.entries)) {
-      if (isObj(v) && norm(v.path || k) === norm(from)) { apply(v); writeAtomic(file, JSON.stringify(j, null, 2) + '\n'); cache.clear(); return { key: k, file }; }
+      if (isObj(v) && norm(v.path || k) === norm(from)) { apply(v); writeAtomic(file, JSON.stringify(j, null, 2) + '\n'); cache.clear(); return { key: k, file, hadLegacy: prev !== undefined, prevLegacy: prev }; }
     }
   }
   let names = [];
@@ -299,7 +371,7 @@ export function setEntryPath(from, to, opts = {}) {
     for (const [k, v] of Object.entries(src)) {
       if (!isObj(v) || k.startsWith('_') || k === 'workspace') continue;
       const key = k.includes('/') ? k : `workspaces/${ws}/${k}`;
-      if (norm(v.path || k) === norm(from)) { apply(v); writeAtomic(wf, JSON.stringify(w, null, 2) + '\n'); cache.clear(); return { key, file: wf }; }
+      if (norm(v.path || k) === norm(from)) { apply(v); writeAtomic(wf, JSON.stringify(w, null, 2) + '\n'); cache.clear(); return { key, file: wf, hadLegacy: prev !== undefined, prevLegacy: prev }; }
     }
   }
   return null;
@@ -314,9 +386,20 @@ export function dataReadRoots(key, opts = {}) {
   const r = resolveDataRel(key, opts);
   const root = dataRoot(undefined, opts);
   const out = [];
-  if (r.exists.new) out.push(path.join(root, ...r.rel.split('/')));
-  if (r.legacyRel && r.exists.legacy && r.legacyRel !== r.rel) out.push(path.join(root, ...r.legacyRel.split('/')));
+  if (r.needsNode) return out;
+  const ex = (x) => { try { return fs.existsSync(path.join(root, ...x.split('/'))); } catch { return false; } };
+  const inRoot = (x) => isInside(x, root);
+  if (r.exists.new) { const x = path.join(root, ...r.rel.split('/')); if (inRoot(x)) out.push(x); }
+  for (const l of r.legacyRels || (r.legacyRel ? [r.legacyRel] : [])) if (l !== r.rel && (r.legacyRels ? ex(l) : r.exists.legacy)) { const x = path.join(root, ...l.split('/')); if (inRoot(x)) out.push(x); }
   return out;
+}
+
+/** Chon goc DOC cho entry mau theo node: rel moi neu <rel>/<segs> ton tai, khong thi legacy dau tien co <legacy>/<segs>. -> {rel, legacy:boolean} */
+export function pickNodeRead(r, segs, root) {
+  const ok = (b) => { try { return fs.existsSync(path.join(root, ...b.split('/'), ...segs)); } catch { return false; } };
+  if (ok(r.rel)) return { rel: r.rel, legacy: false };
+  for (const l of r.legacyRels || []) if (ok(l)) return { rel: l, legacy: true };
+  return { rel: r.rel, legacy: false };
 }
 
 /** dataPathsFor(key, ...parts) -> mang duong dan ton tai (moi truoc, cu sau), noi them parts cho moi goc. */

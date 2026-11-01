@@ -4,6 +4,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadConfig } from '../../core/config/config.mjs';
+import { loadNodeHook, listNodes } from '../../core/io/node-hook.mjs';
+import { orphanWorkspaces } from './archive.mjs';
 import { spawnSync } from 'node:child_process';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
@@ -13,7 +15,7 @@ import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, class
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
-const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes] | prune [--yes] | sizes  (--json --raw --timeout-s N)';
+const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | archive <ws> [--yes] (ws mo coi -> _archive/workspaces/, dry-run) | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes] | prune [--yes] | sizes  (--json --raw --timeout-s N)';
 
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 /** Registry hop nhat do loader chung o core (registry.json + config/data/workspaces/*.json, mode Q5 qua HARNESS_DATA_ENFORCE). */
@@ -42,7 +44,7 @@ export function walk(dir, { maxFiles = LIMITS.maxFiles, deadline = Date.now() + 
 export function top(root) { try { return fs.readdirSync(root, { withFileTypes: true }); } catch { return []; } }
 
 /** Ten cap 1 da biet: duong dan vat ly (entry.path || key) + reserved. */
-const knownTop = (reg) => new Set([...Object.entries(reg.entries).flatMap(([k, e]) => [phys(k, e), phys(k, e).split('/')[0]]), ...reg.reserved]);
+const knownTop = (reg) => new Set([...Object.entries(reg.entries).flatMap(([k, e]) => [phys(k, e), phys(k, e).split('/')[0]]), ...Object.values(reg.patterns || {}).map((p) => String(p.pattern || 'workspaces/*').split('/')[0]), ...reg.reserved]);
 
 export function scan(root = dataRoot(), reg = loadRegistry()) {
   const known = knownTop(reg);
@@ -74,6 +76,7 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
     if (ent.class && !CLASSES.includes(ent.class)) W('missing-field', key, key, `class sai: ${ent.class}`, `class thuoc ${CLASSES.join('|')}`);
     if (ent.zone === 'workspaces' && !ent.workspace) W('missing-field', key, key, 'thieu workspace', 'them "workspace" cho muc zone=workspaces');
     const p = phys(key, ent); const abs = path.join(root, p);
+    if (ent.deprecatedPath) W('deprecated-path', p, key, 'path cu the khai bao trong manifest data[] (workspaces/<ws>/<tool> co dinh)', 'khai bao {zone:"workspaces", tool, class} (khong path) de dung mau workspaces/*/<tool>');
     if (ent.legacy && ent.legacy !== p && fs.existsSync(abs) && fs.existsSync(path.join(root, ent.legacy))) W('duplicate', p, key, `ton tai ca ${p} va ${ent.legacy}`, `gop thu cong roi xoa ${ent.legacy} (hoac harness data mv)`);
     if (!isInside(abs, root) || samePath(abs, root) || !fs.existsSync(abs)) continue;
     const st = fs.statSync(abs);
@@ -93,6 +96,7 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
       if (old) W('retention', p, key, `${old} file qua ${r} ngay`, `harness data clean --days ${r} (dry-run, them --yes de xoa)`);
     }
   }
+  if (Array.isArray(opts.nodes)) for (const ws of orphanWorkspaces(root, opts.nodes)) W('orphan-ws', `workspaces/${ws}`, `workspaces/${ws}`, 'workspace khong nut nao tro toi', `harness data archive ${ws} (dry-run, them --yes)`);
   for (const d of top(inboxDir(root))) {
     if (d.isDirectory() && DATE_RE.test(d.name) && Date.parse(d.name + 'T00:00:00Z') < now - 30 * 86400000) W('stray', `_inbox/${d.name}`, '_inbox', '_inbox qua 30 ngay', 'harness data inbox prune --days 30 (dry-run)');
   }
@@ -317,6 +321,12 @@ function logAccess(cmd, args, extra = {}) {
   appendJsonl(dataPathFor('audit', `date=${today()}`, 'type=data-access', 'data-cli.jsonl'), { ts: new Date().toISOString(), cmd, args: args.filter((a) => /^--?[a-z-]+$|^\d+$/.test(a)), ...extra });
 }
 
+/** Nut tu hook (null khi khong co hook / hook thieu listNodes): dung cho orphan-ws va archive. */
+function hookNodes() {
+  try { const nh = loadNodeHook({ root: workspaceRoot() }); if (nh.mod && typeof nh.mod.listNodes === 'function') return listNodes({ root: workspaceRoot() }); } catch {}
+  return null;
+}
+
 export async function run(argv = process.argv.slice(2)) {
   const o = parseCommon(argv);
   const [cmd, ...r] = o.rest;
@@ -348,10 +358,16 @@ export async function run(argv = process.argv.slice(2)) {
     }
     if (cmd === 'scan' || cmd === 'clean' || cmd === 'adopt') regUsable(reg, cmd);
     if (cmd === 'scan') {
-      const s = scanZones({ root, reg, opts });
+      const s = scanZones({ root, reg, opts: { ...opts, nodes: hookNodes() } });
       logAccess('scan', r, { warnings: s.warnings.length });
       const summary = s.warnings.length ? s.warnings.map(formatWarn).join('\n') : `khong vi pham (${s.files} file)`;
-      return { code: s.warnings.length ? 1 : 0, ...emit({ summary, data: s, truncated: s.truncated ? (s.reason || 'timeout') : null }, o) };
+      return { code: s.warnings.some((w) => w.rule !== 'deprecated-path') ? 1 : 0, ...emit({ summary, data: s, truncated: s.truncated ? (s.reason || 'timeout') : null }, o) };
+    }
+    if (cmd === 'archive') {
+      const { archiveCmd } = await import(new URL('./archive.mjs', import.meta.url));
+      const out = await archiveCmd(r.filter((x) => x !== '--json'), { root, reg, nodes: hookNodes(), opts, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
+      for (const l of out.lines || []) console.log(l);
+      return { code: out.code ?? 0 };
     }
     if (cmd === 'mv') {
       const { mvCmd } = await import(new URL('./mv.mjs', import.meta.url));
@@ -373,15 +389,12 @@ export async function run(argv = process.argv.slice(2)) {
       // Provider/owner roots tu config workspace (projectResolver: module export resolveProject; ownerRoots). Thieu -> bo qua.
       let hc = {}; try { hc = loadConfig('workspace', { root: workspaceRoot() }).config || {}; } catch {}
       let resolveProject, resolverFailed = false;
-      if (hc.projectResolver) {
-        // Ma thuc thi: chi nhap tu goc tin cay (plugin mode: goc ma plugin; hub: goc hub), khong '..'/tuyet doi ra ngoai.
-        const trusted = isPluginMode() ? codeRoot() : workspaceRoot();
-        const fail = (why) => { resolverFailed = true; console.error(formatWarn({ rule: 'project-resolver', path: String(hc.projectResolver), detail: why, fix: 'sua config projectResolver (trong goc tin cay) hoac bo khoa' })); };
-        try {
-          const abs = path.resolve(trusted, String(hc.projectResolver));
-          if (String(hc.projectResolver).split(/[\\/]/).includes('..') || !isInside(abs, trusted)) fail('projectResolver ra ngoai goc tin cay, bo');
-          else { const pm = await import(pathToFileURL(abs).href); resolveProject = (id) => { const { project } = pm.resolveProject(id); return project && project.path ? { path: project.path } : null; }; }
-        } catch (e) { fail('import projectResolver loi: ' + String(e && e.message || e).slice(0, 120)); }
+      {
+        // Ma thuc thi: goc tin cay = goc workspace (ca plugin mode), khong '..'/tuyet doi ra ngoai, chi nap khi ext chua resolver da duyet hash (core/io/node-hook.mjs).
+        // register --project can resolver du khi HUB_DATA_DIR dat (hook ghi du lieu thi bo qua, o day khong).
+        const nh = loadNodeHook({ env: { ...process.env, HUB_DATA_DIR: '' }, root: workspaceRoot() });
+        if (nh.source === 'error') resolverFailed = true;
+        else if (nh.mod && typeof nh.mod.resolveProject === 'function') resolveProject = (id) => { const { project } = nh.mod.resolveProject(id); return project && project.path ? { path: project.path } : null; };
       }
       const out = await fn(r.filter((x) => x !== '--json'), { root, reg, o, hubRoot: workspaceRoot(), dataDir: root, resolverFailed, resolveProject, ownerRoots: hc.ownerRoots, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
       for (const l of out.lines || []) console.log(l);
@@ -413,6 +426,7 @@ export async function run(argv = process.argv.slice(2)) {
       logAccess('tail', r, { domain: dom, rows: t.rows.length });
       return { code: 0, ...emit({ summary: t.rows.map((x) => JSON.stringify(x)).join('\n') || '(khong co dong)', data: t, truncated: t.truncated }, o) };
     }
+    if (cmd === 'query') { const { queryCli } = await import('./data-query.mjs'); return queryCli(r, { o, root, opts, logAccess }); } // data-workspaces P1b: runs.jsonl
     if (cmd === 'inbox') {
       const [sub, ...ir] = r;
       const arg = ir.find((x, i) => !x.startsWith('--') && !/^--(days|limit)$/.test(ir[i - 1] || ''));

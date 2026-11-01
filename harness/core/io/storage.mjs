@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { dataRoot, isInside, ensureDataIgnore } from './paths.mjs';
-import { checkWrite, formatWarn, resolveDataRel } from '../registry/data-registry.mjs';
+import { checkWrite, formatWarn, resolveDataRel, pickNodeRead } from '../registry/data-registry.mjs';
 
 const SEG = /^[A-Za-z0-9_][A-Za-z0-9_.=-]{0,95}$/;
 const ID = /^[a-z0-9][a-z0-9_-]{0,63}$/i;
@@ -41,19 +41,29 @@ export function dataPathFor(key, ...rest) {
   if (rest.length && rest[rest.length - 1] && typeof rest[rest.length - 1] === 'object') opts = rest.pop();
   const root = dataRoot(undefined, opts);
   const r = resolveDataRel(key, opts);
-  let base = r.rel;
-  if (opts.mode === 'read' && r.usingLegacy) {
-    base = r.legacyRel;
-    if (!opts.quiet && !legacyWarned.has(key)) {
-      legacyWarned.add(key);
-      try { process.stderr.write(formatWarn({ rule: 'legacy-read', path: r.legacyRel, key, detail: 'doc tu duong dan cu', fix: `harness data mv ${r.legacyRel} ${r.rel} --yes` }) + '\n'); } catch {}
-    }
-  }
+  if (r.needsNode) throw new Error(`data '${key}' khai bao theo mau ${r.rel}: can opts {node}`);
   const segs = [];
   for (const p of rest) for (const s of String(p).split(/[\\/]/)) {
     if (s === '') continue;
     if (s === '.' || s === '..' || !SEG.test(s)) throw new Error(`doan duong dan khong hop le: ${s}`);
     segs.push(s);
+  }
+  let base = r.rel;
+  if (r.pattern) {
+    if (opts.mode === 'read') {
+      const p = pickNodeRead(r, segs, root);
+      base = p.rel;
+      if (p.legacy && !opts.quiet && !legacyWarned.has(key)) {
+        legacyWarned.add(key);
+        try { process.stderr.write(formatWarn({ rule: 'legacy-read', path: p.rel, key, detail: 'doc tu duong dan cu (chua co cap <node>/)', fix: `ghi moi vao ${r.rel}` }) + '\n'); } catch {}
+      }
+    }
+  } else if (opts.mode === 'read' && r.usingLegacy) {
+    base = r.legacyRel;
+    if (!opts.quiet && !legacyWarned.has(key)) {
+      legacyWarned.add(key);
+      try { process.stderr.write(formatWarn({ rule: 'legacy-read', path: r.legacyRel, key, detail: 'doc tu duong dan cu', fix: `harness data mv ${r.legacyRel} ${r.rel} --yes` }) + '\n'); } catch {}
+    }
   }
   const out = path.join(root, ...base.split('/'), ...segs);
   if (!isInside(out, root)) throw new Error('duong dan thoat khoi dataDir');

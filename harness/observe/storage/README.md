@@ -5,6 +5,22 @@ Lua chon: `data/README.md` nam trong vung deny (`Read|Edit(/data/**)` trong sett
 ## Layout chuan
 `data/<domain>/<tool>/<date=YYYY-MM-DD|run-id>/...`. Duong dan qua `dataPath()` (`harness/core/io/storage.mjs`). Moi `<domain>` phai co trong `registry.json` (owner, retentionDays).
 
+## Hop dong workspace data (data-workspaces, P0)
+Muc dich: du lieu tool theo NUT (du an/repo) nhom vao WORKSPACE (nhieu nut co the chung mot workspace). Plugin generic: khong chua chuoi `projects/`, khong biet hub.
+- **Duong dan**: `data/workspaces/<ws>/<tool>/` ; artifact theo nut `data/workspaces/<ws>/<tool>/<node>/[<run-id>|date=YYYY-MM-DD]/...` ; ban ghi chung `data/workspaces/<ws>/<tool>/runs.jsonl` (append-only).
+- **Hook** (module resolver, khoa config `projectResolver`, vd hub `hub/projects/projects-registry.mjs`): ngoai `resolveProject(id)` co san, export them `workspaceFor(id) -> ws|null` va `listNodes() -> [{id, workspace}]`. `ws` va `id` phai la ten don `[A-Za-z0-9][A-Za-z0-9_.-]{0,79}` (khong '/', '\\', '..'); sai -> bo + canh bao `data-warn rule=resolver`, dung node id.
+- **Mac dinh**: khong hook (repo khac, loi, bi tu choi) -> `workspaceFor(node)` = node id, `listNodes()` = [].
+- **HUB_DATA_DIR** dat (test/sandbox) -> bo qua hook hoan toan.
+- **Tin cay hook** (`harness/core/io/node-hook.mjs`): goc tin cay = goc workspace (ca plugin mode, khong phai codeRoot); duong dan resolver khai bao trong config (default/may, hoac `<workspace>/config/{hub,workspace}/default.json`) phai nam trong goc workspace, khong '..'; chi nap khi ext da dang ky chua file do co hash da duyet (ext-registry `listRegistered` + `isExtensionTrusted`). Lech/chua duyet -> khong nap, canh bao 1 lan, fail-open ve mac dinh. Nap dong bo (require), cache theo process.
+  - Chong TOCTOU: ngay truoc khi require, hash lai byte file resolver (va import tinh tuong doi cung thu muc, 1 cap) va so voi hash lay TRUOC buoc kiem tin cay; lech -> tu choi + canh bao `file resolver doi giua luc kiem va nap`. **Rui ro con lai**: import ngoai thu muc resolver / ngoai goc ext, import dong, node_modules va mo-dun nap qua require long nhau khong duoc phu; hash cay ext (`ext approve`) van gom ca node_modules, nen doi sau khi duyet bi chan o lan kiem ke tiep, nhung khoang trong giua kiem va nap cho file ngoai danh sach tren van ton tai.
+  - **Thay doi hanh vi**: `data register --project <id>` (va moi lenh dung `resolveProject`) chi chay khi resolver nam TRONG mot ext da duyet va hash khop; truoc day resolver ngoai ext da duyet van co the duoc nap. Resolver chua duyet -> `resolverFailed`, register tu choi thay vi bo qua kiem project.
+  - `isSafeWs` them: tu choi ten thiet bi Windows (CON, PRN, AUX, NUL, COM1-9, LPT1-9; co/khong duoi, khong phan biet hoa thuong) va ten ket thuc '.'.
+  - `data scan`: canh bao `deprecated-path` chi la canh bao (exit 0); cac rule khac van exit 1. `data archive`: dich co hau to `Z` (UTC), lay khoa truoc moi kiem tra, kiem lai running ngay truoc rename; rollback that bai duoc bao kem duong dan chinh xac va exit != 0.
+- **API chung**: `workspaceFor(node, opts?)`, `listNodes(opts?)` (khong bao gio nem), `loadNodeHook`, `resolveResolverPath`, `resetNodeHook` tu `harness/core/io/node-hook.mjs`.
+- **Khai bao tool MOT lan** (manifest ext `data[]` hoac registry.json plugin): `{ "zone":"workspaces", "tool":"<tool>", "class":"log|cache|artifact|durable", "retentionDays"?, "caps"?, "legacy"? }`. KHONG khai bao `path`/`workspace`/`project`: mau `workspaces/*/<tool>`.
+- **runs.jsonl** (truong co dinh): `ts, run, node, tool, cmd, status(running|ok|fail|unknown), ref?, env?, artifacts[], durMs, summary(<=200)`. Truong la bi bo + canh bao; cam output tho/email/key/gia tri env.
+- **Duong dan code (P1a)**: `dataPathFor(tool, ...parts, {node, shared?, mode?})` (storage) / `ctx.storage.entryPath(tool, ...parts, {node, shared?, mode?})` -> `workspaces/<workspaceFor(node)>/<tool>/<node>/...`; `shared:true` -> `workspaces/<ws>/<tool>/...` (runs.jsonl). Entry mau thieu node -> nem (khong doan cho). `mode:read`: uu tien duong dan moi, roi `<ws>/<tool>/` (artifact cu khong cap node), roi `legacy` (+ canh bao legacy-read). Registry = manifest tool (class/retention/caps, mau `workspaces/*/<tool>` trong `reg.patterns`) + thu muc ws dang co (entry dan xuat `derived`); `config/data/workspaces/*.json` van doc nhung canh bao `deprecated-config`. Tin cay hook doc qua `core/ext/ext-trust.mjs` (core khong import cli/).
+
 ## Lenh (qua cong, co log vao data/audit/gateway/)
 - `node harness/cli/harness.mjs data ls [domain]` liet ke file/kich thuoc.
 - `data stat` tong quan + so muc ngoai registry.
@@ -17,6 +33,7 @@ Lua chon: `data/README.md` nam trong vung deny (`Read|Edit(/data/**)` trong sett
 - `data inbox prune [--days N] [--yes]` xoa muc _inbox cu hon N ngay (mac dinh 30, 1..3650; dry-run mac dinh).
   Moi lenh inbox ghi vet type=data-access.
 
+- `data query <ws> <tool> [--node X] [--last [N]] [--status S] [--since ISO] [--json]` doc `workspaces/<ws>/<tool>/runs.jsonl` (data-query.mjs): tail, N mac dinh 20 toi da 200, doc toi da 1MB cuoi + 20s (`truncated:`); ws khong ton tai thi thu coi la node id. Ghi: `appendRun(file, rec)` o `core/io/runs-record.mjs` (truong co dinh, redact, cat 200, xoay .old >5MB, khong nem).
 - `data tail <domain> [--n N] [--type T] [--since 1d]` doc N dong cuoi (mac dinh 20, toi da 200) tu .jsonl moi nhat cua domain da dang ky (vd `data tail gateway`), cat truong >300 ky tu, co limit byte/timeout, ghi vet data-access. Dung khi data-gate chan doc truc tiep.
 - `scan`, `clean`, `adopt`, `tail` thoat code 2 va khong cham gi khi registry khong doc duoc (file registry/workspace json hong) hoac rong bat thuong. `clean` dung retention theo class (retentionDays tuong minh > mac dinh class), khop canh bao cua scan; artifact/durable khong bao gio bi xoa. `register`/cache scan ghi nguyen tu (tmp + rename).
 
