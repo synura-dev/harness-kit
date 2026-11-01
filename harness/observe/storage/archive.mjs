@@ -1,6 +1,6 @@
 // `data archive <ws> [--yes]` + kiem tra workspace mo coi (ws khong nut nao tro toi).
 // ctx: { root?, reg?, nodes: [{id, workspace}]|null (null = khong hook), registryFile?, wsDir?, opts?, now? }. Tra {code, lines}. Dry-run mac dinh.
-// Dich: _archive/workspaces/<ws>-<YYYYMMDD-HHMMSS>. Tai dung mv: manifest md5 + khoa + rename + xac minh + cap nhat registry (rollback khi loi). Khong xoa.
+// Dich: _archive/workspaces/<ws>-<YYYYMMDD-HHMMSSZ> (UTC). Tai dung mv: manifest md5 + khoa + rename + xac minh + cap nhat registry (rollback khi loi). Khong xoa.
 import fs from 'node:fs';
 import path from 'node:path';
 import { dataRoot } from '../../core/io/paths.mjs';
@@ -8,11 +8,11 @@ import { appendJsonl, dataPathFor, today } from '../../core/io/storage.mjs';
 import { isSafeWs } from '../../core/io/node-hook.mjs';
 import { loadDataRegistry, setEntryPath } from '../../core/registry/data-registry.mjs';
 import { LIMITS } from './data.mjs';
-import { manifest, takeLock } from './mv.mjs';
+import { manifest, takeLock, rollbackRename } from './mv.mjs';
 import { queryRuns } from './data-query.mjs';
 
 const posix = (x) => String(x).replace(/\\/g, '/').replace(/\/+$/, '');
-const stamp = (d) => d.toISOString().replace(/\.\d+Z$/, '').replace(/[-:]/g, '').replace('T', '-');
+const stamp = (d) => d.toISOString().replace(/\.\d+Z$/, '').replace(/[-:]/g, '').replace('T', '-') + 'Z';
 
 /** Ten thu muc con (chi ten, khong doc file) duoi workspaces/ khong nut nao tro toi. nodes rong/null -> [] (khong co hook thi bo qua rule). */
 export function orphanWorkspaces(root, nodes) {
@@ -58,6 +58,8 @@ export async function archiveCmd(args = [], ctx = {}) {
     const ws = pos[0];
     if (!isSafeWs(ws)) throw new Error('abort: ten workspace khong an toan');
     const root = ctx.root || dataRoot();
+    const nowMs = () => (ctx.now instanceof Date ? ctx.now.getTime() : Date.now());
+    if (yes) lock = takeLock(root); // khoa TRUOC moi kiem tra (mapped/running/dich) de khong co khoang hai giua kiem va rename
     if (!Array.isArray(ctx.nodes) || !ctx.nodes.length) throw new Error('abort: khong co hook nut (listNodes) nen khong xac minh duoc ws con nut tro toi; khong archive');
     const mapped = ctx.nodes.filter((n) => n && n.workspace === ws).map((n) => n.id);
     if (mapped.length) throw new Error(`abort: ws "${ws}" con nut tro toi (${mapped.slice(0, 5).join(', ')}); khong archive`);
@@ -66,7 +68,7 @@ export async function archiveCmd(args = [], ctx = {}) {
     if (!fs.existsSync(absFrom)) throw new Error(`abort: ws khong ton tai: ${from}`);
     const st = fs.lstatSync(absFrom);
     if (st.isSymbolicLink() || !st.isDirectory()) throw new Error('abort: ws phai la thu muc thuong');
-    const running = runningRuns(root, ws, ctx.now instanceof Date ? ctx.now.getTime() : Date.now());
+    const running = runningRuns(root, ws, nowMs());
     if (running.length) throw new Error(`abort: ws "${ws}" con lan chay status=running trong 24h (${running.slice(0, 5).join(', ')}); khong archive`);
     const reg = ctx.reg || loadDataRegistry({ registryFile: ctx.registryFile, workspacesDir: ctx.wsDir, noCache: true });
     if (reg.failed) throw new Error('abort: registry khong doc duoc');
@@ -84,25 +86,32 @@ export async function archiveCmd(args = [], ctx = {}) {
       return { code: 0, lines, manifest: before };
     }
     if (before.truncated) throw new Error(`abort: manifest bi cat (${before.truncated}); khong the xac minh md5`);
-    lock = takeLock(root);
+    if (typeof ctx.opts?.beforeRename === 'function') ctx.opts.beforeRename(); // test seam: mo phong lan chay moi xuat hien sau kiem dau
+    const running2 = runningRuns(root, ws, nowMs()); // kiem lai ngay truoc rename
+    if (running2.length) throw new Error(`abort: ws "${ws}" vua co lan chay status=running (${running2.slice(0, 5).join(', ')}); khong archive`);
     fs.mkdirSync(path.dirname(absTo), { recursive: true });
     try { fs.renameSync(absFrom, absTo); } catch (e) { throw new Error(`abort: rename that bai (${e.code || e.message}); chi ho tro cung o dia`); }
     const after = manifest(absTo, { ...lim, deadline: Date.now() + LIMITS.timeoutS * 1000 });
     if (after.truncated || after.md5 !== before.md5 || after.files.length !== before.files.length) {
-      try { fs.renameSync(absTo, absFrom); } catch {}
-      throw new Error('abort: md5 lech sau rename; da rename nguoc');
+      const rb = rollbackRename(absTo, absFrom);
+      throw new Error(`abort: md5 lech sau rename; ${rb || 'da rename nguoc'}`);
     }
     const so = { registryFile: ctx.registryFile, workspacesDir: ctx.wsDir };
     const done = [];
     try {
       for (const x of ents) {
         const np = to + x.p.slice(from.length);
-        if (setEntryPath(x.p, np, so)) done.push([x.p, np]);
+        const u = setEntryPath(x.p, np, so);
+        if (u) done.push([x.p, np, u]);
       }
     } catch (e) {
-      for (const [a, b] of done.reverse()) { try { setEntryPath(b, a, so); } catch {} }
-      try { fs.renameSync(absTo, absFrom); } catch {}
-      throw new Error(`abort: khong cap nhat duoc registry (${e.message}); da rename nguoc`);
+      const errs = [];
+      for (const [a, b, u] of done.reverse()) {
+        try { if (!setEntryPath(b, a, { ...so, restoreLegacy: { had: u.hadLegacy, value: u.prevLegacy } })) errs.push(`registry "${b}" -> "${a}": khong tim thay muc`); } catch (e2) { errs.push(`registry "${b}" -> "${a}": ${e2.message}`); }
+      }
+      const rb = rollbackRename(absTo, absFrom);
+      if (rb) errs.push(rb);
+      throw new Error(`abort: khong cap nhat duoc registry (${e.message}); ${errs.length ? 'ROLLBACK KHONG HOAN TAT: ' + errs.join('; ') : 'da hoan tac registry va rename nguoc'}`);
     }
     try { appendJsonl(dataPathFor('audit', `date=${today()}`, 'type=data-access', 'data-cli.jsonl'), { ts: new Date().toISOString(), cmd: 'archive', from, to, entries: done.length, files: after.files.length, bytes: after.bytes, md5: after.md5 }); } catch {}
     L(`da archive ${from} -> ${to} (${done.length} muc registry cap nhat)`);

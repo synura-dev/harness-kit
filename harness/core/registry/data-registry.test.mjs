@@ -140,3 +140,57 @@ test('F2: workspace json hong -> failed + failedFiles; cache doi theo mtime', as
   expect(r2.failed).toBeUndefined();
   expect(r2.entries['workspaces/w/t']).toBeDefined();
 });
+
+function drMk(patternLegacy) {
+  const hub = fs.mkdtempSync(path.join(os.tmpdir(), 'drown-'));
+  const dd = path.join(hub, 'data');
+  const env = { HUB_DIR: hub, HUB_DATA_DIR: dd };
+  fs.mkdirSync(path.join(dd, 'workspaces', 'gem', 'real'), { recursive: true });
+  for (const n of ['constructor', 'toString', '__proto__']) fs.mkdirSync(path.join(dd, 'workspaces', 'gem', n), { recursive: true });
+  fs.mkdirSync(path.join(hub, 'outside'), { recursive: true });
+  const rf = path.join(hub, 'r.json');
+  const ent = { zone: 'workspaces', tool: 'real', pattern: 'workspaces/*/real', class: 'log', owner: 'o', ...(patternLegacy ? { legacy: patternLegacy } : {}) };
+  fs.writeFileSync(rf, JSON.stringify({ entries: { real: ent } }));
+  return { hub, dd, env, o: { registryFile: rf, workspacesDir: path.join(hub, 'ws'), env, noCache: true } };
+}
+
+test('patterns/entries: chi own property (constructor/toString/__proto__ khong duoc coi la da dang ky)', () => {
+  const { dd, env, o } = drMk();
+  const reg = m.loadDataRegistry(o);
+  expect(Object.getPrototypeOf(reg.patterns)).toBe(null);
+  expect(Object.keys(reg.entries)).toEqual(['workspaces/gem/real']);
+  for (const n of ['constructor', 'toString', '__proto__']) {
+    expect(m.resolveEntry(path.join(dd, 'workspaces', 'gem', n, 'x'), { registry: reg, env }).entry).toBe(null);
+  }
+  expect(m.resolveEntry(path.join(dd, 'constructor', 'x'), { registry: reg, env }).entry).toBe(null);
+  expect(m.resolveEntry(path.join(dd, 'workspaces', 'gem', 'real', 'x'), { registry: reg, env }).entry).not.toBe(null);
+  expect(m.checkWrite(path.join(dd, 'workspaces', 'gem', 'constructor', 'x'), { registry: reg, env }).warn?.rule).toBe('unregistered');
+});
+
+test('dataReadRoots: legacy cua pattern ra ngoai dataDir (.. / tuyet doi) bi loc', () => {
+  for (const lg of ['../outside', '..\\outside', path.join(os.tmpdir())]) {
+    const { dd, env, o } = drMk(lg);
+    const reg = m.loadDataRegistry(o);
+    const roots = m.dataReadRoots('real', { registry: reg, node: 'n1', env });
+    for (const r of roots) expect(path.relative(dd, r).startsWith('..')).toBe(false);
+    expect(m.resolveDataRel('real', { registry: reg, node: 'n1', env }).legacyRels.length).toBe(1);
+  }
+});
+
+test('setEntryPath: restoreLegacy khoi phuc legacy cu (co/khong co) khi hoan tac', () => {
+  const hub = fs.mkdtempSync(path.join(os.tmpdir(), 'drleg-'));
+  const rf = path.join(hub, 'r.json');
+  fs.writeFileSync(rf, JSON.stringify({ entries: { 'a/b': { class: 'log', legacy: 'old/L' }, 'c/d': { class: 'log' } } }));
+  const o = { registryFile: rf, workspacesDir: path.join(hub, 'ws'), env: { HUB_DIR: hub } };
+  const u = m.setEntryPath('a/b', 'x/y', o);
+  expect(u.hadLegacy).toBe(true);
+  expect(u.prevLegacy).toBe('old/L');
+  m.setEntryPath('x/y', 'a/b', { ...o, restoreLegacy: { had: u.hadLegacy, value: u.prevLegacy } });
+  const j = JSON.parse(fs.readFileSync(rf, 'utf8')).entries['a/b'];
+  expect(j.path).toBe('a/b');
+  expect(j.legacy).toBe('old/L');
+  const u2 = m.setEntryPath('c/d', 'e/f', o);
+  expect(u2.hadLegacy).toBe(false);
+  m.setEntryPath('e/f', 'c/d', { ...o, restoreLegacy: { had: false } });
+  expect(JSON.parse(fs.readFileSync(rf, 'utf8')).entries['c/d'].legacy).toBeUndefined();
+});

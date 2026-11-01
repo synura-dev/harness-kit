@@ -201,3 +201,29 @@ test('scanZones: repoRootFiles mo rong (opts) cho phep file goc, khong con cung 
   assert.deepEqual(p({ repoRootFiles: [] }), ['TASKS.md']);
   assert.deepEqual(p({ repoRootFiles: ['TASKS.md'] }), []);
 });
+
+test('scan: chi deprecated-path (canh bao) -> exit 0; co vi pham that -> exit 1', async () => {
+  const { run } = await import('./data.mjs');
+  const hub = fs.mkdtempSync(path.join(os.tmpdir(), 'dscan-'));
+  const dd = path.join(hub, 'data');
+  fs.mkdirSync(path.join(dd, 'workspaces', 'gem', 'oldtool'), { recursive: true });
+  fs.writeFileSync(path.join(dd, 'workspaces', 'gem', 'oldtool', 'a.txt'), 'a');
+  const rf = path.join(hub, 'registry.json');
+  const ent = { zone: 'workspaces', class: 'artifact', owner: 'o', workspace: 'gem', path: 'workspaces/gem/oldtool', deprecatedPath: true };
+  fs.writeFileSync(rf, JSON.stringify({ entries: { oldtool: ent }, reserved: [] }));
+  const saved = { d: process.env.HUB_DATA_DIR, r: process.env.HARNESS_DATA_REGISTRY, w: process.env.HARNESS_DATA_WORKSPACES };
+  const log = console.log;
+  try {
+    process.env.HUB_DATA_DIR = dd; process.env.HARNESS_DATA_REGISTRY = rf; process.env.HARNESS_DATA_WORKSPACES = path.join(hub, 'ws');
+    console.log = () => {};
+    const s = scanZones({ root: dd, reg: { entries: { oldtool: ent }, reserved: [] }, repoRoot: null, write: false, opts: {} });
+    expect(s.warnings.map((w) => w.rule)).toEqual(['deprecated-path']);
+    expect((await run(['scan'])).code).toBe(0);
+    fs.mkdirSync(path.join(dd, 'strayzone'), { recursive: true });
+    fs.writeFileSync(path.join(dd, 'strayzone', 'x.txt'), 'x');
+    expect((await run(['scan'])).code).toBe(1);
+  } finally {
+    console.log = log;
+    for (const [k, v] of [['HUB_DATA_DIR', saved.d], ['HARNESS_DATA_REGISTRY', saved.r], ['HARNESS_DATA_WORKSPACES', saved.w]]) { if (v === undefined) delete process.env[k]; else process.env[k] = v; }
+  }
+});

@@ -3,7 +3,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { dataRoot, workspaceRoot, isPluginMode, REPO_DIR } from '../io/paths.mjs';
+import { dataRoot, workspaceRoot, isPluginMode, REPO_DIR, isInside } from '../io/paths.mjs';
 import { loadConfig } from '../config/config.mjs';
 import { workspaceFor, isSafeWs } from '../io/node-hook.mjs';
 
@@ -73,6 +73,14 @@ export const SCAN_CACHE_REL = '.state/data-scan.json';
 
 const toPosix = (x) => String(x).replace(/\\/g, '/');
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+/** Tra cuu CHI own property (ten thu muc constructor/toString/__proto__ khong duoc coi la da dang ky). */
+const own = (o, k) => (o && typeof k === 'string' && Object.hasOwn(o, k) ? o[k] : undefined);
+/** legacy rel an toan (nhu ctx legacyOf): khong tuyet doi, khong '.'/'..'/o dia. -> 'a/b' | null */
+const safeLegacy = (l) => {
+  if (typeof l !== 'string' || !l || path.isAbsolute(l) || /^[A-Za-z]:/.test(l)) return null;
+  const s = toPosix(l).split('/').filter(Boolean);
+  return s.length && !s.some((x) => x === '.' || x === '..') ? s.join('/') : null;
+};
 /** Doc JSON (bo BOM); loi -> null. Dung chung cho loader va register. */
 export const readJ = (file) => { try { const t = fs.readFileSync(file, 'utf8'); return JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t); } catch { return null; } };
 /** Ghi nguyen tu: tmp cung thu muc roi rename. */
@@ -98,8 +106,8 @@ function deriveWorkspaceEntries(reg, dir) {
   for (const ws of wss) {
     let tools = []; try { tools = fs.readdirSync(path.join(top, ws), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).slice(0, 100); } catch { continue; }
     for (const t of tools) {
-      const p = reg.patterns[t]; const key = `workspaces/${ws}/${t}`;
-      if (!p || reg.entries[key]) continue;
+      const p = own(reg.patterns, t); const key = `workspaces/${ws}/${t}`;
+      if (!p || own(reg.entries, key)) continue;
       const { pattern, ...rest } = p;
       reg.entries[key] = normEntry({ ...rest, workspace: ws, path: key, target: key, derived: true }, ws);
     }
@@ -204,7 +212,7 @@ export function loadDataRegistry(opts = {}) {
   const extDirs = extDirsFor(hub, codeDir, opts);
   const ck = [wsStamp(dir), file, mtimeOf(file), extDirs.map((d) => d.abs).join(';'), wsDir, ...names.map((n) => n + ':' + mtimeOf(path.join(wsDir, n))), dir, env.HARNESS_DATA_ENFORCE || ''].join('\n');
   if (!opts.noCache && cache.has(ck)) return cache.get(ck);
-  const reg = { enforce: DEFAULT_ENFORCE, entries: {}, patterns: {}, reserved: [], dataDir: dir, failedFiles: [] };
+  const reg = { enforce: DEFAULT_ENFORCE, entries: {}, patterns: Object.create(null), reserved: [], dataDir: dir, failedFiles: [] };
   try {
     const j = readJ(file);
     if (!isObj(j)) throw new Error('registry');
@@ -224,7 +232,7 @@ export function loadDataRegistry(opts = {}) {
       for (const [k, v] of Object.entries(src)) if (isObj(v) && !k.startsWith('_') && k !== 'workspace') reg.entries[k.includes('/') ? k : `workspaces/${ws}/${k}`] = normEntry({ tool: k.includes('/') ? undefined : k, ...(k.includes('/') ? {} : { path: k }), ...v }, ws);
     }
     if (Object.keys(reg.patterns).length) deriveWorkspaceEntries(reg, dir);
-  } catch { reg.entries = {}; reg.patterns = {}; reg.failed = true; reg.failedFiles.push(file); warnRegistryOnce(file); }
+  } catch { reg.entries = {}; reg.patterns = Object.create(null); reg.failed = true; reg.failedFiles.push(file); warnRegistryOnce(file); }
   if (!opts.noCache) cache.set(ck, reg);
   return reg;
 }
@@ -241,12 +249,12 @@ export function resolveEntry(abs, opts = {}) {
     if ((rel === p || rel.startsWith(p + '/')) && (!best || p.length > best.len)) best = { key: k, entry: e, len: p.length };
   }
   if (best) return { key: best.key, entry: best.entry };
-  if (segs[0] === 'workspaces' && segs.length >= 3 && isSafeWs(segs[1]) && reg.patterns && reg.patterns[segs[2]]) {
-    const { pattern, ...rest } = reg.patterns[segs[2]]; const pth = `workspaces/${segs[1]}/${segs[2]}`;
+  if (segs[0] === 'workspaces' && segs.length >= 3 && isSafeWs(segs[1]) && own(reg.patterns, segs[2])) {
+    const { pattern, ...rest } = own(reg.patterns, segs[2]); const pth = `workspaces/${segs[1]}/${segs[2]}`;
     return { key: pth, entry: normEntry({ ...rest, workspace: segs[1], path: pth, target: pth, derived: true }, segs[1]) };
   }
   const tries = ZONES.includes(segs[0]) ? [segs.slice(0, 3).join('/'), segs.slice(0, 2).join('/'), segs[1], segs[2]] : [segs[0]];
-  for (const k of tries) if (k && reg.entries[k]) return { key: k, entry: reg.entries[k] };
+  for (const k of tries) if (k && own(reg.entries, k)) return { key: k, entry: reg.entries[k] };
   return { key: ZONES.includes(segs[0]) && segs[1] ? segs.slice(0, 2).join('/') : segs[0], entry: null };
 }
 
@@ -259,7 +267,7 @@ export function checkWrite(abs, opts = {}) {
     const rel = toPosix(path.relative(dataRoot(undefined, opts), abs));
     if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return { ok: true };
     const segs = rel.split('/');
-    if (reg.reserved.includes(segs[0]) && !reg.entries[segs[0]]) return { ok: true };
+    if (reg.reserved.includes(segs[0]) && !own(reg.entries, segs[0])) return { ok: true };
     let mode = ENFORCE_MODES.includes(env.HARNESS_DATA_ENFORCE) ? env.HARNESS_DATA_ENFORCE : reg.enforce;
     if (mode === 'off') return { ok: true };
     const { key, entry } = resolveEntry(abs, { ...opts, registry: reg });
@@ -296,7 +304,7 @@ export function formatWarn(w) {
  */
 export function resolveDataRel(key, opts = {}) {
   const reg = opts.registry || loadDataRegistry(opts);
-  const pat = reg.patterns && reg.patterns[key];
+  const pat = own(reg.patterns, key);
   if (pat) {
     // Entry mau workspaces/*/<tool>: can opts.node. Khong node -> needsNode (KHONG doan duong dan, khong ghi nham cho).
     const tool = pat.tool || key;
@@ -307,12 +315,13 @@ export function resolveDataRel(key, opts = {}) {
     const base = `workspaces/${ws}/${tool}`;
     const rel = opts.shared ? base : `${base}/${node}`;
     // Doc cu: cap <node>/ chua co (artifact cu nam o <tool>/...) roi `legacy` khai bao trong manifest.
-    const legacyRels = [...(opts.shared ? [] : [base]), ...(pat.legacy ? [toPosix(pat.legacy).replace(/\/+$/, '')] : [])];
+    const lg = safeLegacy(pat.legacy);
+    const legacyRels = [...(opts.shared ? [] : [base]), ...(lg ? [lg] : [])];
     const rt = dataRoot(undefined, opts);
     const exs = (r) => { try { return fs.existsSync(path.join(rt, ...r.split('/'))); } catch { return false; } };
     return { rel, legacyRel: legacyRels[0] || null, legacyRels, readRel: rel, usingLegacy: false, exists: { new: exs(rel), legacy: legacyRels.some(exs) }, pattern: true, needsNode: false, node, ws };
   }
-  const e = reg.entries[key];
+  const e = own(reg.entries, key);
   let base = e && e.path;
   if (!base) {
     base = DEFAULT_PATHS[key];
@@ -322,7 +331,7 @@ export function resolveDataRel(key, opts = {}) {
     }
   }
   const rel = toPosix(base).replace(/\/+$/, '');
-  const legacyRel = e && e.legacy ? toPosix(e.legacy).replace(/\/+$/, '') : null;
+  const legacyRel = e && e.legacy ? safeLegacy(e.legacy) : null;
   const root = dataRoot(undefined, opts);
   const ex = (r) => { try { return !!r && fs.existsSync(path.join(root, r)); } catch { return false; } };
   const exists = { new: ex(rel), legacy: ex(legacyRel) };
@@ -337,15 +346,18 @@ export function setEntryPath(from, to, opts = {}) {
   const file = opts.registryFile || path.join(isPluginMode(codeDir) ? codeDir : hub, 'harness', 'observe', 'storage', 'registry.json');
   const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
   const norm = (x) => toPosix(x).replace(/\/+$/, '');
+  let prev;
   const apply = (v) => {
+    prev = v.legacy;
     v.path = to;
-    if (opts.dropLegacy) delete v.legacy;
+    if (opts.restoreLegacy) { if (opts.restoreLegacy.had) v.legacy = opts.restoreLegacy.value; else delete v.legacy; }
+    else if (opts.dropLegacy) delete v.legacy;
     else if (v.legacy !== undefined && norm(v.legacy) === norm(to)) delete v.legacy; else v.legacy = from;
   };
   const j = readJ(file);
   if (isObj(j) && isObj(j.entries)) {
     for (const [k, v] of Object.entries(j.entries)) {
-      if (isObj(v) && norm(v.path || k) === norm(from)) { apply(v); writeAtomic(file, JSON.stringify(j, null, 2) + '\n'); cache.clear(); return { key: k, file }; }
+      if (isObj(v) && norm(v.path || k) === norm(from)) { apply(v); writeAtomic(file, JSON.stringify(j, null, 2) + '\n'); cache.clear(); return { key: k, file, hadLegacy: prev !== undefined, prevLegacy: prev }; }
     }
   }
   let names = [];
@@ -359,7 +371,7 @@ export function setEntryPath(from, to, opts = {}) {
     for (const [k, v] of Object.entries(src)) {
       if (!isObj(v) || k.startsWith('_') || k === 'workspace') continue;
       const key = k.includes('/') ? k : `workspaces/${ws}/${k}`;
-      if (norm(v.path || k) === norm(from)) { apply(v); writeAtomic(wf, JSON.stringify(w, null, 2) + '\n'); cache.clear(); return { key, file: wf }; }
+      if (norm(v.path || k) === norm(from)) { apply(v); writeAtomic(wf, JSON.stringify(w, null, 2) + '\n'); cache.clear(); return { key, file: wf, hadLegacy: prev !== undefined, prevLegacy: prev }; }
     }
   }
   return null;
@@ -376,8 +388,9 @@ export function dataReadRoots(key, opts = {}) {
   const out = [];
   if (r.needsNode) return out;
   const ex = (x) => { try { return fs.existsSync(path.join(root, ...x.split('/'))); } catch { return false; } };
-  if (r.exists.new) out.push(path.join(root, ...r.rel.split('/')));
-  for (const l of r.legacyRels || (r.legacyRel ? [r.legacyRel] : [])) if (l !== r.rel && (r.legacyRels ? ex(l) : r.exists.legacy)) out.push(path.join(root, ...l.split('/')));
+  const inRoot = (x) => isInside(x, root);
+  if (r.exists.new) { const x = path.join(root, ...r.rel.split('/')); if (inRoot(x)) out.push(x); }
+  for (const l of r.legacyRels || (r.legacyRel ? [r.legacyRel] : [])) if (l !== r.rel && (r.legacyRels ? ex(l) : r.exists.legacy)) { const x = path.join(root, ...l.split('/')); if (inRoot(x)) out.push(x); }
   return out;
 }
 

@@ -38,6 +38,11 @@ export function manifest(abs, { maxFiles = LIMITS.maxFiles, deadline = Date.now(
   return { files, bytes, md5: total.digest('hex'), truncated };
 }
 
+/** Rename nguoc (rollback). -> null neu ok | chuoi loi voi duong dan chinh xac. KHONG nuot loi. */
+export function rollbackRename(from, to) {
+  try { fs.renameSync(from, to); return null; } catch (e) { return `rollback rename THAT BAI (${e.code || e.message}): du lieu dang o "${from}", can chuyen thu cong ve "${to}"`; }
+}
+
 export function takeLock(root) {
   const file = path.join(root, '.state', 'mv.lock');
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -91,14 +96,14 @@ export async function mvCmd(args = [], ctx = {}) {
     try { fs.renameSync(absFrom, absTo); } catch (e) { throw new Error(`abort: rename that bai (${e.code || e.message}); chi ho tro cung o dia`); }
     const after = manifest(absTo, { ...lim, deadline: Date.now() + LIMITS.timeoutS * 1000 });
     if (after.truncated || after.md5 !== before.md5 || after.files.length !== before.files.length) {
-      try { fs.renameSync(absTo, absFrom); } catch {}
-      throw new Error('abort: md5 lech sau rename; da rename nguoc');
+      const rb = rollbackRename(absTo, absFrom);
+      throw new Error(`abort: md5 lech sau rename; ${rb || 'da rename nguoc'}`);
     }
     let upd = null;
     try { upd = setEntryPath(from, to, { registryFile: ctx.registryFile, workspacesDir: ctx.wsDir }); } catch (e) { upd = null; L(`canh bao ghi registry loi: ${e.message}`); }
     if (!upd) {
-      try { fs.renameSync(absTo, absFrom); } catch {}
-      throw new Error('abort: khong cap nhat duoc registry; da rename nguoc');
+      const rb = rollbackRename(absTo, absFrom);
+      throw new Error(`abort: khong cap nhat duoc registry; ${rb || 'da rename nguoc'}`);
     }
     try { appendJsonl(dataPathFor('audit', `date=${today()}`, 'type=data-access', 'data-cli.jsonl'), { ts: new Date().toISOString(), cmd: 'mv', from, to, key: upd.key, files: after.files.length, bytes: after.bytes, md5: after.md5 }); } catch {}
     L(`da chuyen ${from} -> ${to} (key ${upd.key}; legacy giu trong registry)`);

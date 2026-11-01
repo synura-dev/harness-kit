@@ -361,7 +361,7 @@ export async function run(argv = process.argv.slice(2)) {
       const s = scanZones({ root, reg, opts: { ...opts, nodes: hookNodes() } });
       logAccess('scan', r, { warnings: s.warnings.length });
       const summary = s.warnings.length ? s.warnings.map(formatWarn).join('\n') : `khong vi pham (${s.files} file)`;
-      return { code: s.warnings.length ? 1 : 0, ...emit({ summary, data: s, truncated: s.truncated ? (s.reason || 'timeout') : null }, o) };
+      return { code: s.warnings.some((w) => w.rule !== 'deprecated-path') ? 1 : 0, ...emit({ summary, data: s, truncated: s.truncated ? (s.reason || 'timeout') : null }, o) };
     }
     if (cmd === 'archive') {
       const { archiveCmd } = await import(new URL('./archive.mjs', import.meta.url));

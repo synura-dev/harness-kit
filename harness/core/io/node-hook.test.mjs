@@ -115,3 +115,37 @@ test('plugin mode: goc tin cay = workspace (khong phai codeRoot) -> resolver tro
   expect(workspaceFor('gem-sb', o)).toBe('gemsocial');
   expect(m.warns).toEqual([]);
 });
+
+test('isSafeWs: ten thiet bi Windows va ket thuc dau cham bi tu choi', () => {
+  for (const bad of ['CON', 'con', 'Nul.txt', 'prn', 'AUX.log', 'com1', 'COM9.x', 'LPT1', 'lpt9.log', 'a.', 'x.y.']) expect(isSafeWs(bad)).toBe(false);
+  for (const ok of ['console', 'com10', 'lpt0', 'good.name', 'connect', 'a-b_c', 'nulx']) expect(isSafeWs(ok)).toBe(true);
+});
+
+test('TOCTOU: resolver (hoac import cung thu muc) doi giua luc hash va luc nap -> tu choi + canh bao; khong doi -> nap', () => {
+  const stub = () => ({ workspaceFor: () => 'zz' });
+  // doi chinh file resolver trong buoc tin cay
+  let m = mk();
+  m.o.trust = () => { fs.appendFileSync(path.join(m.ext, 'resolver.mjs'), '\n// doi\n'); return true; };
+  m.o.load = stub;
+  let r = loadNodeHook(m.o);
+  expect(r.source).toBe('error');
+  expect(r.mod).toBe(null);
+  expect(m.warns.some((w) => w.includes('doi giua luc kiem va nap'))).toBe(true);
+  expect(workspaceFor('gem-sb', m.o)).toBe('gem-sb');
+  // doi import tinh cung thu muc
+  resetNodeHook();
+  m = mk({ code: "import { h } from './helper.mjs';\n" + RESOLVER });
+  fs.writeFileSync(path.join(m.ext, 'helper.mjs'), 'export const h = 1;\n');
+  m.o.trust = () => { fs.writeFileSync(path.join(m.ext, 'helper.mjs'), 'export const h = 2;\n'); return true; };
+  m.o.load = stub;
+  r = loadNodeHook(m.o);
+  expect(r.source).toBe('error');
+  expect(m.warns.some((w) => w.includes('helper.mjs'))).toBe(true);
+  // doi chung: khong doi gi -> nap binh thuong
+  resetNodeHook();
+  m = mk({ code: "import { h } from './helper.mjs';\n" + RESOLVER });
+  fs.writeFileSync(path.join(m.ext, 'helper.mjs'), 'export const h = 1;\n');
+  m.o.trust = () => true;
+  m.o.load = stub;
+  expect(loadNodeHook(m.o).source).toBe('hook');
+});

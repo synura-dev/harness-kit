@@ -5,6 +5,7 @@
 // HUB_DATA_DIR dat (test/sandbox) -> bo qua hook.
 // Chi import module nhe (paths, config, core/ext/ext-trust: doc dang ky + hash, khong import cli/); KHONG import storage.mjs/data-registry.mjs/safe-id.mjs (tranh vong khi P1 noi vao storage).
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { workspaceRoot, isInside } from './paths.mjs';
@@ -18,7 +19,36 @@ const warned = new Set();
 const nodeRequire = createRequire(import.meta.url);
 
 /** ws/id an toan: ten don (khong '/', '\\', '..'), <= 80 ky tu. */
-export const isSafeWs = (s) => typeof s === 'string' && SAFE.test(s) && !s.includes('..');
+// Windows: ten thiet bi (CON, PRN, AUX, NUL, COM1-9, LPT1-9; co/khong duoi mo rong, khong phan biet hoa thuong) va ten ket thuc '.'/' ' khong dung duoc lam thu muc.
+const WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+export const isSafeWs = (s) => typeof s === 'string' && SAFE.test(s) && !s.includes('..') && !/[. ]$/.test(s) && !WIN_RESERVED.test(s.split('.')[0]);
+
+const sha = (b) => crypto.createHash('sha256').update(b).digest('hex');
+const IMPORT_RE = /(?:\bfrom\s*|\bimport\s*\(?\s*|\brequire\s*\(\s*)['"](\.{1,2}\/[^'"]+)['"]/g;
+const EXTS = ['', '.mjs', '.js', '.cjs', '.json'];
+/** Hash byte file resolver + import tinh tuong doi CUNG thu muc (1 cap). -> Map<abs, sha256>. Import ngoai thu muc/ngoai goc ext khong duoc phu (rui ro con lai, xem README). */
+function fileHashes(abs, extRoot) {
+  const map = new Map();
+  const dir = path.dirname(abs);
+  let buf; try { buf = fs.readFileSync(abs); } catch { return map; }
+  map.set(abs, sha(buf));
+  for (const m of buf.toString('utf8').matchAll(IMPORT_RE)) {
+    const base = path.resolve(dir, m[1]);
+    if (path.dirname(base) !== dir) continue;
+    for (const ext of EXTS) {
+      const f = base + ext;
+      if (map.has(f) || !isInside(f, extRoot)) continue;
+      try { if (!fs.statSync(f).isFile()) continue; map.set(f, sha(fs.readFileSync(f))); break; } catch { /* thu duoi khac */ }
+    }
+  }
+  return map;
+}
+/** Hash lai ngay truoc khi nap: -> ten file lech/mat (dau tien) | null. */
+function hashMismatch(map) {
+  if (!map) return null;
+  for (const [f, h] of map) { try { if (sha(fs.readFileSync(f)) !== h) return f; } catch { return f; } }
+  return null;
+}
 const sanitize = (s) => String(s ?? '').replace(/[^A-Za-z0-9_.-]/g, '').slice(0, 80);
 
 function warnOnce(o, detail, p = '') {
@@ -68,9 +98,10 @@ export function resolveResolverPath(opts = {}) {
   let ext;
   try { ext = listRegistered(extOpts).find((e) => isInside(abs, e.root)); } catch (e) { return { error: 'dang ky ext khong doc duoc: ' + String(e && e.message || e).slice(0, 80), declared: decl }; }
   if (!ext) return { error: 'resolver khong thuoc ext da dang ky', declared: decl };
+  const hashes = fileHashes(abs, ext.root); // hash TRUOC buoc tin cay; loadNodeHook hash lai ngay truoc require (chong doi file giua kiem va nap)
   const trusted = typeof o.trust === 'function' ? o.trust(ext.id, { ...extOpts, root: ext.root }) : isExtensionTrusted(ext.id, { ...extOpts, root: ext.root });
   if (!trusted) return { error: `ext "${ext.id}" chua duyet hash hoac lech hash`, declared: decl };
-  return { abs, extId: ext.id, declared: decl };
+  return { abs, extId: ext.id, declared: decl, hashes };
 }
 
 /** Nap hook (dong bo, cache). -> { mod|null, abs?, error?, source: 'hook'|'none'|'skipped'|'error' } */
@@ -86,8 +117,12 @@ export function loadNodeHook(opts = {}) {
     if (p.none) res = { mod: null, source: p.why ? 'skipped' : 'none' };
     else if (p.error) { warnOnce(o, p.error, p.declared); res = { mod: null, source: 'error', error: p.error }; }
     else {
+      const bad = hashMismatch(p.hashes);
+      if (bad) { const msg = 'file resolver doi giua luc kiem va nap, tu choi: ' + path.basename(bad); warnOnce(o, msg, p.declared); res = { mod: null, source: 'error', error: msg }; }
+      else {
       const mod = (typeof o.load === 'function' ? o.load : nodeRequire)(p.abs);
       res = { mod: mod && typeof mod === 'object' ? mod : null, abs: p.abs, source: 'hook' };
+      }
     }
   } catch (e) {
     const msg = 'nap resolver loi: ' + String(e && e.message || e).slice(0, 120);

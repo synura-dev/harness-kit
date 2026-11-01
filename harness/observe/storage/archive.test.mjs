@@ -25,7 +25,7 @@ function mk() {
   const nodes = [{ id: 'gemsocial-new', workspace: 'gem' }];
   return { hub, dd, root: dd, registryFile, wsDir, nodes, now: new Date('2026-11-02T10:20:30Z') };
 }
-const DEST = '_archive/workspaces/old-20261102-102030';
+const DEST = '_archive/workspaces/old-20261102-102030Z';
 const regOf = (c) => JSON.parse(fs.readFileSync(c.registryFile, 'utf8')).entries;
 
 test('orphanWorkspaces: ten ws khong nut nao tro toi; khong hook/rong -> []', () => {
@@ -124,4 +124,75 @@ test('scan: deprecated-path khi entry co deprecatedPath; entry mau (patterns) ->
   const only = { entries: {}, reserved: [], patterns: { release: { tool: 'release', zone: 'workspaces', pattern: 'workspaces/*/release', class: 'artifact', owner: 'o' } } };
   expect(scan(c.dd, only).unknown.map((x) => x.name)).not.toContain('workspaces');
   expect(scan(c.dd, { entries: {}, reserved: [] }).unknown.map((x) => x.name)).toContain('workspaces');
+});
+
+test('archive: stamp UTC co hau to Z', async () => {
+  const c = mk();
+  const r = await archiveCmd(['old'], c);
+  expect(r.lines.join('\n')).toMatch(/old-20261102-102030Z/);
+});
+
+test('archive --yes: lay khoa TRUOC moi kiem tra (khoa dang giu -> abort khoa, khong phai mapped); khoa nguoi khac khong bi xoa', async () => {
+  const c = mk();
+  const lock = path.join(c.dd, '.state', 'mv.lock');
+  fs.mkdirSync(path.dirname(lock), { recursive: true });
+  fs.writeFileSync(lock, JSON.stringify({ pid: 1, ts: Date.now() }));
+  const r = await archiveCmd(['gem', '--yes'], c); // gem con nut tro toi: neu kiem mapped truoc khoa se bao "con nut tro toi"
+  expect(r.code).toBe(2);
+  expect(r.lines.join('\n')).toMatch(/mv dang chay/);
+  expect(r.lines.join('\n')).not.toMatch(/con nut tro toi/);
+  expect(fs.existsSync(lock)).toBe(true);
+});
+
+test('archive --yes: lan chay running xuat hien SAU kiem dau (ngay truoc rename) -> tu choi, khoa duoc nha', async () => {
+  const c = mk();
+  const f = path.join(c.dd, 'workspaces', 'old', 'release', 'runs.jsonl');
+  const rec = JSON.stringify({ ts: new Date(c.now.getTime() - 3600000).toISOString(), run: 'late', node: 'n', tool: 'release', status: 'running' }) + '\n';
+  c.opts = { beforeRename: () => fs.writeFileSync(f, rec) };
+  const r = await archiveCmd(['old', '--yes'], c);
+  expect(r.code).toBe(2);
+  expect(r.lines.join('\n')).toMatch(/vua co lan chay.*release:late/);
+  expect(fs.existsSync(path.join(c.dd, 'workspaces', 'old'))).toBe(true);
+  expect(fs.existsSync(path.join(c.dd, '.state', 'mv.lock'))).toBe(false);
+});
+
+test('archive: md5 lech + rollback rename that bai -> bao loi voi duong dan chinh xac, code != 0, khong noi da rename nguoc', async () => {
+  const c = mk();
+  const realRename = fs.renameSync;
+  let n = 0;
+  fs.renameSync = (a, b) => {
+    n++;
+    if (n === 1) { realRename(a, b); fs.writeFileSync(path.join(b, 'release', 'extra.txt'), 'x'); return; }
+    const e = new Error('EPERM: nope'); e.code = 'EPERM'; throw e;
+  };
+  let r;
+  try { r = await archiveCmd(['old', '--yes'], c); } finally { fs.renameSync = realRename; }
+  expect(r.code).not.toBe(0);
+  const out = r.lines.join('\n');
+  expect(out).toMatch(/rollback rename THAT BAI \(EPERM\)/);
+  expect(out).toContain(path.join(c.dd, DEST));
+  expect(out).toContain(path.join(c.dd, 'workspaces', 'old'));
+  expect(out).not.toMatch(/da rename nguoc/);
+});
+
+test('archive: loi ghi registry giua chung -> hoan tac registry khoi phuc dung legacy cu + rename nguoc', async () => {
+  const c = mk();
+  fs.mkdirSync(path.join(c.dd, 'workspaces', 'old', 'extra'), { recursive: true });
+  fs.writeFileSync(path.join(c.dd, 'workspaces', 'old', 'extra', 'z.txt'), 'z');
+  const j = JSON.parse(fs.readFileSync(c.registryFile, 'utf8'));
+  j.entries['workspaces/old/release'].legacy = 'prev/legacy-release';
+  j.entries['workspaces/old/extra'] = { zone: 'workspaces', class: 'artifact', owner: 'o', workspace: 'old' };
+  fs.writeFileSync(c.registryFile, JSON.stringify(j));
+  const realRename = fs.renameSync;
+  let regWrites = 0;
+  fs.renameSync = (a, b) => { if (String(b) === c.registryFile) { regWrites++; if (regWrites === 2) throw new Error('EBUSY registry'); } return realRename(a, b); };
+  let r;
+  try { r = await archiveCmd(['old', '--yes'], c); } finally { fs.renameSync = realRename; }
+  expect(r.code).not.toBe(0);
+  expect(r.lines.join('\n')).toMatch(/da hoan tac registry va rename nguoc/);
+  const e = regOf(c);
+  expect(e['workspaces/old/release'].path).toBe('workspaces/old/release');
+  expect(e['workspaces/old/release'].legacy).toBe('prev/legacy-release');
+  expect(e['workspaces/old/extra'].path).toBeUndefined();
+  expect(fs.existsSync(path.join(c.dd, 'workspaces', 'old', 'extra', 'z.txt'))).toBe(true);
 });
