@@ -98,8 +98,8 @@ export const IMPORT_RULES = Object.freeze({
   core: Object.freeze(['core']),
   cli: Object.freeze(['core', 'cli']),
   tools: Object.freeze(['core', 'tools']),
-  // hooks = composition root duy nhat (Dot 5): dispatcher import module vung nhom de goi handle(); vung nhom van chi core + self (khong vong).
-  hooks: Object.freeze(['core', 'hooks/_shared', 'hooks:self', 'observe', 'constrain', 'knowledge']),
+  // hooks = composition root duy nhat (Dot 5): dispatcher import module vung nhom de goi handle() (build: hook user-shim); vung nhom van chi core + self (khong vong).
+  hooks: Object.freeze(['core', 'hooks/_shared', 'hooks:self', 'observe', 'constrain', 'knowledge', 'build']),
   plugins: Object.freeze(['core', 'plugins:self']),
   // vung nhom moi: chi core + chinh nhom minh (<zone>:self = cung thu muc con). build doc skills/ nhu DU LIEU (fs), khong import.
   observe: Object.freeze(['core', 'observe:self']),

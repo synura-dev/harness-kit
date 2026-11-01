@@ -6,7 +6,7 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 import { workspaceRoot, samePath } from '../../core/io/paths.mjs';
 import { install, installShim } from './install.mjs';
 
-const USAGE = 'install [--dry-run] [--skip-doctor] [--root D] [--json] [--timeout-s N] [--max-bytes N]\ninstall --shim [--dir D] [--dry-run] [--force]   (shim `harness` cho PowerShell/cmd/bash cua user; khong sua PATH)';
+const USAGE = 'install [--dry-run] [--skip-doctor] [--root D] [--json] [--timeout-s N] [--max-bytes N]\ninstall --shim [--dir D] [--dry-run] [--force]   (shim `harness` cho PowerShell/cmd/bash cua user + them thu muc vao PATH user; hook SessionStart tu lam viec nay)';
 
 export function main(argv, io = {}, deps = {}) {
   const c = parseCommon(argv);

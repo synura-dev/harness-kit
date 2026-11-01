@@ -149,13 +149,15 @@ try {
   else line(false, '.claude/settings.json', 'khong doc/parse duoc (' + (e.code || e.message) + ')');
 }
 
-// Shim `harness` cho shell cua user (opt-in): plugin da cai ma PATH thieu/lech shim -> canh bao mem kem lenh sua.
+// Shim `harness` cho shell cua user (hook SessionStart build/user-shim tu duy tri): thieu/lech/chua tren PATH -> canh bao mem kem lenh sua.
 if (pluginSeen) try {
   const { shimStatus, pluginCacheDir } = await import('../../core/runtime/user-shim.mjs');
   const s = shimStatus({ cacheDir: pluginCacheDir(REPO_DIR), pluginRoot: REPO_DIR });
-  if (s.state === 'missing') warn('shim', 'chua co shim `harness` tren PATH: PowerShell/cmd/bash ngoai Claude khong goi duoc harness -> chay: harness install --shim (tuy chon)');
-  else if (s.state === 'stale') warn('shim', `shim ${s.file} lech ban hien tai -> chay: harness install --shim`);
-  else if (s.state === 'foreign') warn('shim', `${s.file} khong do harness-kit sinh (viet tay/cu) -> xem roi chay: harness install --shim --dir "${path.dirname(s.file)}" --force`);
+  const fix = 'hook SessionStart tu sua o phien sau, hoac chay: harness install --shim';
+  if (s.state === 'missing') warn('shim', `chua co shim \`harness\` (${s.file}): PowerShell/cmd/bash ngoai Claude khong goi duoc harness -> ${fix}`);
+  else if (s.state === 'stale') warn('shim', `shim ${s.file} lech ban hien tai -> ${fix}`);
+  else if (s.state === 'nopath') warn('shim', `${s.dir} chua co tren PATH user -> ${fix}`);
+  else if (s.state === 'foreign') warn('shim', `${s.file} khong do harness-kit sinh -> xem roi chay: harness install --shim --force`);
 } catch { /* fail-open */ }
 
 // hooks block built from hook_events (audit/defaults.mjs), command path computed from this hub. Plugin da nap: hook den tu plugin, khong in khoi mau.

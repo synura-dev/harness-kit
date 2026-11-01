@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { SHIM_MARK, renderShims, pluginCacheDir, userPathDirs, defaultShimDir, planShim, applyShim, shimStatus, onPath } from './user-shim.mjs';
+import { SHIM_MARK, renderShims, pluginCacheDir, userPathDirs, defaultShimDir, planShim, applyShim, shimStatus, onPath, ensureUserPath, strayShims, syncUserShim } from './user-shim.mjs';
 
+// KHONG test nao duoc ghi PATH that: Windows luon truyen regPath + setUserPath gia; POSIX dung home tam.
 let tmp;
 const mk = (...p) => { const d = path.join(tmp, ...p); fs.mkdirSync(d, { recursive: true }); return d; };
 // cache gia: <tmp>/claude/plugins/cache/mkt/harness-kit/<ver>/bin/harness in ra ban + argv, thoat ma 7
@@ -14,6 +15,7 @@ const fakeCache = (vers) => {
   return c;
 };
 const sep = process.platform === 'win32' ? ';' : ':';
+const noWrite = () => { throw new Error('khong duoc ghi PATH that'); };
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "us 'x-")); }); // dau cach + nhay don trong duong dan
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
@@ -67,7 +69,7 @@ test('pluginCacheDir: suy tu pluginRoot trong cache, quet CLAUDE_CONFIG_DIR, nul
   expect(pluginCacheDir(mk('src2'), { env: {}, home: mk('emptyhome') })).toBe(null);
 });
 
-test('planShim/applyShim: tao, idempotent, cap nhat shim cua ta, tu choi file la tru --force', () => {
+test('planShim/applyShim: tao, idempotent, cap nhat shim cua ta, tu choi file la tru force', () => {
   const dir = mk('bin');
   const p1 = planShim({ dir, platform: 'linux', cacheDir: '/a' });
   expect(p1.files.map((f) => f.action)).toEqual(['create']);
@@ -79,43 +81,109 @@ test('planShim/applyShim: tao, idempotent, cap nhat shim cua ta, tu choi file la
   expect(p2.blocked).toBe(true);
   expect(applyShim(p2)).toBe(false);
   expect(fs.readFileSync(path.join(dir, 'harness'), 'utf8')).toBe('echo cua toi\n');
-  const p3 = planShim({ dir, platform: 'linux', cacheDir: '/a', force: true });
-  expect(applyShim(p3)).toBe(true);
+  expect(applyShim(planShim({ dir, platform: 'linux', cacheDir: '/a', force: true }))).toBe(true);
   expect(fs.readFileSync(path.join(dir, 'harness'), 'utf8')).toContain(SHIM_MARK);
 });
 
-test('userPathDirs: mo rong %VAR% khong phan biet hoa thuong; POSIX -> null', () => {
-  expect(userPathDirs({ platform: 'win32', env: { LocalAppData: 'C:\\L' }, regPath: '%LOCALAPPDATA%\\agy\\bin;;C:\\x ;%NOPE%\\y' })).toEqual(['C:\\L\\agy\\bin', 'C:\\x', '%NOPE%\\y']);
-  expect(userPathDirs({ platform: 'linux' })).toBe(null);
+test('defaultShimDir: thu muc co dinh theo nen', () => {
+  expect(defaultShimDir({ platform: 'win32', env: { LOCALAPPDATA: 'C:\\L' } })).toBe('C:\\L\\harness-kit\\bin');
+  expect(defaultShimDir({ platform: 'win32', env: {}, home: 'C:\\U' })).toBe('C:\\U\\AppData\\Local\\harness-kit\\bin');
+  expect(defaultShimDir({ platform: 'linux', home: '/home/u' })).toBe('/home/u/.local/bin');
 });
 
-test('defaultShimDir Windows: uu tien %APPDATA%\\npm, bo WindowsApps va thu muc khong ghi duoc', () => {
-  const a = mk('agy'); const wa = mk('Microsoft', 'WindowsApps'); const npm = mk('Roaming', 'npm');
-  const env = { APPDATA: path.join(tmp, 'Roaming') };
-  expect(defaultShimDir({ platform: 'win32', env, regPath: [path.join(tmp, 'gone'), wa, a, npm].join(';') }).dir).toBe(npm);
-  expect(defaultShimDir({ platform: 'win32', env: {}, regPath: [wa, a].join(';') }).dir).toBe(a);
-  expect(defaultShimDir({ platform: 'win32', env: {}, regPath: wa }).dir).toBe(null);
+test('userPathDirs: mo rong %VAR% khong phan biet hoa thuong', () => {
+  expect(userPathDirs({ env: { LocalAppData: 'C:\\L' }, regPath: '%LOCALAPPDATA%\\agy\\bin;;C:\\x ;%NOPE%\\y' })).toEqual(['C:\\L\\agy\\bin', 'C:\\x', '%NOPE%\\y']);
 });
 
-test('defaultShimDir POSIX: ~/.local/bin', () => {
-  expect(defaultShimDir({ platform: 'linux', home: '/home/u' })).toEqual({ dir: '/home/u/.local/bin', why: 'POSIX mac dinh ~/.local/bin' });
+test('ensureUserPath Windows: noi them cuoi, giu %VAR%, khong ghi khi da co (ke ca dang %VAR%) / dry-run / doc loi', () => {
+  const calls = [];
+  const set = (v) => { calls.push(v); return null; };
+  const env = { LOCALAPPDATA: 'C:\\L', PATH: 'C:\\Windows' };
+  const dir = 'C:\\L\\harness-kit\\bin';
+  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: '%LOCALAPPDATA%\\harness-kit\\bin\\;C:\\x', setUserPath: noWrite }).state).toBe('present');
+  expect(ensureUserPath(dir, { platform: 'win32', env: { ...env, PATH: dir }, setUserPath: noWrite }).state).toBe('present');
+  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: 'C:\\x', setUserPath: noWrite, apply: false }).state).toBe('planned');
+  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: null, setUserPath: noWrite }).state).toBe('error');
+  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: '%USERPROFILE%\\go\\bin;C:\\x\\;;', setUserPath: set }).state).toBe('added');
+  expect(calls).toEqual(['%USERPROFILE%\\go\\bin;C:\\x\\;C:\\L\\harness-kit\\bin']);
+  expect(ensureUserPath(dir, { platform: 'win32', env, regPath: 'C:\\x', setUserPath: () => 'reg add loi: x' })).toEqual({ state: 'error', where: 'HKCU\\Environment Path', error: 'reg add loi: x' });
 });
 
-test('shimStatus: missing / ok / stale / foreign; bo qua bin trong plugin', () => {
+test('ensureUserPath POSIX: them mot dong co marker vao ~/.profile mot lan; macOS ~/.zprofile', () => {
+  const home = mk('home');
+  const dir = '/h/.local/bin';
+  expect(ensureUserPath(dir, { platform: 'linux', env: { PATH: '/usr/bin' }, home }).state).toBe('added');
+  expect(ensureUserPath(dir, { platform: 'linux', env: { PATH: '/usr/bin' }, home }).state).toBe('present');
+  const prof = fs.readFileSync(path.join(home, '.profile'), 'utf8');
+  expect(prof.match(new RegExp(SHIM_MARK, 'g')).length).toBe(1);
+  expect(prof).toContain('export PATH="/h/.local/bin:$PATH"');
+  expect(ensureUserPath(dir, { platform: 'linux', env: { PATH: `/usr/bin:${dir}` }, home: mk('h2') }).state).toBe('present');
+  expect(fs.existsSync(path.join(tmp, 'h2', '.profile'))).toBe(false);
+  expect(ensureUserPath(dir, { platform: 'darwin', env: { PATH: '' }, home }).where).toBe(path.posix.join(home, '.zprofile'));
+});
+
+test('syncUserShim: ghi shim + PATH + xoa shim cu cua ta (khong dung file la); lan 2 khong doi gi', () => {
+  const cache = fakeCache(['0.1.1']);
+  const home = mk('home');
+  const old = mk('Roaming', 'npm');
+  const other = mk('other');
+  const target = path.join(tmp, 'Local', 'harness-kit', 'bin');
+  applyShim(planShim({ dir: old, cacheDir: '/cu' }));
+  fs.writeFileSync(path.join(other, process.platform === 'win32' ? 'harness.cmd' : 'harness'), 'cua user');
+  const calls = [];
+  const inj = { env: { LOCALAPPDATA: path.join(tmp, 'Local'), APPDATA: path.join(tmp, 'Roaming'), PATH: [other, old].join(sep) }, home, regPath: 'C:\\x', setUserPath: (v) => { calls.push(v); return null; } };
+  const s = syncUserShim({ pluginRoot: path.join(cache, '0.1.1'), ...inj });
+  expect(s.ok).toBe(true);
+  if (process.platform === 'win32') expect(s.dir).toBe(target);
+  expect(s.files.every((f) => f.action === 'create')).toBe(true);
+  expect(s.path.state).toBe('added');
+  expect(s.removed.length).toBeGreaterThan(0);
+  expect(fs.readdirSync(old)).toEqual([]);
+  expect(fs.readFileSync(path.join(other, process.platform === 'win32' ? 'harness.cmd' : 'harness'), 'utf8')).toBe('cua user');
+  const again = syncUserShim({ pluginRoot: path.join(cache, '0.1.1'), ...inj, regPath: `C:\\x;${s.dir}`, setUserPath: noWrite });
+  expect(again.files.every((f) => f.action === 'same')).toBe(true);
+  expect(again.path.state).toBe('present');
+  expect(again.removed).toEqual([]);
+});
+
+test('syncUserShim dry-run: khong ghi gi; file la -> blocked, khong dung PATH', () => {
+  const home = mk('home');
+  const inj = { env: { LOCALAPPDATA: path.join(tmp, 'Local'), PATH: '' }, home, regPath: 'C:\\x', setUserPath: noWrite };
+  const d = syncUserShim({ pluginRoot: mk('p'), apply: false, ...inj });
+  expect(d.ok).toBe(true);
+  expect(d.path.state).toBe('planned');
+  expect(fs.existsSync(d.dir)).toBe(false);
+  fs.mkdirSync(d.dir, { recursive: true });
+  fs.writeFileSync(d.files[0].file, 'la');
+  const b = syncUserShim({ pluginRoot: mk('p'), ...inj });
+  expect(b.blocked).toBe(true);
+  expect(b.path).toBe(null);
+});
+
+test('strayShims: chi lay file co marker o thu muc khac dich', () => {
+  const a = mk('a'); const b = mk('b');
+  applyShim(planShim({ dir: a, cacheDir: '/c' }));
+  applyShim(planShim({ dir: b, cacheDir: '/c' }));
+  const env = { PATH: [a, b].join(sep) };
+  const out = strayShims(a, { env });
+  expect(out.length).toBeGreaterThan(0);
+  expect(out.every((f) => f.startsWith(b))).toBe(true);
+});
+
+test('shimStatus: missing / ok / stale / foreign / nopath o thu muc co dinh', () => {
   const cache = fakeCache(['0.1.1']);
   const plug = path.join(cache, '0.1.1');
-  const pbin = path.join(plug, 'bin');
-  const main = process.platform === 'win32' ? 'harness.cmd' : 'harness';
-  fs.writeFileSync(path.join(pbin, main), 'plugin bin, khong marker');
-  const dir = mk('bin');
-  const env = { PATH: [pbin, dir].join(sep) };
-  const st = () => shimStatus({ env, cacheDir: cache, pluginRoot: plug }).state;
+  const home = mk('home');
+  const env = { LOCALAPPDATA: path.join(tmp, 'Local'), PATH: '' };
+  const dir = defaultShimDir({ env, home });
+  const st = (o = {}) => shimStatus({ env, home, regPath: 'C:\\x', cacheDir: cache, pluginRoot: plug, ...o }).state;
   expect(st()).toBe('missing');
   applyShim(planShim({ dir, cacheDir: cache, pluginRoot: plug }));
-  expect(st()).toBe('ok');
+  expect(st()).toBe('nopath');
+  expect(st({ env: { ...env, PATH: dir } })).toBe('ok');
+  expect(onPath(dir, { env: { PATH: dir } })).toBe(true);
   applyShim(planShim({ dir, cacheDir: path.join(tmp, 'khac'), pluginRoot: plug }));
-  expect(st()).toBe('stale');
-  fs.writeFileSync(path.join(dir, main), 'viet tay');
+  expect(st({ env: { ...env, PATH: dir } })).toBe('stale');
+  fs.writeFileSync(planShim({ dir, cacheDir: cache }).files[0].file, 'viet tay');
   expect(st()).toBe('foreign');
-  expect(onPath(dir, { env })).toBe(true);
 });

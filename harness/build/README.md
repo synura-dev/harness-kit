@@ -9,7 +9,17 @@ Import: chỉ `core` và chính nhóm con của mình (`build:self`). `skills/` 
 Domain `install`: `node harness/cli/harness.mjs install [--dry-run] [--skip-doctor]`. Mac dinh chay (ghi); `--dry-run` chi bao.
 Cac buoc: (1) kiem Node >= 18, bun (tuy chon); (2) `skills build --adopt` tu `harness/skills` sang `.claude/skills` + `.agents/skills`, roi `skills check`; (3) doctor rut gon (chi dong MISS/LOI/warn); (4) in huong dan dang ky hook (lam tay, KHONG sua settings.json/hooks.json).
 Idempotent: chay lai thi build bo qua (hash khop). `--adopt` chi thay thu muc khong marker khi noi dung trung nguon; skill cai ngoai (skill-a, skill-b...) khong bao gio bi dung.
-`install --shim [--dir D] [--dry-run] [--force]`: CHI cai shim `harness` cho shell cua user (bo qua cac buoc tren). Logic o `core/runtime/user-shim.mjs` (doctor dung chung de canh bao thieu/lech). Thu muc mac dinh: Windows `%APPDATA%\npm` neu co tren PATH user (HKCU), khong thi thu muc ghi duoc dau tien (bo WindowsApps); POSIX `~/.local/bin`. Shim = `node -e <js> -- args`, chon ban moi nhat (so sanh so) trong `<config>/plugins/cache/<mkt>/harness-kit/` luc chay. Dong `harness-kit user shim` danh dau file cua ta; file khong marker -> tu choi (exit 1) tru `--force`. Khong sua PATH; thu muc chua co tren PATH -> chi canh bao.
+`install --shim [--dir D] [--dry-run] [--force]`: CHI cai shim `harness` cho shell cua user (bo qua cac buoc tren); ban tay cua hook `user-shim` duoi, cung logic `core/runtime/user-shim.mjs` `syncUserShim` (doctor dung `shimStatus`).
+
+## user-shim (hook SessionStart)
+
+Moi phien: dam bao lenh `harness` dung duoc tu PowerShell/cmd/bash cua user. MOT thu muc co dinh cho ca may: Windows `%LOCALAPPDATA%\harness-kit\bin` (`harness.cmd` + `harness` cho Git Bash), POSIX `~/.local/bin`.
+- Shim = `node -e <js> -- args`, chon ban moi nhat (so sanh so) trong `<config>/plugins/cache/<mkt>/harness-kit/` luc chay; nang cap plugin khong can ghi lai.
+- PATH user: thieu thi noi vao cuoi mot lan. Windows: `reg add HKCU\Environment /v Path /t REG_EXPAND_SZ` (giu `%VAR%`, khong setx vi cat 1024 ky tu) roi phat WM_SETTINGCHANGE; POSIX: mot dong co marker trong `~/.profile` (macOS `~/.zprofile`). Doc PATH user loi -> khong ghi, chi bao.
+- Xoa shim CUA TA (co dong `harness-kit user shim`) o thu muc khac tren PATH va `%APPDATA%\npm` (cho cu) -> chi mot ban tren may.
+- File khong marker cung ten -> khong ghi de, bao `harness install --shim --force`. Chay tu nguon (khong co cache plugin) -> bo qua. Duoi `bun test` (NODE_ENV=test) khong tiem IO -> bo qua (test dispatcher khong dung may that).
+- Chi bao (additionalContext, mot dong) khi co thay doi/loi; on dinh thi im lang (chi doc file; doc registry chi khi thu muc chua tren PATH tien trinh). Fail-open, timeout 15s.
+- Tat: `HOOK_USER_SHIM_ENABLED=0` hoac `hook.config.local.json {"enabled": false}`. Import: hooks duoc import `build` (contract IMPORT_RULES) chi de nap module nay.
 Exit 1 khi co buoc LOI.
 
 ## skills

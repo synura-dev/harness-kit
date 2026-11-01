@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
-import { defaultShimDir, pluginCacheDir, planShim, applyShim, onPath } from '../../core/runtime/user-shim.mjs';
+import { syncUserShim } from '../../core/runtime/user-shim.mjs';
 
 const DOCTOR_TIMEOUT_MS = 30000;
 const SKILLS_CLI = fileURLToPath(new URL('../skills/cli.mjs', import.meta.url));
@@ -78,20 +78,16 @@ export function install({ root, apply = true, skipDoctor = false, timeoutS = 60,
 }
 
 /**
- * installShim({dir, apply, force, ...tiem}) -> {ok, dir, files, lines[]}: shim `harness` cho shell cua user (xem core/runtime/user-shim.mjs).
- * Khong sua PATH; file la cung ten -> tu choi tru force; chay lai khong doi gi (same).
+ * installShim({dir, apply, force, ...tiem}) -> {ok, dir, files, path, removed, lines[]}: ban tay cua hook SessionStart build/user-shim,
+ * cung logic core/runtime/user-shim.mjs syncUserShim (ghi shim, them thu muc vao PATH user, xoa shim cu cua ta). Chay lai khong doi gi.
  */
-export function installShim({ dir = null, apply = true, force = false, platform = process.platform, env = process.env, home, regPath, pluginRoot = REPO_DIR } = {}) {
-  const def = dir ? { dir: path.resolve(dir), why: '--dir' } : defaultShimDir({ platform, env, home, regPath });
-  if (!def.dir) return { ok: false, dir: null, files: [], lines: [`LOI: ${def.why}`] };
-  const cacheDir = pluginCacheDir(pluginRoot, { env, ...(home ? { home } : {}) });
-  const plan = planShim({ dir: def.dir, platform, cacheDir, pluginRoot, force });
-  const lines = [`thu muc: ${def.dir} (${def.why})`, `chay: ${cacheDir ? `ban harness-kit moi nhat trong ${cacheDir}` : `co dinh ${path.join(pluginRoot, 'bin', 'harness')} (khong thay cache plugin)`}`];
+export function installShim({ dir = null, apply = true, force = false, pluginRoot = REPO_DIR, ...inj } = {}) {
+  const s = syncUserShim({ dir: dir && path.resolve(dir), apply, force, pluginRoot, ...inj });
+  const lines = [`thu muc: ${s.dir}`, `chay: ${s.cacheDir ? `ban harness-kit moi nhat trong ${s.cacheDir}` : `co dinh ${path.join(pluginRoot, 'bin', 'harness')} (khong thay cache plugin)`}`];
   const verb = { create: apply ? 'tao' : 'se tao', update: apply ? 'cap nhat' : 'se cap nhat', same: 'khop (bo qua)', foreign: 'LOI file la cung ten, khong ghi de (them --force)' };
-  for (const f of plan.files) lines.push(`  ${verb[f.action]}: ${f.file}`);
-  if (!onPath(def.dir, { platform, env })) lines.push(`canh bao: ${def.dir} chua co tren PATH cua tien trinh nay; tu them vao PATH (install KHONG sua PATH) hoac mo shell moi`);
-  if (plan.blocked) return { ok: false, dir: def.dir, files: plan.files, lines };
-  if (apply) applyShim(plan);
-  lines.push(`go: xoa ${plan.files.map((f) => `"${f.file}"`).join(' va ')}`);
-  return { ok: true, dir: def.dir, files: plan.files, lines };
+  for (const f of s.files) lines.push(`  ${verb[f.action]}: ${f.file}`);
+  if (s.path) lines.push({ present: `PATH: da co (${s.path.where})`, planned: `PATH: se them vao ${s.path.where}`, added: `PATH: da them vao ${s.path.where} (mo terminal moi de dung)`, error: `LOI PATH (${s.path.where}): ${s.path.error}` }[s.path.state]);
+  for (const f of s.removed) lines.push(`  ${apply ? 'da xoa' : 'se xoa'} shim cu: ${f}`);
+  if (!s.blocked) lines.push(`go: xoa ${s.files.map((f) => `"${f.file}"`).join(' va ')}; bo ${s.dir} khoi PATH user`);
+  return { ...s, lines };
 }

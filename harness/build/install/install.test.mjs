@@ -77,7 +77,8 @@ test('cli: --dry-run --skip-doctor --root chay duoc, exit 0', () => {
 test('cli --shim: dry-run khong ghi, ghi that idempotent, tu choi file la tru --force, --dir thieu gia tri', () => {
   const dir = path.join(root, 'userbin');
   fs.mkdirSync(dir);
-  const shim = { pluginRoot: path.join(root, 'plugin'), env: { PATH: dir }, home: root };
+  // dir da tren PATH -> khong dung PATH user; setUserPath nem neu lo bi goi (KHONG ghi PATH that)
+  const shim = { pluginRoot: path.join(root, 'plugin'), env: { PATH: dir }, home: root, regPath: 'C:\\x', setUserPath: () => { throw new Error('khong duoc ghi PATH'); } };
   let text = '';
   const io = { out: (s) => { text += s; } };
   expect(main(['--shim', '--dir', dir, '--dry-run'], io, { shim })).toBe(0);
