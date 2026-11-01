@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { workspaceFor, listNodes, loadNodeHook, resolveResolverPath, resetNodeHook, isSafeWs } from './node-hook.mjs';
-import { hashTree } from '../../cli/commands/ext-registry.mjs';
+import { hashTree } from '../ext/ext-trust.mjs';
 
 beforeEach(() => resetNodeHook());
 

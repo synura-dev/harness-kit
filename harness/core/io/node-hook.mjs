@@ -1,15 +1,15 @@
 // Hook nut -> workspace du lieu (hop dong: harness/observe/storage/README.md, muc "Hop dong workspace data").
 // Module resolver (config `projectResolver`) co the export them: workspaceFor(id) -> ws|null, listNodes() -> [{id, workspace}], resolveProject (cu).
 // Dong bo, cache theo process, fail-open: khong hook / loi / bi tu choi -> workspaceFor = node id, listNodes = [] (+ canh bao stderr 1 lan).
-// Tin cay: duong dan resolver phai nam TRONG goc workspace (hub/du an), khong '..'; chi nap khi ext chua file do da duyet hash (ext-registry).
+// Tin cay: duong dan resolver phai nam TRONG goc workspace (hub/du an), khong '..'; chi nap khi ext chua file do da duyet hash (core/ext/ext-trust).
 // HUB_DATA_DIR dat (test/sandbox) -> bo qua hook.
-// Chi import module nhe (paths, config, ext-registry); KHONG import storage.mjs/data-registry.mjs/safe-id.mjs (tranh vong khi P1 noi vao storage).
+// Chi import module nhe (paths, config, core/ext/ext-trust: doc dang ky + hash, khong import cli/); KHONG import storage.mjs/data-registry.mjs/safe-id.mjs (tranh vong khi P1 noi vao storage).
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
 import { workspaceRoot, isInside } from './paths.mjs';
 import { loadConfig } from '../config/config.mjs';
-import { listRegistered, isExtensionTrusted } from '../../cli/commands/ext-registry.mjs';
+import { listRegistered, isExtensionTrusted } from '../ext/ext-trust.mjs';
 
 const SAFE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/;
 const MAX_CFG_BYTES = 262144;
