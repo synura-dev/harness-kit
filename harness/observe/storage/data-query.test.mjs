@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { appendRun, normalizeRun } from '../../core/io/runs-record.mjs';
-import { queryRuns, runsFile } from './data-query.mjs';
+import { queryRuns, runsFile, routedRunsFile } from './data-query.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const mkRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), 'dq-'));
@@ -78,4 +78,14 @@ test('CLI data query qua goc data tam: text, --json, loi tham so', () => {
   assert.deepEqual(JSON.parse(j.stdout).rows.map((x) => x.run), ['r0', 'r2', 'r4']);
   assert.notEqual(run('gem').status, 0);
   assert.notEqual(run('gem', 'release', '--bogus').status, 0);
+});
+test('routedRunsFile: tool co entry mau -> dataPathFor (shared), khong mau -> duong tay', () => {
+  const root = mkRoot();
+  const registry = { entries: {}, reserved: [], patterns: { release: { tool: 'release', zone: 'workspaces', class: 'durable', owner: 'o' } } };
+  assert.equal(routedRunsFile(root, 'gem', 'release', { registry, warn: () => {} }), path.join(root, 'workspaces', 'gem', 'release', 'runs.jsonl'));
+  assert.equal(routedRunsFile(root, 'gem', 'other', { registry }), runsFile(root, 'gem', 'other'));
+  // ban ghi cu o <tool>/runs.jsonl van doc duoc qua dinh tuyen
+  const f = seed(root);
+  assert.equal(routedRunsFile(root, 'gem', 'release', { registry }), f);
+  assert.equal(queryRuns({ root, ws: 'gem', tool: 'release', hookOpts: { registry } }).rows.length, 6);
 });

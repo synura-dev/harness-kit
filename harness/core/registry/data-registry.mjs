@@ -30,7 +30,7 @@ const DEFAULT_PATHS = Object.freeze({ audit: 'system/audit', memory: 'memory', e
 const warnedNoPath = new Set();
 
 /** Cac rule canh bao. */
-const WARN_RULES = Object.freeze(['unregistered', 'missing-field', 'over-caps', 'retention', 'stray', 'clutter', 'legacy-read', 'duplicate', 'deprecated-config', 'deprecated-path']);
+const WARN_RULES = Object.freeze(['unregistered', 'missing-field', 'over-caps', 'retention', 'stray', 'clutter', 'legacy-read', 'duplicate', 'deprecated-config', 'deprecated-path', 'orphan-ws']);
 
 /** Duong cache scan (tuong doi dataDir). */
 export const SCAN_CACHE_REL = '.state/data-scan.json';

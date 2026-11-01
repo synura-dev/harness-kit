@@ -15,7 +15,7 @@ import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, class
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
-const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | archive <ws> [--yes] (ws mo coi -> _archive/workspaces/, dry-run) | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes] | prune [--yes] | sizes  (--json --raw --timeout-s N)';
+const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | archive <ws> [--yes] (ws mo coi -> _archive/workspaces/, dry-run) | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes] | prune [--yes] | sizes  (--json --raw --timeout-s N)';
 
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 /** Registry hop nhat do loader chung o core (registry.json + config/data/workspaces/*.json, mode Q5 qua HARNESS_DATA_ENFORCE). */
@@ -44,7 +44,7 @@ export function walk(dir, { maxFiles = LIMITS.maxFiles, deadline = Date.now() + 
 export function top(root) { try { return fs.readdirSync(root, { withFileTypes: true }); } catch { return []; } }
 
 /** Ten cap 1 da biet: duong dan vat ly (entry.path || key) + reserved. */
-const knownTop = (reg) => new Set([...Object.entries(reg.entries).flatMap(([k, e]) => [phys(k, e), phys(k, e).split('/')[0]]), ...reg.reserved]);
+const knownTop = (reg) => new Set([...Object.entries(reg.entries).flatMap(([k, e]) => [phys(k, e), phys(k, e).split('/')[0]]), ...Object.values(reg.patterns || {}).map((p) => String(p.pattern || 'workspaces/*').split('/')[0]), ...reg.reserved]);
 
 export function scan(root = dataRoot(), reg = loadRegistry()) {
   const known = knownTop(reg);
@@ -76,6 +76,7 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
     if (ent.class && !CLASSES.includes(ent.class)) W('missing-field', key, key, `class sai: ${ent.class}`, `class thuoc ${CLASSES.join('|')}`);
     if (ent.zone === 'workspaces' && !ent.workspace) W('missing-field', key, key, 'thieu workspace', 'them "workspace" cho muc zone=workspaces');
     const p = phys(key, ent); const abs = path.join(root, p);
+    if (ent.deprecatedPath) W('deprecated-path', p, key, 'path cu the khai bao trong manifest data[] (workspaces/<ws>/<tool> co dinh)', 'khai bao {zone:"workspaces", tool, class} (khong path) de dung mau workspaces/*/<tool>');
     if (ent.legacy && ent.legacy !== p && fs.existsSync(abs) && fs.existsSync(path.join(root, ent.legacy))) W('duplicate', p, key, `ton tai ca ${p} va ${ent.legacy}`, `gop thu cong roi xoa ${ent.legacy} (hoac harness data mv)`);
     if (!isInside(abs, root) || samePath(abs, root) || !fs.existsSync(abs)) continue;
     const st = fs.statSync(abs);

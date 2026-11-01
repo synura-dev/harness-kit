@@ -9,6 +9,7 @@ import { isSafeWs } from '../../core/io/node-hook.mjs';
 import { loadDataRegistry, setEntryPath } from '../../core/registry/data-registry.mjs';
 import { LIMITS } from './data.mjs';
 import { manifest, takeLock } from './mv.mjs';
+import { queryRuns } from './data-query.mjs';
 
 const posix = (x) => String(x).replace(/\\/g, '/').replace(/\/+$/, '');
 const stamp = (d) => d.toISOString().replace(/\.\d+Z$/, '').replace(/[-:]/g, '').replace('T', '-');
@@ -20,6 +21,23 @@ export function orphanWorkspaces(root, nodes) {
   let ents = [];
   try { ents = fs.readdirSync(path.join(root, 'workspaces'), { withFileTypes: true }); } catch { return []; }
   return ents.filter((e) => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_') && !mapped.has(e.name)).map((e) => e.name).sort();
+}
+
+const RUNNING_WINDOW_MS = 24 * 3600 * 1000;
+const MAX_TOOL_DIRS = 100;
+/** Ban ghi status=running ts<24h trong <ws>/<tool>/runs.jsonl (doc co gioi han qua queryRuns). -> ['<tool>:<run>', ...]. Loi doc 1 tool -> bo qua tool do. */
+export function runningRuns(root, ws, now = Date.now()) {
+  const out = [];
+  let tools = [];
+  try { tools = fs.readdirSync(path.join(root, 'workspaces', ws), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name).slice(0, MAX_TOOL_DIRS); } catch { return out; }
+  const since = new Date(now - RUNNING_WINDOW_MS).toISOString();
+  for (const tool of tools) {
+    try {
+      const q = queryRuns({ root, ws, tool, status: 'running', since, last: 20 });
+      for (const r of q.rows) out.push(`${tool}:${r.run || '?'}`);
+    } catch { /* ten tool khong hop le / loi doc: bo qua */ }
+  }
+  return out;
 }
 
 /** Nut tho tu hook (truoc khi listNodes loc) co workspace khong an toan -> [{id, workspace}]. */
@@ -48,6 +66,8 @@ export async function archiveCmd(args = [], ctx = {}) {
     if (!fs.existsSync(absFrom)) throw new Error(`abort: ws khong ton tai: ${from}`);
     const st = fs.lstatSync(absFrom);
     if (st.isSymbolicLink() || !st.isDirectory()) throw new Error('abort: ws phai la thu muc thuong');
+    const running = runningRuns(root, ws, ctx.now instanceof Date ? ctx.now.getTime() : Date.now());
+    if (running.length) throw new Error(`abort: ws "${ws}" con lan chay status=running trong 24h (${running.slice(0, 5).join(', ')}); khong archive`);
     const reg = ctx.reg || loadDataRegistry({ registryFile: ctx.registryFile, workspacesDir: ctx.wsDir, noCache: true });
     if (reg.failed) throw new Error('abort: registry khong doc duoc');
     const to = `_archive/workspaces/${ws}-${stamp(ctx.now instanceof Date ? ctx.now : new Date())}`;

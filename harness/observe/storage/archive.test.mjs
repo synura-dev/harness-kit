@@ -2,8 +2,8 @@ import { test, expect } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { archiveCmd, orphanWorkspaces, unsafeWorkspaceNodes } from './archive.mjs';
-import { scanZones } from './data.mjs';
+import { archiveCmd, orphanWorkspaces, unsafeWorkspaceNodes, runningRuns } from './archive.mjs';
+import { scanZones, scan } from './data.mjs';
 import { manifest } from './mv.mjs';
 
 function mk() {
@@ -100,4 +100,28 @@ test('unsafeWorkspaceNodes: bat workspace khong an toan tu nut tho', () => {
   const raw = [{ id: 'a', workspace: 'ok' }, { id: 'b', workspace: '../x' }, { id: 'c' }, { id: 'd', workspace: 'a/b' }, null];
   expect(unsafeWorkspaceNodes(raw).map((n) => n.id)).toEqual(['b', 'd']);
   expect(unsafeWorkspaceNodes(undefined)).toEqual([]);
+});
+
+test('archive tu choi khi runs.jsonl co running < 24h; running cu hon 24h hoac status khac -> cho qua', async () => {
+  const c = mk();
+  const f = path.join(c.dd, 'workspaces', 'old', 'release', 'runs.jsonl');
+  const rec = (ageH, status) => JSON.stringify({ ts: new Date(c.now.getTime() - ageH * 3600000).toISOString(), run: `r-${status}-${ageH}`, node: 'n', tool: 'release', status }) + '\n';
+  fs.writeFileSync(f, rec(30, 'running') + rec(1, 'ok'));
+  expect((await archiveCmd(['old'], c)).code).toBe(0);
+  fs.appendFileSync(f, rec(2, 'running'));
+  const r = await archiveCmd(['old', '--yes'], c);
+  expect(r.code).toBe(2);
+  expect(r.lines.join('\n')).toMatch(/running.*release:r-running-2/);
+  expect(fs.existsSync(path.join(c.dd, 'workspaces', 'old'))).toBe(true);
+  expect(runningRuns(c.dd, 'old', c.now.getTime())).toEqual(['release:r-running-2']);
+});
+
+test('scan: deprecated-path khi entry co deprecatedPath; entry mau (patterns) -> workspaces la cap 1 da biet', () => {
+  const c = mk();
+  const reg = { entries: { ...regOf(c), oldtool: { zone: 'workspaces', class: 'artifact', owner: 'o', workspace: 'gem', path: 'workspaces/gem/oldtool', deprecatedPath: true } }, reserved: [] };
+  const w = scanZones({ root: c.dd, reg, repoRoot: null, write: false, opts: {} }).warnings.filter((x) => x.rule === 'deprecated-path');
+  expect(w.map((x) => x.key)).toEqual(['oldtool']);
+  const only = { entries: {}, reserved: [], patterns: { release: { tool: 'release', zone: 'workspaces', pattern: 'workspaces/*/release', class: 'artifact', owner: 'o' } } };
+  expect(scan(c.dd, only).unknown.map((x) => x.name)).not.toContain('workspaces');
+  expect(scan(c.dd, { entries: {}, reserved: [] }).unknown.map((x) => x.name)).toContain('workspaces');
 });

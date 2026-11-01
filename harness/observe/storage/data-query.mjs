@@ -5,6 +5,8 @@ import { dataRoot, isInside } from '../../core/io/paths.mjs';
 import { workspaceFor } from '../../core/io/node-hook.mjs';
 import { RUN_STATUS } from '../../core/io/runs-record.mjs';
 import { emit } from '../../core/io/out.mjs';
+import { dataPathFor } from '../../core/io/storage.mjs';
+import { loadDataRegistry } from '../../core/registry/data-registry.mjs';
 
 export const QUERY_LIMITS = { defaultLast: 20, maxLast: 200, maxBytes: 1048576, timeoutS: 20 };
 const ID_RE = /^[A-Za-z0-9][A-Za-z0-9_.-]{0,79}$/;
@@ -17,6 +19,21 @@ export function runsFile(root, ws, tool) {
   return f;
 }
 
+/**
+ * Duong runs.jsonl theo dinh tuyen P1a: dataPathFor(tool,'runs.jsonl',{node:ws,shared:true,mode:'read'}) khi tool co entry mau (registry.patterns),
+ * goc = `root` (HUB_DATA_DIR ep, ws da giai nen nen khong qua hook lan nua). Tool khong co mau / loi dinh tuyen / ra ngoai root -> duong tay (runsFile).
+ */
+export function routedRunsFile(root, ws, tool, hookOpts = {}) {
+  const hand = runsFile(root, ws, tool);
+  try {
+    const env = { ...(hookOpts.env || process.env), HUB_DATA_DIR: root };
+    const registry = hookOpts.registry || loadDataRegistry({ ...hookOpts, env });
+    if (!registry.patterns || !registry.patterns[tool]) return hand;
+    const f = dataPathFor(tool, 'runs.jsonl', { ...hookOpts, env, registry, node: ws, shared: true, mode: 'read', quiet: true });
+    return isInside(f, root) ? f : hand;
+  } catch { return hand; }
+}
+
 /** Doc ban ghi runs da loc (tail). Ws khong ton tai thi coi arg la node id (workspaceFor). File thieu -> rows rong. */
 export function queryRuns({ root = dataRoot(), ws, tool, node = null, last = QUERY_LIMITS.defaultLast, status = null, since = null, maxBytes = QUERY_LIMITS.maxBytes, deadline = Date.now() + QUERY_LIMITS.timeoutS * 1000, hookOpts = {} } = {}) {
   if (status && !RUN_STATUS.includes(status)) throw new Error(`--status phai la ${RUN_STATUS.join('|')}`);
@@ -25,7 +42,7 @@ export function queryRuns({ root = dataRoot(), ws, tool, node = null, last = QUE
   const cnt = Math.min(Math.max(Math.floor(Number(last)) || QUERY_LIMITS.defaultLast, 1), QUERY_LIMITS.maxLast);
   let wsName = ws;
   if (ID_RE.test(String(ws)) && !fs.existsSync(path.join(root, 'workspaces', String(ws)))) { try { const w = workspaceFor(ws, hookOpts); if (w && w !== ws) wsName = w; } catch {} }
-  const file = runsFile(root, wsName, tool);
+  const file = routedRunsFile(root, wsName, tool, hookOpts);
   let truncated = null; let rows = [];
   try {
     const size = fs.statSync(file).size;
