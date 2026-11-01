@@ -38,7 +38,7 @@ export function manifest(abs, { maxFiles = LIMITS.maxFiles, deadline = Date.now(
   return { files, bytes, md5: total.digest('hex'), truncated };
 }
 
-function takeLock(root) {
+export function takeLock(root) {
   const file = path.join(root, '.state', 'mv.lock');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   for (let i = 0; i < 2; i++) {
