@@ -48,7 +48,9 @@ const DOCTOR = path.join(import.meta.dir, 'doctor.mjs');
 // Shim cua ta khop ban hien tai o thu muc co dinh (LOCALAPPDATA/HOME tam) va co tren PATH -> canh bao shim cua may that khong lot vao dem warnings
 const SHIM_HOME = fs.mkdtempSync(path.join(os.tmpdir(), 'docshim-'));
 const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== 'PATH'));
-if (process.platform === 'win32') baseEnv.LOCALAPPDATA = SHIM_HOME; else baseEnv.HOME = SHIM_HOME;
+// shim Windows o %USERPROFILE%\.harness-kit\bin; LOCALAPPDATA/APPDATA tach khoi thu muc tam (tmpdir nam duoi LOCALAPPDATA that -> doctor se canh bao MSIX); giu CLAUDE_CONFIG_DIR that de pluginCacheDir khong doi
+if (process.platform === 'win32') Object.assign(baseEnv, { USERPROFILE: SHIM_HOME, LOCALAPPDATA: path.join(SHIM_HOME, 'Local'), APPDATA: path.join(SHIM_HOME, 'Roaming') }); else baseEnv.HOME = SHIM_HOME;
+baseEnv.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const SHIM_BIN = defaultShimDir({ env: baseEnv, home: SHIM_HOME });
 applyShim(planShim({ dir: SHIM_BIN, cacheDir: pluginCacheDir(REPO_DIR), pluginRoot: REPO_DIR }));
 baseEnv.PATH = [SHIM_BIN, process.env.PATH].join(path.delimiter);

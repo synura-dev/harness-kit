@@ -21,7 +21,7 @@ test('SessionStart lan dau: tao shim + them PATH, bao mot dong; lan sau im lang'
   const r = await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
   expect(r.additionalContext).toContain('harness-kit user-shim:');
   if (process.platform === 'win32') expect(calls.length).toBe(1);
-  const dir = path.join(tmp, 'Local', 'harness-kit', 'bin');
+  const dir = path.join(inj.home, process.platform === 'win32' ? '.harness-kit' : '.local', 'bin');
   const again = await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj: { ...inj, regPath: `C:\\x;${dir}`, home: inj.home, env: { ...inj.env, PATH: process.platform === 'win32' ? '' : dir } } });
   expect(again).toEqual({});
 });
@@ -37,8 +37,8 @@ test('tat / su kien khac / chay tu nguon (khong cache) -> khong lam gi', async (
 
 test('file la o thu muc dich -> khong ghi de, bao lenh --force; loi -> fail-open', async () => {
   await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
-  const main = fs.readdirSync(path.join(tmp, 'Local', 'harness-kit', 'bin')).sort().at(-1);
-  const f = path.join(tmp, 'Local', 'harness-kit', 'bin', process.platform === 'win32' ? 'harness.cmd' : main);
+  const main = fs.readdirSync(path.join(inj.home, process.platform === 'win32' ? '.harness-kit' : '.local', 'bin')).sort().at(-1);
+  const f = path.join(inj.home, process.platform === 'win32' ? '.harness-kit' : '.local', 'bin', process.platform === 'win32' ? 'harness.cmd' : main);
   fs.writeFileSync(f, 'la');
   const r = await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
   expect(r.additionalContext).toContain('--force');

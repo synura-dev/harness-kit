@@ -1,5 +1,6 @@
 // Shim `harness` cho shell cua user (PowerShell/cmd/bash ngoai Claude): Claude Code chi them bin/ cua plugin vao PATH cua Bash tool.
-// MOT cho co dinh: Windows %LOCALAPPDATA%\harness-kit\bin, POSIX ~/.local/bin. syncUserShim = logic duy nhat, dung boi hook SessionStart
+// MOT cho co dinh: Windows %USERPROFILE%\.harness-kit\bin (KHONG %LOCALAPPDATA%: Claude desktop la app MSIX, ghi %LOCALAPPDATA% tu tien trinh con bi ao hoa
+// vao Packages\Claude_*\LocalCache\Local nen shell that khong thay; goc %USERPROFILE% khong bi ao hoa), POSIX ~/.local/bin. Muc PATH cu %LOCALAPPDATA%\harness-kit\bin duoc thay (migrate). syncUserShim = logic duy nhat, dung boi hook SessionStart
 // (build/user-shim, tu dong) va `harness install --shim` (tay): ghi shim, dam bao thu muc co tren PATH user (Windows: HKCU\Environment Path,
 // giu REG_EXPAND_SZ, khong setx; POSIX: mot dong co marker trong ~/.profile | ~/.zprofile), xoa shim CUA TA o cho khac (vd %APPDATA%\npm cu).
 // Shim chon ban harness-kit moi nhat trong cache plugin luc chay (so sanh so: 0.1.10 > 0.1.9) nen nang cap plugin khong can cai lai.
@@ -50,12 +51,42 @@ export function renderShims({ platform = process.platform, cacheDir, pluginRoot 
   return [{ name: 'harness.cmd', content: cmd }, sh];
 }
 
-/** Thu muc co dinh cua shim. */
-export function defaultShimDir({ platform = process.platform, env = process.env, home = os.homedir() } = {}) {
+/** Thu muc co dinh cua shim. Windows: %USERPROFILE%\.harness-kit\bin (khong bi MSIX ao hoa), POSIX: ~/.local/bin. */
+export function defaultShimDir({ platform = process.platform, home = os.homedir() } = {}) {
   const P = pp(platform);
-  if (platform === 'win32') return P.join(env.LOCALAPPDATA || P.join(home, 'AppData', 'Local'), 'harness-kit', 'bin');
+  if (platform === 'win32') return P.join(home, '.harness-kit', 'bin');
   return P.join(home, '.local', 'bin');
 }
+
+/** Thu muc shim CU cua Windows (%LOCALAPPDATA%\harness-kit\bin; bi MSIX ao hoa) hoac null (POSIX). Chi de migrate/don dep. */
+export function legacyShimDir({ platform = process.platform, env = process.env, home = os.homedir() } = {}) {
+  if (platform !== 'win32') return null;
+  const k = Object.keys(env).find((x) => x.toLowerCase() === 'localappdata');
+  return path.win32.join((k && env[k]) || path.win32.join(home, 'AppData', 'Local'), 'harness-kit', 'bin');
+}
+
+/**
+ * Windows: tien trinh dang chay trong goi MSIX (Claude desktop)? -> {msix, reason}. Dau hieu: execPath duoi \WindowsApps\, hoac ton tai
+ * <LocalAppData>\Packages\Claude_*\LocalCache\Local\harness-kit (noi ghi %LOCALAPPDATA% bi chuyen huong). readdir/exists tiem cho test.
+ */
+export function msixInfo({ platform = process.platform, env = process.env, execPath = process.execPath, home = os.homedir(), readdir = (d) => fs.readdirSync(d), exists = (f) => fs.existsSync(f) } = {}) {
+  if (platform !== 'win32') return { msix: false, reason: null };
+  if (/[\\/]WindowsApps[\\/]/i.test(String(execPath))) return { msix: true, reason: 'tien trinh chay duoi \\WindowsApps\\ (goi MSIX)' };
+  const P = path.win32;
+  const k = Object.keys(env).find((x) => x.toLowerCase() === 'localappdata');
+  const local = (k && env[k]) || P.join(home, 'AppData', 'Local');
+  try {
+    const pk = P.join(local.replace(/[\\/]+$/, '').replace(/[\\/]Packages[\\/].*$/i, ''), 'Packages');
+    for (const n of readdir(pk)) {
+      const v = P.join(pk, n, 'LocalCache', 'Local', 'harness-kit');
+      if (/^Claude_/i.test(n) && exists(v)) return { msix: true, reason: `co ${v} (ghi %LOCALAPPDATA% bi chuyen huong)` };
+    }
+  } catch { /* khong co Packages: khong phai MSIX */ }
+  return { msix: false, reason: null };
+}
+
+/** Lenh de chay trong terminal THAT (ngoai Claude): ghi shim + PATH user khong qua ao hoa MSIX. */
+export const realTerminalLine = (pluginRoot) => `node "${path.join(pluginRoot, 'bin', 'harness')}" install --shim`;
 
 /** Gia tri tho PATH user tren Windows (HKCU\Environment Path, chua mo rong) hoac null khi doc khong duoc. regPath: tiem cho test. */
 function readUserPath(regPath) {
@@ -96,13 +127,27 @@ function setWinUserPath(value) {
 export function ensureUserPath(dir, { platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath = setWinUserPath, apply = true } = {}) {
   if (platform === 'win32') {
     const where = 'HKCU\\Environment Path';
-    if (onPath(dir, { platform, env })) return { state: 'present', where: 'PATH tien trinh' };
+    const legacy = legacyShimDir({ platform, env, home });
+    if (onPath(dir, { platform, env }) && !(legacy && onPath(legacy, { platform, env }))) return { state: 'present', where: 'PATH tien trinh' };
     const raw = readUserPath(regPath);
     if (raw == null) return { state: 'error', where, error: 'khong doc duoc PATH user; tu them thu muc vao PATH' };
-    if (userPathDirs({ env, regPath: raw }).some((d) => key(platform, d) === key(platform, dir))) return { state: 'present', where };
-    if (!apply) return { state: 'planned', where };
-    const err = setUserPath(raw ? `${raw.replace(/;+$/, '')};${dir}` : dir);
-    return err ? { state: 'error', where, error: err } : { state: 'added', where };
+    const entries = raw.split(';').map((s) => s.trim()).filter(Boolean);
+    const exp = userPathDirs({ env, regPath: raw }); // cung loc rong, cung thu tu voi entries
+    const isOld = (d) => key(platform, legacy) !== key(platform, dir) && key(platform, d) === key(platform, legacy);
+    const hasNew = exp.some((d) => key(platform, d) === key(platform, dir));
+    const hasOld = exp.some(isOld);
+    if (hasNew && !hasOld) return { state: 'present', where };
+    if (!apply) return { state: 'planned', where, migrate: hasOld };
+    // Muc cu duoc thay tai cho bang dir (giu thu tu uu tien); muc khac giu nguyen (ke ca %VAR% chua mo rong).
+    const out = [];
+    let placed = hasNew;
+    entries.forEach((e, i) => {
+      if (!isOld(exp[i])) { out.push(e); return; }
+      if (!placed) { out.push(dir); placed = true; }
+    });
+    if (!placed) out.push(dir);
+    const err = setUserPath(out.join(';'));
+    return err ? { state: 'error', where, error: err } : { state: 'added', where, migrate: hasOld };
   }
   const prof = profileFile(platform, home);
   if (onPath(dir, { platform, env })) return { state: 'present', where: 'PATH tien trinh' };
@@ -135,9 +180,10 @@ export function applyShim(plan) {
 }
 
 /** Shim CUA TA (co SHIM_MARK) o thu muc khac dir: tren PATH tien trinh + %APPDATA%\npm (cho cu). */
-export function strayShims(dir, { platform = process.platform, env = process.env } = {}) {
+export function strayShims(dir, { platform = process.platform, env = process.env, home = os.homedir() } = {}) {
   const P = pp(platform);
-  const dirs = [...pathDirs(platform, env), ...(platform === 'win32' && env.APPDATA ? [P.join(env.APPDATA, 'npm')] : [])];
+  const legacy = legacyShimDir({ platform, env, home });
+  const dirs = [...pathDirs(platform, env), ...(platform === 'win32' && env.APPDATA ? [P.join(env.APPDATA, 'npm')] : []), ...(legacy ? [legacy] : [])];
   const seen = new Set([key(platform, dir)]);
   const out = [];
   for (const d of dirs) {
@@ -160,20 +206,34 @@ export function syncUserShim({ dir, apply = true, force = false, platform = proc
   if (plan.blocked) return res;
   if (apply) applyShim(plan);
   res.path = ensureUserPath(target, { platform, env, home, regPath, setUserPath, apply });
-  res.removed = strayShims(target, { platform, env });
+  res.removed = strayShims(target, { platform, env, home });
   if (apply) for (const f of res.removed) try { fs.unlinkSync(f); } catch { /* bo qua */ }
   res.ok = res.path.state !== 'error';
   return res;
 }
 
-/** Trang thai cho doctor (chi doc): {state: ok|missing|stale|foreign|nopath, dir, file?}. */
-export function shimStatus({ platform = process.platform, env = process.env, home = os.homedir(), regPath, cacheDir, pluginRoot }) {
-  const dir = defaultShimDir({ platform, env, home });
+/** Thu muc nam duoi %LOCALAPPDATA% / %APPDATA% (Windows)? Day la goc bi MSIX ao hoa. */
+export function virtualizedDir(dir, { platform = process.platform, env = process.env } = {}) {
+  if (platform !== 'win32') return false;
+  return ['LOCALAPPDATA', 'APPDATA'].some((n) => {
+    const k = Object.keys(env).find((x) => x.toUpperCase() === n);
+    return !!(k && env[k]) && `${key(platform, dir)}\\`.startsWith(`${key(platform, env[k])}\\`);
+  });
+}
+
+/**
+ * Trang thai cho doctor (chi doc): {state: ok|missing|stale|foreign|nopath, dir, file, risk}.
+ * risk (Windows) = {why} khi thu muc shim duoi %LOCALAPPDATA%/%APPDATA% hoac tien trinh chay trong goi MSIX: shell that co the khong thay shim/PATH.
+ */
+export function shimStatus({ platform = process.platform, env = process.env, home = os.homedir(), regPath, cacheDir, pluginRoot, execPath, readdir, exists }) {
+  const dir = defaultShimDir({ platform, home });
+  const msix = msixInfo({ platform, env, home, ...(execPath ? { execPath } : {}), ...(readdir ? { readdir } : {}), ...(exists ? { exists } : {}) });
+  const risk = virtualizedDir(dir, { platform, env }) ? { why: `thu muc shim ${dir} nam duoi %LOCALAPPDATA%/%APPDATA% (bi MSIX ao hoa)` } : msix.msix ? { why: msix.reason } : null;
   const plan = planShim({ dir, platform, cacheDir, pluginRoot });
   const file = plan.files[0].file;
-  if (plan.files[0].action === 'create') return { state: 'missing', dir, file };
-  if (plan.blocked) return { state: 'foreign', dir, file };
-  if (plan.files.some((f) => f.action !== 'same')) return { state: 'stale', dir, file };
+  if (plan.files[0].action === 'create') return { state: 'missing', dir, file, risk };
+  if (plan.blocked) return { state: 'foreign', dir, file, risk };
+  if (plan.files.some((f) => f.action !== 'same')) return { state: 'stale', dir, file, risk };
   const p = ensureUserPath(dir, { platform, env, home, regPath, apply: false });
-  return { state: p.state === 'present' ? 'ok' : 'nopath', dir, file };
+  return { state: p.state === 'present' ? 'ok' : 'nopath', dir, file, risk };
 }
