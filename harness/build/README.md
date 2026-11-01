@@ -9,6 +9,7 @@ Import: chỉ `core` và chính nhóm con của mình (`build:self`). `skills/` 
 Domain `install`: `node harness/cli/harness.mjs install [--dry-run] [--skip-doctor]`. Mac dinh chay (ghi); `--dry-run` chi bao.
 Cac buoc: (1) kiem Node >= 18, bun (tuy chon); (2) `skills build --adopt` tu `harness/skills` sang `.claude/skills` + `.agents/skills`, roi `skills check`; (3) doctor rut gon (chi dong MISS/LOI/warn); (4) in huong dan dang ky hook (lam tay, KHONG sua settings.json/hooks.json).
 Idempotent: chay lai thi build bo qua (hash khop). `--adopt` chi thay thu muc khong marker khi noi dung trung nguon; skill cai ngoai (skill-a, skill-b...) khong bao gio bi dung.
+`install --shim [--dir D] [--dry-run] [--force]`: CHI cai shim `harness` cho shell cua user (bo qua cac buoc tren). Logic o `core/runtime/user-shim.mjs` (doctor dung chung de canh bao thieu/lech). Thu muc mac dinh: Windows `%APPDATA%\npm` neu co tren PATH user (HKCU), khong thi thu muc ghi duoc dau tien (bo WindowsApps); POSIX `~/.local/bin`. Shim = `node -e <js> -- args`, chon ban moi nhat (so sanh so) trong `<config>/plugins/cache/<mkt>/harness-kit/` luc chay. Dong `harness-kit user shim` danh dau file cua ta; file khong marker -> tu choi (exit 1) tru `--force`. Khong sua PATH; thu muc chua co tren PATH -> chi canh bao.
 Exit 1 khi co buoc LOI.
 
 ## skills

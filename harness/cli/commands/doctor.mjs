@@ -149,6 +149,15 @@ try {
   else line(false, '.claude/settings.json', 'khong doc/parse duoc (' + (e.code || e.message) + ')');
 }
 
+// Shim `harness` cho shell cua user (opt-in): plugin da cai ma PATH thieu/lech shim -> canh bao mem kem lenh sua.
+if (pluginSeen) try {
+  const { shimStatus, pluginCacheDir } = await import('../../core/runtime/user-shim.mjs');
+  const s = shimStatus({ cacheDir: pluginCacheDir(REPO_DIR), pluginRoot: REPO_DIR });
+  if (s.state === 'missing') warn('shim', 'chua co shim `harness` tren PATH: PowerShell/cmd/bash ngoai Claude khong goi duoc harness -> chay: harness install --shim (tuy chon)');
+  else if (s.state === 'stale') warn('shim', `shim ${s.file} lech ban hien tai -> chay: harness install --shim`);
+  else if (s.state === 'foreign') warn('shim', `${s.file} khong do harness-kit sinh (viet tay/cu) -> xem roi chay: harness install --shim --dir "${path.dirname(s.file)}" --force`);
+} catch { /* fail-open */ }
+
 // hooks block built from hook_events (audit/defaults.mjs), command path computed from this hub. Plugin da nap: hook den tu plugin, khong in khoi mau.
 if (pluginSeen) console.log("[skip] khoi hook mau settings.json: plugin harness-kit da nap (hook den tu plugin, khong dan vao settings)");
 else try {

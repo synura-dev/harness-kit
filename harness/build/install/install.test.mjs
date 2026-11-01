@@ -73,3 +73,28 @@ test('cli: --dry-run --skip-doctor --root chay duoc, exit 0', () => {
   expect(code === 0 || code === 1).toBe(true);
   expect(ex('.claude/skills/alpha/.generated.json')).toBe(false);
 });
+
+test('cli --shim: dry-run khong ghi, ghi that idempotent, tu choi file la tru --force, --dir thieu gia tri', () => {
+  const dir = path.join(root, 'userbin');
+  fs.mkdirSync(dir);
+  const shim = { pluginRoot: path.join(root, 'plugin'), env: { PATH: dir }, home: root };
+  let text = '';
+  const io = { out: (s) => { text += s; } };
+  expect(main(['--shim', '--dir', dir, '--dry-run'], io, { shim })).toBe(0);
+  expect(fs.readdirSync(dir)).toEqual([]);
+  expect(text).toContain('se tao');
+  expect(main(['--shim', '--dir', dir], io, { shim })).toBe(0);
+  const names = fs.readdirSync(dir).sort();
+  expect(names).toEqual(process.platform === 'win32' ? ['harness', 'harness.cmd'] : ['harness']);
+  text = '';
+  expect(main(['--shim', '--dir', dir], io, { shim })).toBe(0);
+  expect(text).toContain('khop (bo qua)');
+  expect(text).toContain('go: xoa');
+  fs.writeFileSync(path.join(dir, names[0]), 'cua user');
+  expect(main(['--shim', '--dir', dir], io, { shim })).toBe(1);
+  expect(fs.readFileSync(path.join(dir, names[0]), 'utf8')).toBe('cua user');
+  expect(main(['--shim', '--dir', dir, '--force'], io, { shim })).toBe(0);
+  expect(fs.readFileSync(path.join(dir, names[0]), 'utf8')).toContain('harness-kit user shim');
+  expect(main(['--shim', '--dir'], io, { shim })).toBe(2);
+  expect(main(['--force'], io, { shim })).toBe(2);
+});

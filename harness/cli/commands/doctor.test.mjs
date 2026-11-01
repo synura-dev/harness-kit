@@ -42,9 +42,15 @@ test('day du -> khong canh bao', () => {
 // chay doctor.mjs that tren fixture (HUB_DIR) de kiem exit code va kiem hook settings
 import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
-import { isPluginMode } from '../../core/io/paths.mjs';
+import { isPluginMode, REPO_DIR } from '../../core/io/paths.mjs';
+import { planShim, applyShim, pluginCacheDir } from '../../core/runtime/user-shim.mjs';
 const DOCTOR = path.join(import.meta.dir, 'doctor.mjs');
-const runDoctor = (hub) => spawnSync('node', [DOCTOR], { encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: hub } });
+// PATH dau tien = thu muc co shim cua ta khop ban hien tai -> canh bao shim cua may that khong lot vao dem warnings
+const SHIM_BIN = fs.mkdtempSync(path.join(os.tmpdir(), 'docshim-'));
+applyShim(planShim({ dir: SHIM_BIN, cacheDir: pluginCacheDir(REPO_DIR), pluginRoot: REPO_DIR }));
+const baseEnv = Object.fromEntries(Object.entries(process.env).filter(([k]) => k.toUpperCase() !== 'PATH'));
+baseEnv.PATH = [SHIM_BIN, process.env.PATH].join(path.delimiter);
+const runDoctor = (hub) => spawnSync('node', [DOCTOR], { encoding: 'utf8', timeout: 60000, env: { ...baseEnv, HUB_DIR: hub } });
 const fixHub = (withFile) => {
   const r = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-'));
   const mkdir = (p) => fs.mkdirSync(path.join(r, p), { recursive: true });
