@@ -69,9 +69,9 @@ test('caps trong data[] manifest duoc giu (so nguyen duong), sai bi bo', () => {
   expect(e.b.caps).toBeUndefined();
 });
 
-test('zone workspaces tu co workspace = id manifest', () => {
+test('zone workspaces khong path -> entry mau workspaces/*/<tool>', () => {
   const d = fs.mkdtempSync(path.join(tmp, 'wsx-'));
   fs.mkdirSync(path.join(d, 'jobx'));
   fs.writeFileSync(path.join(d, 'jobx', 'manifest.json'), JSON.stringify({ id: 'jobx', data: [{ zone: 'workspaces', class: 'durable', tool: 'jobx' }] }));
-  expect(manifestDataEntries(d, 'hub').jobx).toMatchObject({ zone: 'workspaces', workspace: 'jobx', path: 'workspaces/jobx' });
+  expect(manifestDataEntries(d, 'hub').jobx).toMatchObject({ zone: 'workspaces', tool: 'jobx', pattern: 'workspaces/*/jobx' });
 });
