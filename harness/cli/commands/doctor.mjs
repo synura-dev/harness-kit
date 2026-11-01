@@ -272,11 +272,19 @@ try {
   try {
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../harness.mjs', import.meta.url)), 'data', 'scan', '--json'], { encoding: 'utf8', timeout: 15000 });
     const dw = JSON.parse(r.stdout).warnings || [];
-    for (const [name, rules] of [['data-unregistered', ['unregistered']], ['data-fields', ['missing-field']], ['data-caps', ['over-caps']], ['data-retention', ['retention', 'stray']], ['repo-clutter', ['clutter']]]) {
+    for (const [name, rules] of [['data-unregistered', ['unregistered']], ['data-fields', ['missing-field']], ['data-caps', ['over-caps']], ['data-retention', ['retention', 'stray']], ['repo-clutter', ['clutter']], ['data-orphan-ws', ['orphan-ws']]]) {
       const ws = dw.filter((w) => rules.includes(w.rule));
       cap(ws.map((w) => `${name} rule=${w.rule} ${w.path}: ${w.detail} -> ${w.fix}`), 10);
       rows.push({ name, total: ws.length, errors: 0, truncated: false });
     }
+  } catch { /* fail-open */ }
+  try {
+    const { loadNodeHook } = await import(new URL('../../core/io/node-hook.mjs', import.meta.url).href);
+    const { unsafeWorkspaceNodes } = await import(new URL('../../observe/storage/archive.mjs', import.meta.url).href);
+    const nh = loadNodeHook({ root: HUB_ROOT });
+    const bad = nh.mod && typeof nh.mod.listNodes === 'function' ? unsafeWorkspaceNodes(nh.mod.listNodes()) : [];
+    cap(bad.map((n) => `data-ws-unsafe node ${n.id}: workspace "${n.workspace}" khong an toan (dung node id) -> sua workspace trong INDEX cua nut`), 10);
+    rows.push({ name: 'data-ws-unsafe', total: bad.length, errors: 0, truncated: false });
   } catch { /* fail-open */ }
   rows.push({ name: 'dead', total: sc.unused.length, errors: sc.unused.length, truncated: false });
   if (si.truncated) console.log('[warn] scan-input truncated: ' + si.truncated);
