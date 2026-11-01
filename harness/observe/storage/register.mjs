@@ -2,7 +2,7 @@
 // ctx: { dataDir, hubRoot, registryFile?, wsDir?, readmeFile?, callerDir?, resolveProject?(id)->{path}|null, ownerRoots?: string[] (rel hub; mac dinh ['.']) }
 import fs from 'node:fs';
 import path from 'node:path';
-import { ZONES, CLASSES, CLASS_DEFAULTS, readJ as readJson, writeAtomic } from '../../core/registry/data-registry.mjs';
+import { ZONES, CLASSES, CLASS_DEFAULTS, readJ as readJson, writeAtomic, loadDataRegistry } from '../../core/registry/data-registry.mjs';
 import { workspaceRoot } from '../../core/io/paths.mjs';
 import { safeId } from '../../core/io/safe-id.mjs';
 
@@ -126,30 +126,27 @@ export function registerCmd(args = [], ctx = {}) {
   return { code: 0, lines };
 }
 
-function collect(P) {
+/** Cay tu registry HOP NHAT (registry.json | manifest ext + entry mau + muc suy ra tu thu muc ws + config/data/workspaces cu), cung nguon voi check/ghi data. */
+function collect(P, ctx = {}) {
   const rows = [];
-  const add = (key, e) => {
+  const add = (key, e, group) => {
     const zone = e.domain || e.zone || 'legacy';
     const segs = key.split('/');
-    const group = e.workspace || (e.zone && segs.length === 3 ? segs[1] : segs[0]);
+    const g = group || e.workspace || (e.zone && segs.length === 3 ? segs[1] : segs[0]);
     const tool = e.tool || (segs.length === 3 ? segs[2] : '-');
     const ret = e.retentionDays !== undefined ? e.retentionDays : (CLASS_DEFAULTS[e.class]?.retentionDays ?? null);
-    rows.push({ zone, group, tool, cls: e.class || '-', owner: e.owner || '-', ret });
+    rows.push({ zone, group: g, tool, cls: e.class || '-', owner: e.owner || '-', ret, derived: !!e.derived });
   };
-  const reg = readJ(P.reg, { entries: {} });
+  const env = { ...process.env, HUB_DIR: P.hub };
+  if (ctx.dataDir) env.HUB_DATA_DIR = ctx.dataDir;
+  const reg = loadDataRegistry({ registryFile: ctx.registryFile, workspacesDir: ctx.wsDir, env, noCache: true });
   for (const [k, e] of Object.entries(reg.entries || {})) add(k, e || {});
-  let files = [];
-  try { files = fs.readdirSync(P.ws).filter((f) => f.endsWith('.json')).sort(); } catch { /* none */ }
-  for (const f of files) {
-    const j = readJ(path.join(P.ws, f), {});
-    const w = j.workspace || f.slice(0, -5);
-    for (const [t, e] of Object.entries(j.entries || {})) add(`workspaces/${w}/${t}`, { zone: 'workspaces', workspace: w, tool: t, ...e });
-  }
+  for (const [k, e] of Object.entries(reg.patterns || {})) add(`workspaces/*/${e.tool || k}`, { zone: 'workspaces', ...e, tool: e.tool || k }, '*');
   return rows;
 }
 
-function buildTree(P) {
-  const rows = collect(P);
+function buildTree(P, ctx) {
+  const rows = collect(P, ctx);
   const zones = [...new Set([...ZONES, 'external', 'legacy'])];
   const out = [];
   for (const z of zones) {
@@ -159,7 +156,7 @@ function buildTree(P) {
     for (const g of [...new Set(zr.map((r) => r.group))].sort()) {
       out.push(`  ${g}/`);
       for (const r of zr.filter((x) => x.group === g).sort((a, b) => a.tool.localeCompare(b.tool))) {
-        out.push(`    ${r.tool}  [${r.cls}] owner=${r.owner} retention=${r.ret === null ? 'giu' : r.ret + 'd'}`);
+        out.push(`    ${r.tool}  [${r.cls}] owner=${r.owner} retention=${r.ret === null ? 'giu' : r.ret + 'd'}${r.derived ? ' (derived)' : ''}`);
       }
     }
   }
@@ -169,7 +166,7 @@ function buildTree(P) {
 export function treeCmd(args = [], ctx = {}) {
   const P = paths(ctx);
   const { flags } = parseArgs(args);
-  const tree = buildTree(P);
+  const tree = buildTree(P, ctx);
   const lines = tree.length ? tree : ['(registry rong)'];
   if (!flags['write-readme']) return { code: 0, lines };
   const block = `${TREE_START}\n\`\`\`\n${lines.join('\n')}\n\`\`\`\n${TREE_END}`;

@@ -2,13 +2,13 @@
 // Module resolver (config `projectResolver`) co the export them: workspaceFor(id) -> ws|null, listNodes() -> [{id, workspace}], resolveProject (cu).
 // Dong bo, cache theo process, fail-open: khong hook / loi / bi tu choi -> workspaceFor = node id, listNodes = [] (+ canh bao stderr 1 lan).
 // Tin cay: duong dan resolver phai nam TRONG goc workspace (hub/du an), khong '..'; chi nap khi ext chua file do da duyet hash (core/ext/ext-trust).
-// HUB_DATA_DIR dat (test/sandbox) -> bo qua hook.
+// HUB_DATA_DIR dat (test/sandbox) -> bo qua hook, TRU khi no chinh la thu muc data mac dinh cua workspace (<ws>/data | <ws>/.harness/data): bin/harness va hook dat bien nay cho workspace that, khong phai ghi de.
 // Chi import module nhe (paths, config, core/ext/ext-trust: doc dang ky + hash, khong import cli/); KHONG import storage.mjs/data-registry.mjs/safe-id.mjs (tranh vong khi P1 noi vao storage).
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { createRequire } from 'node:module';
-import { workspaceRoot, isInside } from './paths.mjs';
+import { workspaceRoot, isInside, samePath } from './paths.mjs';
 import { loadConfig } from '../config/config.mjs';
 import { listRegistered, isExtensionTrusted } from '../ext/ext-trust.mjs';
 
@@ -59,6 +59,11 @@ function warnOnce(o, detail, p = '') {
   if (typeof o.warn === 'function') o.warn(line); else console.error(line);
 }
 
+/** HUB_DATA_DIR = thu muc data mac dinh cua chinh workspace nay (khong phai sandbox/test) -> khong coi la ghi de. */
+function isOwnDataDir(hd, root) {
+  try { return samePath(hd, path.join(root, 'data')) || samePath(hd, path.join(root, '.harness', 'data')); } catch { return false; }
+}
+
 /** Doc khoa projectResolver: opts.projectResolver (test) > loadConfig (default/may) > file config cua workspace (config/{hub,workspace}/default.json). -> string|null */
 function declaredResolver(o, root) {
   if (typeof o.projectResolver === 'string') return o.projectResolver;
@@ -84,8 +89,9 @@ function declaredResolver(o, root) {
 export function resolveResolverPath(opts = {}) {
   const o = opts || {};
   const env = o.env || process.env;
-  if (typeof env.HUB_DATA_DIR === 'string' && env.HUB_DATA_DIR.trim()) return { none: true, why: 'HUB_DATA_DIR' };
   let root; try { root = path.resolve(o.root || workspaceRoot({ env, repoDir: o.repoDir })); } catch { return { none: true }; }
+  const hd = env.HUB_DATA_DIR;
+  if (typeof hd === 'string' && hd.trim() && !isOwnDataDir(hd.trim(), root)) return { none: true, why: 'HUB_DATA_DIR' };
   const decl = declaredResolver(o, root);
   if (!decl) return { none: true };
   if (path.isAbsolute(decl) && !isInside(path.resolve(decl), root)) return { error: 'projectResolver ra ngoai goc workspace, bo', declared: decl };
@@ -161,6 +167,31 @@ export function listNodes(opts = {}) {
     }
     return out;
   } catch (e) { warnOnce(opts || {}, 'listNodes loi: ' + String(e && e.message || e).slice(0, 100)); return []; }
+}
+
+/**
+ * Nut hook cho CLI/lenh du lieu (orphan-ws, archive...): MOI loi goi hook di qua day de luon co goc workspace (opts.root | CLAUDE_PROJECT_DIR | cwd), khong bao gio goc ma.
+ * -> mang nut | null (khong cau hinh hook / hook thieu listNodes). Co projectResolver khai bao ma khong nap duoc -> 1 dong `data-warn rule=hook` (khong im lang).
+ */
+export function hookNodes(opts = {}) {
+  const o = { ...(opts || {}) };
+  const env = o.env || process.env;
+  let root = ''; try { root = path.resolve(o.root || workspaceRoot({ env, repoDir: o.repoDir })); o.root = root; } catch { /* khong co */ }
+  try {
+    const nh = loadNodeHook(o);
+    if (nh.mod && typeof nh.mod.listNodes === 'function') return listNodes(o);
+    const declared = root ? declaredResolver(o, root) : null;
+    if (declared) {
+      const why = nh.source === 'hook' ? 'resolver khong export listNodes' : nh.source === 'skipped' ? 'HUB_DATA_DIR ghi de' : (nh.error || nh.source);
+      const key = `hook|${root}|${why}`;
+      if (!warned.has(key)) {
+        warned.add(key);
+        const line = `data-warn rule=hook path=${declared} detail=${why} fix=kiem tra projectResolver, hash ext (harness ext verify) va HUB_DATA_DIR`;
+        if (typeof o.warn === 'function') o.warn(line); else console.error(line);
+      }
+    }
+  } catch { /* fail-open */ }
+  return null;
 }
 
 /** Test: xoa cache + bo nho canh bao. */

@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadConfig } from '../../core/config/config.mjs';
-import { loadNodeHook, listNodes } from '../../core/io/node-hook.mjs';
+import { loadNodeHook, hookNodes as hookNodesCore } from '../../core/io/node-hook.mjs';
 import { orphanWorkspaces } from './archive.mjs';
 import { spawnSync } from 'node:child_process';
 import { parseCommon, emit } from '../../core/io/out.mjs';
@@ -321,11 +321,8 @@ function logAccess(cmd, args, extra = {}) {
   appendJsonl(dataPathFor('audit', `date=${today()}`, 'type=data-access', 'data-cli.jsonl'), { ts: new Date().toISOString(), cmd, args: args.filter((a) => /^--?[a-z-]+$|^\d+$/.test(a)), ...extra });
 }
 
-/** Nut tu hook (null khi khong co hook / hook thieu listNodes): dung cho orphan-ws va archive. */
-function hookNodes() {
-  try { const nh = loadNodeHook({ root: workspaceRoot() }); if (nh.mod && typeof nh.mod.listNodes === 'function') return listNodes({ root: workspaceRoot() }); } catch {}
-  return null;
-}
+/** Nut tu hook (null khi khong co hook / hook thieu listNodes): dung cho orphan-ws va archive. Goc workspace luon duoc truyen (hookNodes trong node-hook). */
+function hookNodes() { return hookNodesCore({ root: workspaceRoot() }); }
 
 export async function run(argv = process.argv.slice(2)) {
   const o = parseCommon(argv);
