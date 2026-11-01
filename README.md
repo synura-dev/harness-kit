@@ -26,6 +26,10 @@ Cho agy: chay `harness agy init` mot lan trong du an (sinh `.agents/hooks.json`,
 
 ## Changelog
 
+### 0.2.1
+- Fix: CLI du lieu (archive, scan orphan-ws, dinh tuyen ws) khong nap hook nut khi bin/harness dat HUB_DATA_DIR = thu muc data mac dinh cua workspace; nay chi ghi de that (sandbox/test) moi bo qua hook. Mot ham hookNodes truyen goc workspace; co projectResolver ma khong nap duoc -> 1 dong data-warn rule=hook.
+- Fix: harness data tree doc registry hop nhat (manifest + entry mau workspaces/*/<tool> + muc suy ra theo ws), khong con "(registry rong)".
+
 ### 0.2.0
 - Shim `harness` cho shell user: thu muc co dinh `%USERPROFILE%\.harness-kit\bin` (khong con `%LOCALAPPDATA%`); doctor canh bao (`[warn]`) khi chay trong goi MSIX hoac shim nam duoi LOCALAPPDATA/APPDATA.
 - Dinh tuyen du lieu theo workspace qua hook cua hub (`workspaceFor` / `listNodes`); registry dung manifest cua tool; `config/data/workspaces/*.json` deprecated (van doc, canh bao `deprecated-config`).
