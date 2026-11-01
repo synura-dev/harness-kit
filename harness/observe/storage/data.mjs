@@ -411,6 +411,7 @@ export async function run(argv = process.argv.slice(2)) {
       logAccess('tail', r, { domain: dom, rows: t.rows.length });
       return { code: 0, ...emit({ summary: t.rows.map((x) => JSON.stringify(x)).join('\n') || '(khong co dong)', data: t, truncated: t.truncated }, o) };
     }
+    if (cmd === 'query') { const { queryCli } = await import('./data-query.mjs'); return queryCli(r, { o, root, opts, logAccess }); } // data-workspaces P1b: runs.jsonl
     if (cmd === 'inbox') {
       const [sub, ...ir] = r;
       const arg = ir.find((x, i) => !x.startsWith('--') && !/^--(days|limit)$/.test(ir[i - 1] || ''));

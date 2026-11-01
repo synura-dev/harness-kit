@@ -28,6 +28,7 @@ Muc dich: du lieu tool theo NUT (du an/repo) nhom vao WORKSPACE (nhieu nut co th
 - `data inbox prune [--days N] [--yes]` xoa muc _inbox cu hon N ngay (mac dinh 30, 1..3650; dry-run mac dinh).
   Moi lenh inbox ghi vet type=data-access.
 
+- `data query <ws> <tool> [--node X] [--last [N]] [--status S] [--since ISO] [--json]` doc `workspaces/<ws>/<tool>/runs.jsonl` (data-query.mjs): tail, N mac dinh 20 toi da 200, doc toi da 1MB cuoi + 20s (`truncated:`); ws khong ton tai thi thu coi la node id. Ghi: `appendRun(file, rec)` o `core/io/runs-record.mjs` (truong co dinh, redact, cat 200, xoay .old >5MB, khong nem).
 - `data tail <domain> [--n N] [--type T] [--since 1d]` doc N dong cuoi (mac dinh 20, toi da 200) tu .jsonl moi nhat cua domain da dang ky (vd `data tail gateway`), cat truong >300 ky tu, co limit byte/timeout, ghi vet data-access. Dung khi data-gate chan doc truc tiep.
 - `scan`, `clean`, `adopt`, `tail` thoat code 2 va khong cham gi khi registry khong doc duoc (file registry/workspace json hong) hoac rong bat thuong. `clean` dung retention theo class (retentionDays tuong minh > mac dinh class), khop canh bao cua scan; artifact/durable khong bao gio bi xoa. `register`/cache scan ghi nguyen tu (tmp + rename).
 
