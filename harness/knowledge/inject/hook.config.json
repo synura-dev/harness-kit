@@ -1,6 +1,6 @@
 {
   "enabled": true,
-  "events": ["UserPromptSubmit", "SessionStart"],
+  "events": ["UserPromptSubmit", "SessionStart", "SubagentStart"],
   "timeoutMs": 2000,
   "maxFacts": 5,
   "maxChars": 1500,

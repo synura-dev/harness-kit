@@ -236,3 +236,18 @@ test('tham so thu hai = loc module (guard rieng)', () => {
   const r2 = runNew('PreToolUse', bash('ls'), b.env, 'guard');
   expect(parse(r2.stdout)).toEqual({});
 }, 60000);
+
+test('SubagentStart: khop role vault tam -> additionalContext chua ghi chu role', async () => {
+  const { put } = await import('../../knowledge/vault/vault.mjs');
+  const seed = (env) => {
+    const r = put({ meta: { id: 'builder-role-note', kind: 'rule', scope: 'role:builder', status: 'active' }, body: 'Quy tac rieng cho builder trong dispatch.' }, { root: path.join(env.HUB_DATA_DIR, 'memory') });
+    expect(r.ok, JSON.stringify(r.errors)).toBe(true);
+  };
+  const b = sandbox();
+  seed(b.env);
+  const neu = runNew('SubagentStart', JSON.stringify({ hook_event_name: 'SubagentStart', session_id: 'eq1', cwd: ROOT, agent_type: 'builder' }), b.env);
+  expect(neu.status).toBe(0);
+  const j = parse(neu.stdout);
+  expect(j.hookSpecificOutput.hookEventName).toBe('SubagentStart');
+  expect(j.hookSpecificOutput.additionalContext).toContain('builder-role-note [rule]');
+}, 60000);

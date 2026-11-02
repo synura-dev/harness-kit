@@ -15,7 +15,7 @@ const VAULT_CLI = path.join(HERE, '..', 'vault', 'cli.mjs');
 
 export const DEFAULTS = {
   enabled: true,
-  events: ['UserPromptSubmit', 'SessionStart'],
+  events: ['UserPromptSubmit', 'SessionStart', 'SubagentStart'],
   timeoutMs: 2000, // tran cho truy van vault (tien trinh con); hook tu thoat sau timeoutMs + 300
   maxFacts: 5,
   maxChars: 1500, // tong additionalContext
@@ -104,6 +104,52 @@ function queryVault(cfg, { root, now } = {}) {
   try { const j = JSON.parse(r.stdout); return Array.isArray(j.items) ? j.items : null; } catch { return null; }
 }
 
+/** Truy van context tu vault qua CLI theo role va global (tien trinh con, co timeout). Tra text chuoi hoac '' (loi/timeout -> fail-open). */
+function queryContextVault(cfg, { root, now } = {}, agentType) {
+  const r0 = root || cfg.root || '';
+  const args = [
+    VAULT_CLI, 'context',
+    '--scope', `role:${agentType}`,
+    '--scope', 'global',
+    '--max-chars', '1200',
+    '--limit', '5',
+    '--raw',
+    '--timeout-s', String(Math.max(0.1, cfg.timeoutMs / 1000)),
+  ];
+  if (r0) args.push('--root', String(r0));
+  if (now) args.push('--now', String(now));
+  const r = spawnSync(process.execPath, args, {
+    encoding: 'utf8',
+    timeout: cfg.timeoutMs,
+    windowsHide: true,
+    maxBuffer: 8 * 1024 * 1024,
+  });
+  if (r.error || r.status !== 0 || !r.stdout) return '';
+  const out = r.stdout.trim();
+  if (!out || out === '(khong co tri thuc phu hop)') return '';
+  return out;
+}
+
+/** Lay context cho agentType: uu tien ctx.context (dispatcher/test in-process), fallback qua CLI vault. */
+function fetchContext(cfg, opts, agentType) {
+  if (typeof opts.context === 'function') {
+    try {
+      const r = opts.context({
+        scope: [`role:${agentType}`, 'global'],
+        maxChars: 1200,
+        limit: 5,
+        root: opts.root || cfg.root || '',
+        now: opts.now,
+      });
+      const md = (r && typeof r === 'object' ? r.md : String(r || '')) || '';
+      return md.trim();
+    } catch {
+      return '';
+    }
+  }
+  return queryContextVault(cfg, opts, agentType);
+}
+
 /** Loi: ctx.query(args) -> items[] | {items} | null thay cho tien trinh con (dispatcher, vung hooks, truyen vault.query in-process). */
 function fetchItems(cfg, opts) {
   if (typeof opts.query !== 'function') return queryVault(cfg, opts);
@@ -117,8 +163,16 @@ function fetchItems(cfg, opts) {
 /** Thuan (tru doc vault): payload -> { ev, text } ; text '' = khong chen. */
 function build(payload, opts = {}) {
   const cfg = { ...DEFAULTS, ...(opts.cfg || {}) };
-  const ev = payload && payload.hook_event_name;
+  const ev = (payload && payload.hook_event_name) || (payload && (payload.agent_type || payload.agentType) ? 'SubagentStart' : '');
   if (!cfg.enabled || !cfg.events.includes(ev)) return { ev, text: '' };
+
+  if (ev === 'SubagentStart') {
+    const agentType = String((payload && (payload.agent_type || payload.agentType)) || '').trim();
+    if (!agentType) return { ev, text: '' };
+    const text = fetchContext(cfg, opts, agentType);
+    return { ev, text };
+  }
+
   let kws = [], tagOnly;
   if (ev === 'SessionStart') { tagOnly = (cfg.sessionTags || []).filter(Boolean); if (!tagOnly.length) return { ev, text: '' }; }
   else { kws = keywords(payload.prompt, cfg); if (!kws.length) return { ev, text: '' }; }
@@ -138,14 +192,14 @@ export function handle(a, b, c) {
     try {
       const input = b && typeof b === 'object' ? b : {};
       const { text } = build({ ...input, hook_event_name: a || input.hook_event_name }, c || {});
-      return text ? { additionalContext: text } : {};
+      return text ? { additionalContext: text, hookSpecificOutput: { additionalContext: text } } : {};
     } catch { return {}; }
   }
   const { ev, text } = build(a, b || {});
   return text ? JSON.stringify({ hookSpecificOutput: { hookEventName: ev, additionalContext: text } }) : '';
 }
 
-const META = { id: 'knowledge-inject', events: Object.freeze(['UserPromptSubmit', 'SessionStart']), timeoutMs: DEFAULTS.timeoutMs + 300, onError: 'open' };
+const META = { id: 'knowledge-inject', events: Object.freeze(['UserPromptSubmit', 'SessionStart', 'SubagentStart']), timeoutMs: DEFAULTS.timeoutMs + 300, onError: 'open' };
 /** Alias cu (test): dang handle(input, ctx). Chuan dispatcher la export default. */
 export const hook = Object.freeze({ ...META, handle: (input, ctx) => handle((input && input.hook_event_name) || '', input, ctx) });
 /** Chuan HOOK_MODULE: async handle(event, input, ctx). Module thuan: khong ghi file nao (ctx.write khong anh huong); ctx.query de test/dispatcher. */

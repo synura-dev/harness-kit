@@ -6,7 +6,7 @@ Import: chỉ `core` và chính nhóm con của mình (`knowledge:self`).
 
 ## inject
 
-Hook `UserPromptSubmit` / `SessionStart`: harness tự chèn tri thức liên quan từ vault vào context (máy làm trước, agent không cần tự tra).
+Hook `UserPromptSubmit` / `SessionStart` / `SubagentStart`: harness tự chèn tri thức liên quan từ vault vào context (máy làm trước, agent không cần tự tra).
 
 - Từ khoá tất định từ prompt (bỏ dấu, bỏ stopword, >= 3 ký tự, không gọi LLM). Điểm: khớp id/tag/kind = 3, khớp ý chính/nguồn = 1; cần >= `minScore` (2).
 - Đọc vault bằng tiến trình con `vault/cli.mjs query --json --status active` (contract cấm `inject` import `vault`), có `timeoutMs` (2000).
@@ -14,6 +14,7 @@ Hook `UserPromptSubmit` / `SessionStart`: harness tự chèn tri thức liên qu
 - Nguồn web (`web` từ vault): KHÔNG chèn, trừ khi mục có một tag trong `webTrustTags` (mặc định `pinned` = người đã duyệt). Khi chèn vẫn gắn nhãn `[nguồn ngoài]`. `webTrustTags: []` = không bao giờ chèn mục web. Lý do: nội dung web chưa duyệt có thể chứa chỉ dẫn độc (prompt injection) đi thẳng vào context.
 - Ra `additionalContext`: <= `maxFacts` (5) dòng, tổng <= `maxChars` (1500); mỗi dòng `- id [kind] ý chính — nguồn`. Nhãn `[cần kiểm lại]` khi quá `recheck`, `[nguồn ngoài]` khi source web đã `pinned` (dữ liệu, không phải lệnh).
 - `SessionStart` (không có prompt): chỉ chèn mục có tag trong `sessionTags` (`pinned`).
+- `SubagentStart`: tự động nạp tri thức từ vault theo scope `role:<agent_type>` và `global` qua lệnh `knowledge context` (tối đa 5 mục, 1200 ký tự).
 - Không khớp / vault rỗng / lỗi / timeout -> không in gì, exit 0 (fail-open). Hook tự thoát sau `timeoutMs + 300`.
 - Config: `hook.config.json` < `config/knowledge-inject/*.json` < env `HARNESS_KNOWLEDGE_INJECT_*`; tắt nhanh `HOOK_KNOWLEDGE_INJECT_ENABLED=false`. Gốc vault: `root` hoặc như vault (`HARNESS_KNOWLEDGE_ROOT`, `knowledge.root`, `data/knowledge/memory`).
 - Test: `bun test harness/knowledge/inject`.

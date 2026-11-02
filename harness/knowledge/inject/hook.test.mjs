@@ -137,3 +137,58 @@ test('vault tuy chon: thieu vault (query null/nem/khong co) -> inject chay khong
   expect(handle('UserPromptSubmit', p, { query: () => { throw new Error('vault tat'); } })).toEqual({});
   expect(() => handle(p, { root: path.join(root, 'khong', 'co', 'vault'), now: NOW })).not.toThrow();
 });
+
+test('SubagentStart: nap tri thuc theo scope role:<agentType> va global, fail-open', () => {
+  add({ id: 'builder-rule', kind: 'rule', scope: 'role:builder', status: 'active' }, 'Quy tac rieng cho builder');
+  add({ id: 'global-rule', kind: 'rule', scope: 'global', status: 'active' }, 'Quy tac dung chung toan cuc');
+  add({ id: 'reviewer-rule', kind: 'rule', scope: 'role:reviewer', status: 'active' }, 'Quy tac reviewer khong duoc vao builder');
+
+  // Payload chi co agent_type (suy doan SubagentStart)
+  const out1 = handle({ agent_type: 'builder' }, { root, now: NOW });
+  const j1 = JSON.parse(out1);
+  expect(j1.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+  expect(j1.hookSpecificOutput.additionalContext).toContain('global-rule [rule]');
+  expect(j1.hookSpecificOutput.additionalContext).not.toContain('reviewer-rule');
+
+  // Payload day du hook_event_name + agent_type
+  const out2 = handle({ hook_event_name: 'SubagentStart', agent_type: 'builder' }, { root, now: NOW });
+  const j2 = JSON.parse(out2);
+  expect(j2.hookSpecificOutput.hookEventName).toBe('SubagentStart');
+  expect(j2.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+
+  // Goi dang hop dong module handle('SubagentStart', payload, ctx)
+  const r1 = handle('SubagentStart', { agent_type: 'builder' }, { root, now: NOW });
+  expect(r1.additionalContext).toContain('builder-rule [rule]');
+  expect(r1.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+
+  // Chay that qua stdin tien trinh con HOOK
+  const env = { ...process.env, HARNESS_KNOWLEDGE_ROOT: root };
+  const subproc = spawnSync(process.execPath, [HOOK], {
+    input: JSON.stringify({ hook_event_name: 'SubagentStart', agent_type: 'builder' }),
+    encoding: 'utf8',
+    env,
+    timeout: 10000,
+  });
+  expect(subproc.status).toBe(0);
+  const jProc = JSON.parse(subproc.stdout);
+  expect(jProc.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+
+  // Khong co agent_type -> fail-open khong chen
+  expect(handle({ hook_event_name: 'SubagentStart' }, { root, now: NOW })).toBe('');
+  expect(handle('SubagentStart', {}, { root, now: NOW })).toEqual({});
+
+  // Vault trong / khong khop -> fail-open
+  const emptyDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kinject-sub-empty-'));
+  try {
+    expect(handle({ hook_event_name: 'SubagentStart', agent_type: 'builder' }, { root: emptyDir, now: NOW })).toBe('');
+    expect(handle('SubagentStart', { agent_type: 'builder' }, { root: emptyDir, now: NOW })).toEqual({});
+  } finally {
+    fs.rmSync(emptyDir, { recursive: true, force: true });
+  }
+
+  // ctx.context tuy chon in-process: mock hoat dong
+  const mocked = handle('SubagentStart', { agent_type: 'builder' }, {
+    context: () => ({ md: '### mock-rule [rule]\nMocked context' }),
+  });
+  expect(mocked.additionalContext).toBe('### mock-rule [rule]\nMocked context');
+});

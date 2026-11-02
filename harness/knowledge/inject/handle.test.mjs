@@ -16,7 +16,7 @@ afterEach(() => { fs.rmSync(root, { recursive: true, force: true }); });
 
 test('descriptor hop le theo validateHookModule', () => {
   expect(validateHookModule(hook)).toEqual([]);
-  expect(hook.events).toEqual(['UserPromptSubmit', 'SessionStart']);
+  expect(hook.events).toEqual(['UserPromptSubmit', 'SessionStart', 'SubagentStart']);
 });
 
 test('handle(event, input, ctx): khop -> {additionalContext}; chuoi khop dang cu', () => {
