@@ -8,7 +8,8 @@
     {
       "name": "harness-kit",
       "source": "./",
-      "description": "Lop rang buoc tat dinh cho agent."
+      "description": "Lop rang buoc tat dinh cho agent.",
+      "license": "Apache-2.0"
     }
   ]
 }
