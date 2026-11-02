@@ -1,42 +1,61 @@
 # harness-kit
 
-Plugin Claude Code: lop rang buoc tat dinh cho agent (guard, approval, data zone, audit, hook dispatcher, cong CLI). Zero dependency, can Node.
-
 <p align="center"><img src="assets/icon.svg" width="64" alt="harness-kit"></p>
 
-## Cai dat
+A Claude Code plugin that adds a deterministic constraint layer around AI agents: guard, approval, data zones, audit, a hook dispatcher and a CLI gateway.
+
+## Goals
+
+- Enforce rules with code, not agent judgment: checks a machine can run are automated and warn on their own.
+- Constrain agents safely: guards and approvals for risky commands, with hooks that fail open.
+- Keep data organized and observable: a zoned data tree with audit logs, cost and usage views.
+- Single entry point: one `harness` CLI to read data, run doctor checks and extend the system.
+- Zero dependencies; requires only Node.js.
+
+## Quick start
 
 ```
-/plugin marketplace add synura-dev/harness-kit
+/plugin marketplace add https://github.com/synura-dev/harness-kit
 /plugin install harness-kit@synura
 ```
 
-Repo private: can dang nhap GitHub (git credential) co quyen doc repo thi `marketplace add` va cap nhat moi chay duoc.
+The repository is currently private, so `marketplace add` and updates need GitHub credentials (git credential) with read access.
 
-Xong, khong can setup them: khong launcher, khong `bin/harness.mjs` o du an, khong sua PATH. Hook Claude do plugin cung cap; CLI `harness` co trong PATH cua Bash tool.
-Lenh `harness` cho PowerShell/cmd/bash cua user (ngoai Claude): hook SessionStart tu cai o phien Claude dau tien (xem muc CLI duoi); mo terminal moi la dung duoc.
-Cho agy: chay `harness agy init` mot lan trong du an (sinh `.agents/hooks.json`, shim, `.agents/harness-agy.local.json`; thieu thi hook SessionStart/doctor tu sinh lai hoac bao `fix_command`). Agy goi CLI bang `node ./.agents/harness-agy-shim.mjs cli <lenh>` (process.execPath + duong dan tuyet doi, khong PATH).
+No further setup is needed. The plugin provides the Claude hooks, and the `harness` CLI is on the Bash tool's PATH.
 
-- Repo nay la NGUON cua code loi; sua o day. Xem docs/SOURCE-HISTORY.md (lich su truoc cutover nam o hub).
-- CLI: lenh `harness [<domain> [lenh]]` (bin/harness, bin/harness.cmd) co trong PATH cua Bash tool khi plugin bat (da kiem Claude Code 2.1.312, Windows Git Bash). Ngoai Claude (PowerShell/cmd/bash cua user): hook SessionStart `build/user-shim` tu dong ghi shim `harness` vao MOT thu muc co dinh cho ca may (Windows `%USERPROFILE%\.harness-kit\bin`: `harness.cmd` + `harness` cho Git Bash, khong dung `%LOCALAPPDATA%` vi Claude desktop MSIX ao hoa thu muc nay; POSIX `~/.local/bin`), them thu muc do vao PATH user mot lan (Windows: noi vao cuoi HKCU\Environment Path, giu REG_EXPAND_SZ, khong setx; POSIX: mot dong co marker trong `~/.profile`, macOS `~/.zprofile`) va xoa shim cu cua harness-kit o cho khac (vd `%APPDATA%\npm`, `%LOCALAPPDATA%\harness-kit\bin`; muc PATH cu duoc thay tai cho). Shim chon ban plugin moi nhat trong cache luc chay nen nang cap plugin khong can cai lai. Khong ghi de file la; chay tu nguon (khong cache plugin) thi bo qua. Ban tay, cung logic: `harness install --shim [--dir D] [--dry-run] [--force]`. Tat: `HOOK_USER_SHIM_ENABLED=0`. Go: xoa thu muc shim va bo no khoi PATH user. Doctor canh bao (`[warn]` nhom shim) khi thieu/lech/chua tren PATH, hoac khi shim nam duoi `%LOCALAPPDATA%`/`%APPDATA%` / tien trinh chay trong goi MSIX (kem dong `node "<plugin>\bin\harness" install --shim` de chay trong terminal that).
-- Du lieu: <du an>/.harness/data (tu them .gitignore). PLUGIN_ROOT chi doc.
-- Workspace tuy bien (vd hub): du an co `config/workspace/default.json` hoac `config/hub/default.json` (file cau hinh tool `workspace`, ten cu `hub`) -> hook (`hooks/run.mjs`) va CLI `harness` dat `HUB_DATA_DIR=<du an>/data`, `HARNESS_CONFIG_DIR=<du an>/config` (khong ghi de bien da dat; repo nguon plugin khong tinh). Loi suy workspace/wrapper: fail-open + mot dong `HKERR {...}` ra stderr (HK-HOOK-001/002).
-- Guard chi o muc no luc tot nhat (hook fail-open); nen tu them deny trong settings cua du an.
-- Khong bat cung luc voi dispatcher cung loai trong .claude/settings.json (hook chay doi).
+- Outside Claude (PowerShell, cmd, your own bash): the first Claude session installs a `harness` shim through the SessionStart hook; open a new terminal afterwards. Manual install: `harness install --shim [--dir D] [--dry-run] [--force]`. Disable with `HOOK_USER_SHIM_ENABLED=0`.
+- agy: run `harness agy init` once per project.
+- Health check: `/harness-kit:doctor` or `harness doctor`.
 
-## Changelog
+Notes:
+- Runtime data is stored under `.harness/data` in the project (a `.gitignore` entry is added automatically). The plugin root is read-only.
+- A project may define a custom workspace with `config/workspace/default.json`; hooks and the CLI then use that project's own data and config folders.
+- Guards are best-effort (hooks fail open); also add deny rules in the project's settings.
+- Do not enable another dispatcher of the same kind in `.claude/settings.json`, or hooks run twice.
 
-### 0.2.1
-- Fix: CLI du lieu (archive, scan orphan-ws, dinh tuyen ws) khong nap hook nut khi bin/harness dat HUB_DATA_DIR = thu muc data mac dinh cua workspace; nay chi ghi de that (sandbox/test) moi bo qua hook. Mot ham hookNodes truyen goc workspace; co projectResolver ma khong nap duoc -> 1 dong data-warn rule=hook.
-- Fix: harness data tree doc registry hop nhat (manifest + entry mau workspaces/*/<tool> + muc suy ra theo ws), khong con "(registry rong)".
+## Repository structure
 
-### 0.2.0
-- Shim `harness` cho shell user: thu muc co dinh `%USERPROFILE%\.harness-kit\bin` (khong con `%LOCALAPPDATA%`); doctor canh bao (`[warn]`) khi chay trong goi MSIX hoac shim nam duoi LOCALAPPDATA/APPDATA.
-- Dinh tuyen du lieu theo workspace qua hook cua hub (`workspaceFor` / `listNodes`); registry dung manifest cua tool; `config/data/workspaces/*.json` deprecated (van doc, canh bao `deprecated-config`).
-- `runs.jsonl` (ghi moi lan chay) va lenh `harness data query`.
-- `harness data scan`: phat hien workspace mo coi (orphan-ws).
-- `harness data archive`.
-- `harness register --project` yeu cau extension da duoc duyet (ext trust).
+```
+.claude-plugin/   plugin.json and marketplace.json
+assets/           icon
+bin/              harness CLI launchers (harness, harness.cmd)
+commands/         slash commands (doctor)
+config/           default and workspace configuration
+docs/             plans and source history
+harness/          core implementation
+  build/          install, skills, user shim
+  cli/            CLI gateway and commands
+  constrain/      guard, approval, bash-guard, data-gate, verify-gate, worktree
+  core/           audit, config, registry, runtime, agy, io, checks, ext
+  evolve/         eval and loop tooling
+  hooks/          hook dispatcher
+  knowledge/      inject, vault
+  observe/        audit, cost, data-check, evidence, storage, views
+  tools/          adapters, sync, play
+hooks/            plugin hook entry points (hooks.json, run.mjs)
+skills/           bundled skills
+```
 
-### 0.1.1
-- Gom sua cong duyet release, frontmatter skill, shim agy cli.
+## License
+
+Apache-2.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE). Release history: [CHANGELOG.md](CHANGELOG.md).
