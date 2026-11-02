@@ -35,6 +35,29 @@ export const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const TAG_RE = /^[a-z0-9][a-z0-9_/-]{0,59}$/;
 export const REF_RE = /^project:[a-z0-9_-]+\/(notes|facts)\/[a-z0-9_.-]+$/;
 const SCOPE_RE = /^(global|project:[a-z0-9][a-z0-9._-]{0,59}|role:[a-z0-9][a-z0-9_-]{0,59})$/;
+export const SCOPE_DIR_RE = /^(global|role-[a-z0-9_-]{1,64}|project-[a-z0-9_-]{1,64})$/;
+
+/** Chuyen scope sang ten thu muc 1 cap an toan: 'global' -> 'global', 'role:<x>' -> 'role-<x>', 'project:<y>' -> 'project-<y>'. */
+export function scopeToDir(scope = 'global') {
+  const s = String(scope || 'global').trim();
+  let dir;
+  if (s === 'global') dir = 'global';
+  else if (s.startsWith('role:')) dir = 'role-' + s.slice(5);
+  else if (s.startsWith('project:')) dir = 'project-' + s.slice(8);
+  else dir = s;
+  if (!SCOPE_DIR_RE.test(dir)) throw new Error(`scope khong hop le de tao thu muc: ${scope}`);
+  return dir;
+}
+
+/** Chuyen nguoc ten thu muc sang scope: 'global' -> 'global', 'role-x' -> 'role:x', 'project-y' -> 'project:y', khong hop le -> null. */
+export function dirToScope(dir) {
+  const d = String(dir || '').trim();
+  if (!SCOPE_DIR_RE.test(d)) return null;
+  if (d === 'global') return 'global';
+  if (d.startsWith('role-')) return 'role:' + d.slice(5);
+  if (d.startsWith('project-')) return 'project:' + d.slice(8);
+  return null;
+}
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const STAMP_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?)?$/;
 // Heuristic "source web" (xem README): bat ky URL scheme (tru file://), tien to web:/url:/link:, www., host.tld/<path>,

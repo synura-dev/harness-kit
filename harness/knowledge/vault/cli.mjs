@@ -11,11 +11,11 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 import { samePath } from '../../core/io/paths.mjs';
 import { normKind } from './schema.mjs';
 import { parse } from './frontmatter.mjs';
-import { put, get, links, query, context, check, prune } from './vault.mjs';
+import { put, get, links, query, context, check, prune, migrate } from './vault.mjs';
 
 const BOOL = new Set(['replace', 'dry-run', 'stdin', 'stale', 'fresh', 'apply', 'probe']);
 const MAX_INPUT = 65536;
-const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | links <id> [...] | query [text] [...] | context --scope <scope> [...] | check [--probe] | prune [--apply]  (--root <dir>)';
+const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | links <id> [...] | query [text] [...] | context --scope <scope> [...] | check [--probe] | prune [--apply] | migrate [--apply]  (--root <dir>)';
 
 function parseFlags(rest) {
   const f = { _: [], tag: [], scope: [] };
@@ -121,6 +121,14 @@ export function run(argv, emitOpts = {}) {
       const head = r.apply ? `da archive ${r.applied.length}/${r.candidates.length}` : `${r.candidates.length} ung vien (dry-run; --apply de chuyen status: archived, khong xoa file)`;
       const summary = [head, ...r.candidates.slice(0, 30).map((x) => `${x.kind}/${x.id} recheck=${x.recheck || '-'} status=${x.status || '-'}`), ...r.failed.map((x) => `LOI ${x.id}: ${x.msg}`)].join('\n');
       return { code: r.failed.length ? 1 : 0, ...emit({ summary, data: r, truncated: r.truncated }, o) };
+    }
+    if (cmd === 'migrate') {
+      const r = migrate({ ...base, apply: !!f.apply });
+      const head = r.dryRun
+        ? `${r.count} file can di chuyen (dry-run; dung --apply de thuc hien)`
+        : `da di chuyen ${r.count} file sang cau truc thu muc moi`;
+      const summary = [head, ...r.moved.slice(0, 30).map((x) => `${x.id}: ${x.from} -> ${x.to}`)].join('\n');
+      return { code: 0, ...emit({ summary, data: r }, o) };
     }
   } catch (e) { err(`knowledge ${cmd}: ${e.message}`); return { code: 1 }; }
   err(USAGE);

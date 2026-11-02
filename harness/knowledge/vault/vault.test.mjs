@@ -4,9 +4,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { put, get, query, check, prune, safeFile, writeNew, renameRetry } from './vault.mjs';
+import { put, get, query, check, prune, safeFile, writeNew, renameRetry, migrate } from './vault.mjs';
 import { parse, stringify } from './frontmatter.mjs';
-import { validate, findSecret, metaText, isWebSource } from './schema.mjs';
+import { validate, findSecret, metaText, isWebSource, scopeToDir, dirToScope } from './schema.mjs';
 import { run } from './cli.mjs';
 import { loadHarnessRegistry } from '../../core/registry/plugin-registry.mjs';
 
@@ -36,9 +36,9 @@ test('put -> get -> query -> check (luong chinh, atomic, khong de lai .tmp)', ()
   const r = P(fact('bun-test-timeout', { meta: { source: 'https://bun.sh/docs/test', quote: 'default timeout is 5000ms', ttl_days: '30', links: ['ref-note'] } }));
   expect(r.errors).toEqual([]);
   expect(r.ok).toBe(true);
-  expect(r.file).toBe(path.join(root, 'fact', 'bun-test-timeout.md'));
+  expect(r.file).toBe(path.join(root, 'fact', 'global', 'bun-test-timeout.md'));
   expect(P({ meta: { id: 'ref-note', kind: 'ref' }, body: 'Lien quan [[bun-test-timeout]]' }).ok).toBe(true);
-  expect(fs.readdirSync(path.join(root, 'fact'))).toEqual(['bun-test-timeout.md']);
+  expect(fs.readdirSync(path.join(root, 'fact', 'global'))).toEqual(['bun-test-timeout.md']);
   const g = get('bun-test-timeout', { root });
   expect(g.meta.recheck).toBe('2026-11-28');
   expect(g.meta.created).toBe(NOW);
@@ -149,10 +149,10 @@ test('check: link gay, id lech ten file, qua han recheck', () => {
 test('prune: mac dinh dry-run; --apply chuyen archived, khong xoa file', () => {
   P(fact('old', { meta: { recheck: '2026-01-01' } }));
   P(fact('new', { meta: { recheck: '2027-01-01' } }));
-  const before = fs.readFileSync(path.join(root, 'fact', 'old.md'), 'utf8');
+  const before = fs.readFileSync(path.join(root, 'fact', 'global', 'old.md'), 'utf8');
   const d = prune({ root, now: NOW });
   expect(d.candidates.map((x) => x.id)).toEqual(['old']);
-  expect(fs.readFileSync(path.join(root, 'fact', 'old.md'), 'utf8')).toBe(before);
+  expect(fs.readFileSync(path.join(root, 'fact', 'global', 'old.md'), 'utf8')).toBe(before);
   const a = prune({ root, now: NOW, apply: true });
   expect(a.applied).toEqual(['old']);
   expect(get('old', { root }).meta.status).toBe('archived');
@@ -162,7 +162,7 @@ test('prune: mac dinh dry-run; --apply chuyen archived, khong xoa file', () => {
 
 test('cli run(): put/query/check exit code', () => {
   expect(run(['put', '--root', root, '--now', NOW, '--id', 'c1', '--kind', 'reference', '--tags', 'a,b', '--body', 'x'], quiet).code).toBe(0);
-  expect(fs.existsSync(path.join(root, 'ref', 'c1.md'))).toBe(true);
+  expect(fs.existsSync(path.join(root, 'ref', 'global', 'c1.md'))).toBe(true);
   expect(run(['put', '--root', root, '--id', '../x', '--kind', 'fact'], quiet).code).toBe(1);
   expect(run(['bogus'], quiet).code).toBe(2);
   const out = [];
@@ -226,7 +226,7 @@ test('put trung id song song (nhieu tien trinh): dung 1 thanh cong, ban thang kh
   expect(rs.every((r) => typeof r.ok === 'boolean')).toBe(true);
   const wins = rs.filter((r) => r.ok);
   expect(wins.length).toBe(1);
-  expect(fs.readdirSync(path.join(root, 'fact'))).toEqual(['race-note.md']);
+  expect(fs.readdirSync(path.join(root, 'fact', 'global'))).toEqual(['race-note.md']);
   expect(get('race-note', { root }).body.trim()).toBe(`writer ${wins[0].i}`);
 }, 60000);
 
@@ -287,4 +287,164 @@ test('renameRetry: win32 EPERM tam thoi -> thu lai thanh cong; loi khac/nen tang
   n = 0; expect(() => renameRetry('a', 'b', { platform: 'linux', rename: () => { n++; throw err('EPERM'); } })).toThrow('EPERM'); expect(n).toBe(1);
   n = 0; expect(() => renameRetry('a', 'b', { platform: 'win32', rename: () => { n++; throw err('ENOENT'); } })).toThrow('ENOENT'); expect(n).toBe(1);
   n = 0; expect(() => renameRetry('a', 'b', { platform: 'win32', tries: 4, rename: () => { n++; throw err('EBUSY'); } })).toThrow('EBUSY'); expect(n).toBe(4);
+});
+
+test('scopeToDir va dirToScope: chuyen doi 2 chieu va chan path traversal', () => {
+  expect(scopeToDir()).toBe('global');
+  expect(scopeToDir('global')).toBe('global');
+  expect(scopeToDir('role:builder')).toBe('role-builder');
+  expect(scopeToDir('project:harness-kit')).toBe('project-harness-kit');
+  expect(scopeToDir('role:a_b-1')).toBe('role-a_b-1');
+
+  expect(() => scopeToDir('../evil')).toThrow();
+  expect(() => scopeToDir('role:../evil')).toThrow();
+  expect(() => scopeToDir('project:a/b')).toThrow();
+  expect(() => scopeToDir('invalid')).toThrow();
+  expect(() => scopeToDir('role:')).toThrow();
+
+  expect(dirToScope('global')).toBe('global');
+  expect(dirToScope('role-builder')).toBe('role:builder');
+  expect(dirToScope('project-harness-kit')).toBe('project:harness-kit');
+  expect(dirToScope('role-a_b-1')).toBe('role:a_b-1');
+
+  expect(dirToScope('..')).toBeNull();
+  expect(dirToScope('role-')).toBeNull();
+  expect(dirToScope('project-')).toBeNull();
+  expect(dirToScope('random-dir')).toBeNull();
+  expect(dirToScope('.hidden')).toBeNull();
+  expect(dirToScope('')).toBeNull();
+  expect(dirToScope(null)).toBeNull();
+});
+
+test('put: phan vung thu muc <kind>/<scope-dir>/<id>.md theo scope', () => {
+  const r1 = P(fact('note-global'));
+  expect(r1.ok).toBe(true);
+  expect(r1.file).toBe(path.join(root, 'fact', 'global', 'note-global.md'));
+  expect(fs.existsSync(r1.file)).toBe(true);
+
+  const r2 = P({ meta: { id: 'note-role', kind: 'rule', scope: 'role:builder', source: 'docs/test' }, body: 'rule body' });
+  expect(r2.ok).toBe(true);
+  expect(r2.file).toBe(path.join(root, 'rule', 'role-builder', 'note-role.md'));
+  expect(fs.existsSync(r2.file)).toBe(true);
+
+  const r3 = P({ meta: { id: 'note-proj', kind: 'decision', scope: 'project:harness-kit' }, body: 'decision body' });
+  expect(r3.ok).toBe(true);
+  expect(r3.file).toBe(path.join(root, 'decision', 'project-harness-kit', 'note-proj.md'));
+  expect(fs.existsSync(r3.file)).toBe(true);
+});
+
+test('locate / get / query: doc duoc ca flat legacy lan subdir', () => {
+  fs.mkdirSync(path.join(root, 'fact'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'fact', 'flat-legacy.md'), '---\nid: flat-legacy\nkind: fact\nscope: global\nstatus: active\n---\nlegacy content\n');
+
+  P({ meta: { id: 'sub-new', kind: 'fact', scope: 'role:reviewer' }, body: 'sub content' });
+
+  const g1 = get('flat-legacy', { root });
+  expect(g1.ok).toBe(true);
+  expect(g1.file).toBe(path.join(root, 'fact', 'flat-legacy.md'));
+  expect(g1.body.trim()).toBe('legacy content');
+
+  const g2 = get('sub-new', { root });
+  expect(g2.ok).toBe(true);
+  expect(g2.file).toBe(path.join(root, 'fact', 'role-reviewer', 'sub-new.md'));
+  expect(g2.body.trim()).toBe('sub content');
+
+  const q = query({}, { root, now: NOW });
+  const ids = q.items.map((x) => x.id);
+  expect(ids).toContain('flat-legacy');
+  expect(ids).toContain('sub-new');
+});
+
+test('put --replace doi scope: ghi vi tri moi va xoa file cu', () => {
+  const r1 = P({ meta: { id: 'movable', kind: 'rule', scope: 'role:builder', source: 'docs/a' }, body: 'v1' });
+  expect(r1.ok).toBe(true);
+  const oldFile = path.join(root, 'rule', 'role-builder', 'movable.md');
+  expect(fs.existsSync(oldFile)).toBe(true);
+
+  const r2 = P({ meta: { id: 'movable', kind: 'rule', scope: 'role:reviewer', source: 'docs/a' }, body: 'v2' }, { replace: true });
+  expect(r2.ok).toBe(true);
+  const newFile = path.join(root, 'rule', 'role-reviewer', 'movable.md');
+  expect(fs.existsSync(newFile)).toBe(true);
+  expect(fs.existsSync(oldFile)).toBe(false);
+
+  fs.mkdirSync(path.join(root, 'fact'), { recursive: true });
+  const flatFile = path.join(root, 'fact', 'flat-to-sub.md');
+  fs.writeFileSync(flatFile, '---\nid: flat-to-sub\nkind: fact\nscope: global\nstatus: active\n---\nold flat\n');
+  expect(fs.existsSync(flatFile)).toBe(true);
+
+  const r3 = P(fact('flat-to-sub', { body: 'new sub' }), { replace: true });
+  expect(r3.ok).toBe(true);
+  expect(fs.existsSync(path.join(root, 'fact', 'global', 'flat-to-sub.md'))).toBe(true);
+  expect(fs.existsSync(flatFile)).toBe(false);
+
+  const r4 = P(fact('flat-to-sub'));
+  expect(r4.ok).toBe(false);
+  expect(r4.errors.join(' ')).toContain('dung --replace');
+});
+
+test('check: phat hien scope-dir lech frontmatter nhung chap nhan file flat', () => {
+  fs.mkdirSync(path.join(root, 'rule', 'role-builder'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'rule', 'role-builder', 'bad-scope.md'), '---\nid: bad-scope\nkind: rule\nscope: role:reviewer\nsource: docs/x\n---\nx\n');
+
+  fs.mkdirSync(path.join(root, 'fact'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'fact', 'flat-ok.md'), '---\nid: flat-ok\nkind: fact\nscope: global\n---\nx\n');
+
+  const c = check({ root, now: NOW });
+  const msgs = c.errors.map((e) => `${e.id}: ${e.msg}`);
+  expect(msgs).toContain('bad-scope: scope-dir lech frontmatter');
+  expect(msgs.some((m) => m.startsWith('flat-ok: scope-dir'))).toBe(false);
+});
+
+test('migrate: dry-run va --apply chuyen file flat sang scope-dir', () => {
+  fs.mkdirSync(path.join(root, 'fact'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'rule', 'global'), { recursive: true });
+
+  const flat1 = path.join(root, 'fact', 'mig-1.md');
+  fs.writeFileSync(flat1, '---\nid: mig-1\nkind: fact\nscope: global\n---\nx\n');
+  const flat2 = path.join(root, 'fact', 'mig-2.md');
+  fs.writeFileSync(flat2, '---\nid: mig-2\nkind: fact\nscope: project:alpha\n---\nx\n');
+  const wrongScope = path.join(root, 'rule', 'global', 'mig-3.md');
+  fs.writeFileSync(wrongScope, '---\nid: mig-3\nkind: rule\nscope: role:builder\nsource: docs/y\n---\nx\n');
+
+  const dry = migrate(root);
+  expect(dry.ok).toBe(true);
+  expect(dry.dryRun).toBe(true);
+  expect(dry.count).toBe(3);
+  expect(dry.moved.map((m) => m.id).sort()).toEqual(['mig-1', 'mig-2', 'mig-3']);
+  expect(fs.existsSync(flat1)).toBe(true);
+  expect(fs.existsSync(flat2)).toBe(true);
+  expect(fs.existsSync(wrongScope)).toBe(true);
+
+  const applied = migrate(root, { apply: true });
+  expect(applied.ok).toBe(true);
+  expect(applied.dryRun).toBe(false);
+  expect(applied.count).toBe(3);
+
+  expect(fs.existsSync(flat1)).toBe(false);
+  expect(fs.existsSync(flat2)).toBe(false);
+  expect(fs.existsSync(wrongScope)).toBe(false);
+
+  expect(fs.existsSync(path.join(root, 'fact', 'global', 'mig-1.md'))).toBe(true);
+  expect(fs.existsSync(path.join(root, 'fact', 'project-alpha', 'mig-2.md'))).toBe(true);
+  expect(fs.existsSync(path.join(root, 'rule', 'role-builder', 'mig-3.md'))).toBe(true);
+
+  const re = migrate(root);
+  expect(re.count).toBe(0);
+});
+
+test('cli migrate: ho tro dry-run, --apply va --json', () => {
+  fs.mkdirSync(path.join(root, 'fact'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'fact', 'cli-mig.md'), '---\nid: cli-mig\nkind: fact\nscope: global\n---\nx\n');
+
+  const out = [];
+  const r1 = run(['migrate', '--root', root, '--json'], { out: (s) => out.push(s), err: () => {} });
+  expect(r1.code).toBe(0);
+  const data1 = JSON.parse(out[0]);
+  expect(data1.dryRun).toBe(true);
+  expect(data1.count).toBe(1);
+
+  const r2 = run(['migrate', '--root', root, '--apply'], quiet);
+  expect(r2.code).toBe(0);
+  expect(fs.existsSync(path.join(root, 'fact', 'global', 'cli-mig.md'))).toBe(true);
+  expect(fs.existsSync(path.join(root, 'fact', 'cli-mig.md'))).toBe(false);
 });

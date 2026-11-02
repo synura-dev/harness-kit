@@ -6,7 +6,7 @@ import { workspaceRoot, isInside } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { loadConfig } from '../../core/config/config.mjs';
-import { KINDS, ID_RE, DEFAULT_PROBE_ALLOW, validate, validateProbe, isStale, bodyLinks, todayStr, addDays, findSecret, metaText, isWebSource } from './schema.mjs';
+import { KINDS, ID_RE, DEFAULT_PROBE_ALLOW, validate, validateProbe, isStale, bodyLinks, todayStr, addDays, findSecret, metaText, isWebSource, scopeToDir, dirToScope } from './schema.mjs';
 import { parse, stringify } from './frontmatter.mjs';
 import { probeNotes } from './probe.mjs';
 import { rankItems } from './rank.mjs';
@@ -33,17 +33,24 @@ export function probeAllow() {
 
 const lexists = (p) => { try { return fs.lstatSync(p); } catch { return null; } };
 
-/** Duong dan file cho (kind,id); nem Error neu ra ngoai <root>/<kind> hoac dung symlink. */
-export function safeFile(root, kind, id) {
+/** Duong dan file cho (kind,id,scope); nem Error neu ra ngoai <root>/<kind> hoac dung symlink.
+ *  scope co gia tri: <root>/<kind>/<scope-dir>/<id>.md. Khong truyen scope: <root>/<kind>/<id>.md (legacy flat). */
+export function safeFile(root, kind, id, scope) {
   if (!KINDS.includes(kind)) throw new Error(`kind khong hop le: ${kind}`);
   if (typeof id !== 'string' || !ID_RE.test(id)) throw new Error(`id khong hop le: ${String(id).slice(0, 80)}`);
-  const base = path.resolve(root), dir = path.join(base, kind), f = path.join(dir, `${id}.md`);
+  const base = path.resolve(root);
+  const kindDir = path.join(base, kind);
+  const dir = scope !== undefined && scope !== null ? path.join(kindDir, scopeToDir(scope)) : kindDir;
+  const f = path.join(dir, `${id}.md`);
   if (!isInside(f, dir) || path.dirname(f) !== dir) throw new Error('duong dan ra ngoai vault');
-  for (const p of [base, dir, f]) {
+  if (!isInside(dir, kindDir) && dir !== kindDir) throw new Error('duong dan ra ngoai vault');
+  if (!isInside(kindDir, base) && kindDir !== base) throw new Error('duong dan ra ngoai vault');
+  for (const p of [base, kindDir, dir, f]) {
     const st = lexists(p);
     if (st && st.isSymbolicLink()) throw new Error(`tu choi symlink/junction: ${path.relative(base, p) || '.'}`);
   }
-  if (fs.existsSync(dir) && !isInside(fs.realpathSync(dir), fs.realpathSync(base))) throw new Error('thu muc kind ra ngoai vault');
+  if (fs.existsSync(kindDir) && !isInside(fs.realpathSync(kindDir), fs.realpathSync(base))) throw new Error('thu muc kind ra ngoai vault');
+  if (fs.existsSync(dir) && !isInside(fs.realpathSync(dir), fs.realpathSync(base))) throw new Error('thu muc scope ra ngoai vault');
   return f;
 }
 
@@ -52,13 +59,33 @@ function readVaultFile(f, max = READ_CAP.fileBytes) {
   try { const st = fs.fstatSync(fd); const b = Buffer.alloc(Math.min(st.size, max)); fs.readSync(fd, b, 0, b.length, 0); return { text: b.toString('utf8'), cut: st.size > max }; } finally { fs.closeSync(fd); }
 }
 
-/** Tim file theo id trong moi kind: [{kind, file}]. */
+/** Tim file theo id trong moi kind: [{kind, file}]. Duyet ca thu muc scope 1 cap lan flat legacy. */
 function locate(root, id, kind) {
   const out = [];
+  const base = path.resolve(root);
   for (const k of kind ? [kind] : KINDS) {
-    let f; try { f = safeFile(root, k, id); } catch { continue; }
-    const st = lexists(f);
-    if (st && st.isFile()) out.push({ kind: k, file: f });
+    const kindDir = path.join(base, k);
+    const kSt = lexists(kindDir);
+    if (!kSt || !kSt.isDirectory() || kSt.isSymbolicLink()) continue;
+
+    let ents = [];
+    try { ents = fs.readdirSync(kindDir, { withFileTypes: true }); } catch { continue; }
+    for (const e of ents.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+      if (e.name.startsWith('.')) continue;
+      if (e.isDirectory()) {
+        const sc = dirToScope(e.name);
+        if (sc !== null) {
+          let f; try { f = safeFile(root, k, id, sc); } catch { continue; }
+          const st = lexists(f);
+          if (st && st.isFile()) out.push({ kind: k, file: f });
+        }
+      }
+    }
+
+    let flatF;
+    try { flatF = safeFile(root, k, id); } catch { continue; }
+    const flatSt = lexists(flatF);
+    if (flatSt && flatSt.isFile()) out.push({ kind: k, file: flatF });
   }
   return out;
 }
@@ -120,11 +147,17 @@ export function put(input, opts = {}) {
   meta.updated = today;
   const v = validate(meta, body, { probeAllow: probeAllow() });
   if (v.errors.length) return { ok: false, errors: v.errors, warnings: v.warnings };
-  let f; try { f = safeFile(root, meta.kind, meta.id); } catch (e) { return { ok: false, errors: [e.message], warnings: v.warnings }; }
+  let f; try { f = safeFile(root, meta.kind, meta.id, meta.scope); } catch (e) { return { ok: false, errors: [e.message], warnings: v.warnings }; }
   const text = stringify(meta, body);
   if (!opts.dryRun) {
-    if (same) writeAtomic(f, text); // --replace ban da co: tmp + rename (ghi de co chu dich)
-    else {
+    if (same) {
+      writeAtomic(f, text); // --replace ban da co: tmp + rename (ghi de co chu dich)
+      for (const ex of existing) {
+        if (path.resolve(ex.file) !== path.resolve(f)) {
+          try { fs.rmSync(ex.file, { force: true }); } catch {}
+        }
+      }
+    } else {
       // Tao moi: doc quyen tai buoc ghi (khong chi check-then-act) -> 2 put cung id song song chi 1 thanh cong.
       try { writeNew(f, text); } catch (e) {
         if (e.code === 'EEXIST') return { ok: false, errors: [`id da ton tai (${meta.kind}, tao dong thoi); dung --replace`], warnings: v.warnings };
@@ -152,25 +185,42 @@ export function get(id, opts = {}) {
   return { ok: true, file: hit.file, kind: hit.kind, meta: p.meta, body: p.body, text: r.text, cut: r.cut };
 }
 
-/** Duyet vault co tran: tra {notes:[{kind,id,file,meta,body,error,cut}], truncated}. */
+/** Duyet vault co tran: tra {notes:[{kind,id,file,meta,body,error,cut,scopeDir}], truncated}. */
 export function scan(opts = {}) {
   const root = resolveRoot(opts.root);
   const t0 = Date.now(), tmo = (opts.timeoutS || 10) * 1000, cap = opts.maxFiles || READ_CAP.files;
+  const maxBytes = opts.maxBytes || READ_CAP.fileBytes;
   const notes = []; let truncated = null;
   const baseSt = lexists(root);
   if (!baseSt || baseSt.isSymbolicLink()) return { root, notes, truncated };
   outer: for (const kind of opts.kind ? [opts.kind] : KINDS) {
     const dir = path.join(root, kind); const st = lexists(dir);
-    if (!st || !st.isDirectory()) continue;
+    if (!st || !st.isDirectory() || st.isSymbolicLink()) continue;
     let ents = []; try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const e of ents.sort((a, b) => (a.name < b.name ? -1 : 1))) {
       if (Date.now() - t0 > tmo) { truncated = 'timeout'; break outer; }
       if (notes.length >= cap) { truncated = `limit ${cap} files`; break outer; }
-      if (!e.isFile() || !e.name.endsWith('.md')) continue;
-      const file = path.join(dir, e.name);
-      let r; try { r = readVaultFile(file); } catch { continue; }
-      const p = parse(r.text);
-      notes.push({ kind, id: e.name.slice(0, -3), file, meta: p.meta, body: p.body, error: p.error, cut: r.cut });
+      if (e.name.startsWith('.')) continue;
+      if (e.isFile() && e.name.endsWith('.md')) {
+        const file = path.join(dir, e.name);
+        let r; try { r = readVaultFile(file, maxBytes); } catch { continue; }
+        const p = parse(r.text);
+        notes.push({ kind, id: e.name.slice(0, -3), file, meta: p.meta, body: p.body, error: p.error, cut: r.cut, scopeDir: null });
+      } else if (e.isDirectory()) {
+        const subDir = path.join(dir, e.name);
+        const subSt = lexists(subDir);
+        if (!subSt || !subSt.isDirectory() || subSt.isSymbolicLink()) continue;
+        let subEnts = []; try { subEnts = fs.readdirSync(subDir, { withFileTypes: true }); } catch { continue; }
+        for (const se of subEnts.sort((a, b) => (a.name < b.name ? -1 : 1))) {
+          if (Date.now() - t0 > tmo) { truncated = 'timeout'; break outer; }
+          if (notes.length >= cap) { truncated = `limit ${cap} files`; break outer; }
+          if (se.name.startsWith('.') || !se.isFile() || !se.name.endsWith('.md')) continue;
+          const subFile = path.join(subDir, se.name);
+          let r; try { r = readVaultFile(subFile, maxBytes); } catch { continue; }
+          const p = parse(r.text);
+          notes.push({ kind, id: se.name.slice(0, -3), file: subFile, meta: p.meta, body: p.body, error: p.error, cut: r.cut, scopeDir: e.name });
+        }
+      }
     }
   }
   return { root, notes, truncated };
@@ -320,6 +370,10 @@ export function check(opts = {}) {
     if (n.cut) add(warnings, 'file qua lon, chi doc phan dau');
     if (n.meta.id !== n.id) add(errors, `id frontmatter (${n.meta.id}) khac ten file`);
     if (n.meta.kind !== n.kind) add(errors, `kind frontmatter (${n.meta.kind}) khac thu muc`);
+    if (n.scopeDir !== null && n.scopeDir !== undefined) {
+      const expScope = n.meta.scope || 'global';
+      if (dirToScope(n.scopeDir) !== expScope) add(errors, 'scope-dir lech frontmatter');
+    }
     const v = validate(n.meta, n.body, { probeAllow: allow });
     for (const x of v.errors) add(errors, x);
     for (const x of v.warnings) add(warnings, x);
@@ -345,7 +399,7 @@ export function prune(opts = {}) {
   if (opts.apply) {
     for (const n of cands) {
       try {
-        const f = safeFile(s.root, n.kind, n.id);
+        const f = n.file || safeFile(s.root, n.kind, n.id, n.meta.scope);
         if (n.cut) throw new Error('file qua lon');
         writeAtomic(f, stringify({ ...n.meta, status: 'archived', updated: today }, n.body));
         applied.push(n.id);
@@ -353,4 +407,28 @@ export function prune(opts = {}) {
     }
   }
   return { root: s.root, candidates: cands.map((n) => ({ id: n.id, kind: n.kind, recheck: n.meta.recheck || null, status: n.meta.status || null })), applied, failed, apply: !!opts.apply, truncated: s.truncated };
+}
+
+/** Di chuyen cac file tu dang flat hoac sai scope sang dung thu muc <root>/<kind>/<scopeToDir(scope)>/<id>.md. */
+export function migrate(rootOrOpts = {}, opts = {}) {
+  const isStr = typeof rootOrOpts === 'string';
+  const root = resolveRoot(isStr ? rootOrOpts : rootOrOpts.root);
+  const options = isStr ? opts : rootOrOpts;
+  const s = scan({ ...options, root });
+  const moved = [];
+  for (const n of s.notes) {
+    if (n.error || !n.id) continue;
+    const scope = (n.meta && n.meta.scope) || 'global';
+    let targetFile;
+    try { targetFile = safeFile(root, n.kind, n.id, scope); } catch { continue; }
+    if (path.resolve(n.file) !== path.resolve(targetFile)) {
+      if (options.apply === true) {
+        fs.mkdirSync(path.dirname(targetFile), { recursive: true });
+        renameRetry(n.file, targetFile);
+        try { fs.rmdirSync(path.dirname(n.file)); } catch {}
+      }
+      moved.push({ id: n.id, from: n.file, to: targetFile });
+    }
+  }
+  return { ok: true, dryRun: options.apply !== true, moved, count: moved.length };
 }
