@@ -300,8 +300,8 @@ export function context(f = {}, opts = {}) {
 /** Ban do tri thuc thu gon (Zero-Scan). Loc active, bo stale/secret, scope (OR), tags (AND). rankItems. */
 export function map(rootOrOpts = {}, opts = {}) {
   const isStr = typeof rootOrOpts === 'string';
-  const root = resolveRoot(isStr ? rootOrOpts : rootOrOpts.root);
-  const options = isStr ? opts : rootOrOpts;
+  const root = resolveRoot(isStr ? rootOrOpts : (rootOrOpts?.root || opts?.root));
+  const options = isStr ? (opts || {}) : { ...(rootOrOpts || {}), ...(opts || {}) };
   const idx = syncIndex(root, options);
   const candidates = filterCandidates(idx.items, { ...options, today: todayStr(options.now) }, { isStale, noteLine });
   const ranked = rankItems(candidates, options.text || '');
