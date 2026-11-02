@@ -27,7 +27,7 @@ export const DEFAULTS = {
   maxPromptChars: 4000,
   sessionTags: ['pinned'], // SessionStart (khong co prompt): chi chen muc co tag nay
   webTrustTags: ['pinned'], // muc co nguon web chi duoc chen khi co mot tag nay (nguoi da duyet); van giu nhan [nguon ngoai]
-  root: '', // rong = goc vault mac dinh (config knowledge.root / data/memory)
+  root: '', // rong = goc vault mac dinh (config knowledge.root / data/knowledge/memory)
   stopwords: ['the', 'and', 'for', 'with', 'this', 'that', 'from', 'into', 'have', 'has', 'are', 'was', 'not', 'you', 'your', 'can', 'please', 'what', 'how', 'why', 'when', 'where', 'which', 'will', 'should', 'would', 'could', 'all', 'any', 'one', 'out', 'use', 'make',
     'cho', 'cua', 'khong', 'nhung', 'trong', 'mot', 'cac', 'nay', 'kia', 'thi', 'duoc', 'lam', 'voi', 'nhu', 'roi', 'xem', 'hay', 'giup', 'minh', 'toi', 'ban', 'neu', 'sau', 'truoc', 'them', 'bang', 'theo', 'khi', 'can', 'phai', 'nao', 'gi', 'vao', 'ra', 'len', 'xuong', 'dang', 'con', 'nua', 'cung', 'viec', 'chay', 'sua'],
 };

@@ -54,7 +54,9 @@
       "zone": "knowledge",
       "class": "durable",
       "owner": "harness/knowledge/vault",
-      "target": "knowledge/memory"
+      "target": "knowledge/memory",
+      "path": "knowledge/memory",
+      "legacy": "memory"
     },
     "evolve": {
       "zone": "knowledge",

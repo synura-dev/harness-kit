@@ -1,5 +1,5 @@
 // harness/knowledge/vault/vault.mjs - I/O vault: <root>/<kind>/<id>.md. Cong ghi an toan (validate, chong traversal/symlink, secret, atomic).
-// Goc: opts.root > config knowledge.root (config/knowledge/*.json | env HARNESS_KNOWLEDGE_ROOT) > registry 'memory' (dataReadRoots goc dau, khong co thi dataPathFor; HUB_DATA_DIR).
+// Goc: opts.root > config knowledge.root (config/knowledge/*.json | env HARNESS_KNOWLEDGE_ROOT) > registry 'memory' (dataReadRoots goc dau, khong co thi dataPathFor; HUB_DATA_DIR hoac data/knowledge/memory).
 import fs from 'node:fs';
 import path from 'node:path';
 import { workspaceRoot, isInside } from '../../core/io/paths.mjs';
@@ -9,10 +9,11 @@ import { loadConfig } from '../../core/config/config.mjs';
 import { KINDS, ID_RE, DEFAULT_PROBE_ALLOW, validate, validateProbe, isStale, bodyLinks, todayStr, addDays, findSecret, metaText, isWebSource } from './schema.mjs';
 import { parse, stringify } from './frontmatter.mjs';
 import { probeNotes } from './probe.mjs';
+import { rankItems } from './rank.mjs';
 
 const READ_CAP = Object.freeze({ files: 2000, fileBytes: 65536 });
 
-function resolveRoot(opt) {
+export function resolveRoot(opt) {
   if (opt) return path.resolve(String(opt));
   try {
     const { config } = loadConfig('knowledge', { defaults: { root: '' } });
@@ -186,9 +187,10 @@ export function query(f = {}, opts = {}) {
   const s = scan({ ...opts, kind: f.kind });
   const text = f.text ? String(f.text).toLowerCase() : null;
   const tags = (f.tags || []).filter(Boolean);
+  const scopes = Array.isArray(f.scope) ? f.scope.filter(Boolean) : (Array.isArray(f.scopes) ? f.scopes.filter(Boolean) : (typeof f.scope === 'string' && f.scope.trim() ? [f.scope.trim()] : null));
   const hits = s.notes.filter((n) => {
     const m = n.meta;
-    if (f.scope && m.scope !== f.scope) return false;
+    if (scopes && scopes.length && !scopes.includes(m.scope)) return false;
     if (f.status && f.status !== 'any' ? m.status !== f.status : !f.status && m.status === 'archived') return false;
     if (tags.length && !tags.every((t) => Array.isArray(m.tags) && m.tags.includes(t))) return false;
     const st = isStale(m, today);
@@ -204,6 +206,87 @@ export function query(f = {}, opts = {}) {
 }
 
 /** Kiem: sai schema, id/kind lech ten file/thu muc, link gay, qua recheck. Tra {errors:[{id,msg}], warnings:[...]}. */
+/**
+ * Context: loc active, bo stale/secret, cham diem theo text (id/tag=3, line/source=1; rule truoc; minScore),
+ * khong text thi kind(rule>lesson>decision>fact>ref) roi updated moi nhat.
+ * Cat theo maxChars; kind=ref chi hien id + quote (khong nap body).
+ */
+export function context(f = {}, opts = {}) {
+  const today = todayStr(opts.now);
+  const s = scan(opts);
+  const tags = (f.tags || []).filter(Boolean);
+  const scopes = Array.isArray(f.scope) ? f.scope.filter(Boolean) : (Array.isArray(f.scopes) ? f.scopes.filter(Boolean) : (typeof f.scope === 'string' && f.scope.trim() ? [f.scope.trim()] : null));
+
+  const valid = s.notes.filter((n) => {
+    const m = n.meta;
+    if (m.status !== 'active') return false;
+    if (isStale(m, today)) return false;
+    if (scopes && scopes.length && !scopes.includes(m.scope)) return false;
+    if (tags.length && !tags.every((t) => Array.isArray(m.tags) && m.tags.includes(t))) return false;
+    if (findSecret([metaText(m), n.body].join('\n'))) return false;
+    return true;
+  });
+
+  const prepared = valid.map((n) => ({
+    ...n,
+    line: noteLine(n),
+    source: typeof n.meta.source === 'string' ? n.meta.source : '',
+    updated: n.meta.updated || n.meta.created || '',
+  }));
+
+  const ranked = rankItems(prepared, { text: f.text, minScore: typeof f.minScore === 'number' ? f.minScore : 2 });
+  const limit = f.limit > 0 ? f.limit : 5;
+  const maxChars = f.maxChars > 0 ? f.maxChars : 1200;
+
+  const chosen = [];
+  const blocks = [];
+  let totalChars = 0;
+
+  for (const it of ranked) {
+    if (chosen.length >= limit) break;
+    const content = it.kind === 'ref' ? (it.meta.quote ? `> ${it.meta.quote}` : '') : String(it.body || '').trim();
+    const block = `### ${it.id} [${it.kind}]\n${content}`.trim();
+    const addLen = (blocks.length ? 2 : 0) + block.length;
+    if (totalChars + addLen <= maxChars) {
+      blocks.push(block);
+      totalChars += addLen;
+      chosen.push(it);
+    } else if (chosen.length === 0) {
+      const cutBlock = block.slice(0, maxChars);
+      blocks.push(cutBlock);
+      totalChars = cutBlock.length;
+      chosen.push(it);
+      break;
+    } else {
+      break;
+    }
+  }
+
+  const md = blocks.join('\n\n');
+  const items = chosen.map((n) => {
+    const base = {
+      id: n.id,
+      kind: n.kind,
+      scope: n.meta.scope || null,
+      tags: n.meta.tags || [],
+      status: n.meta.status || null,
+      source: typeof n.meta.source === 'string' ? n.meta.source : null,
+      created: n.meta.created || null,
+      updated: n.meta.updated || null,
+    };
+    if (n.score !== undefined) base.score = n.score;
+    if (n.kind === 'ref') {
+      base.quote = n.meta.quote || '';
+    } else {
+      base.body = String(n.body || '').trim();
+      if (n.meta.quote) base.quote = n.meta.quote;
+    }
+    return base;
+  });
+
+  return { root: s.root, total: ranked.length, count: items.length, items, md, truncated: s.truncated };
+}
+
 export function check(opts = {}) {
   const today = todayStr(opts.now);
   const s = scan(opts);

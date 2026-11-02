@@ -11,14 +11,14 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 import { samePath } from '../../core/io/paths.mjs';
 import { normKind } from './schema.mjs';
 import { parse } from './frontmatter.mjs';
-import { put, get, query, check, prune } from './vault.mjs';
+import { put, get, query, context, check, prune } from './vault.mjs';
 
 const BOOL = new Set(['replace', 'dry-run', 'stdin', 'stale', 'fresh', 'apply', 'probe']);
 const MAX_INPUT = 65536;
-const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | query [text] [--kind --scope --tag --status --text --stale|--fresh --limit] | check [--probe] | prune [--apply]  (--root <dir>)';
+const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | query [text] [...] | context --scope <scope> [...] | check [--probe] | prune [--apply]  (--root <dir>)';
 
 function parseFlags(rest) {
-  const f = { _: [], tag: [] };
+  const f = { _: [], tag: [], scope: [] };
   for (let i = 0; i < rest.length; i++) {
     const a = rest[i];
     if (!a.startsWith('--')) { f._.push(a); continue; }
@@ -28,7 +28,8 @@ function parseFlags(rest) {
     else if (BOOL.has(k)) v = true;
     else v = rest[++i];
     if (v === undefined) throw new Error(`thieu gia tri cho --${k}`);
-    if (k === 'tag') f.tag.push(...String(v).split(',').map((x) => x.trim()).filter(Boolean));
+    if (k === 'tag' || k === 'tags') f.tag.push(...String(v).split(',').map((x) => x.trim()).filter(Boolean));
+    else if (k === 'scope' || k === 'scopes') f.scope.push(...String(v).split(',').map((x) => x.trim()).filter(Boolean));
     else f[k] = v;
   }
   return f;
@@ -44,8 +45,9 @@ function readInput(file) {
 function buildInput(f) {
   let meta = {}, body = '';
   if (f.from) { const p = parse(readInput(f.from)); if (p.error) throw new Error(`--from: ${p.error}`); meta = { ...p.meta }; body = p.body; }
-  const map = { id: 'id', kind: 'kind', scope: 'scope', status: 'status', confidence: 'confidence', source: 'source', quote: 'quote', fetched: 'fetched', recheck: 'recheck', 'ttl-days': 'ttl_days' };
+  const map = { id: 'id', kind: 'kind', status: 'status', confidence: 'confidence', source: 'source', quote: 'quote', fetched: 'fetched', recheck: 'recheck', 'ttl-days': 'ttl_days' };
   for (const [flag, key] of Object.entries(map)) if (f[flag] !== undefined) meta[key] = String(f[flag]);
+  if (f.scope.length) meta.scope = f.scope[f.scope.length - 1];
   if (f['probe-json'] !== undefined) { try { meta.probe = JSON.parse(String(f['probe-json'])); } catch { throw new Error('--probe-json khong phai JSON'); } }
   if (f.tags !== undefined) meta.tags = splitCsv(f.tags);
   if (f.tag.length) meta.tags = [...new Set([...(meta.tags || []), ...f.tag])];
@@ -78,12 +80,25 @@ export function run(argv, emitOpts = {}) {
       return { code: 0, ...emit({ summary: r.text, data: { id: arg, kind: r.kind, file: r.file, meta: r.meta, body: r.body }, raw: r.text, truncated: r.cut ? `max-bytes ${o.maxBytes}` : null }, o) };
     }
     if (cmd === 'query') {
-      const q = { kind: f.kind ? normKind(f.kind) : undefined, scope: f.scope, tags: f.tag, status: f.status, text: f.text || arg, stale: !!f.stale, fresh: !!f.fresh, limit: Number(f.limit) || 10 };
+      const q = { kind: f.kind ? normKind(f.kind) : undefined, scope: f.scope.length ? f.scope : undefined, tags: f.tag, status: f.status, text: f.text || arg, stale: !!f.stale, fresh: !!f.fresh, limit: Number(f.limit) || 10 };
       const r = query(q, base);
       const lines = r.items.map((x) => `${x.id} [${x.kind}${x.stale ? ',het-han' : ''}] ${x.line}`);
       const more = r.total > r.items.length ? `(${r.items.length}/${r.total}, tang --limit)` : `(${r.total})`;
       const summary = (lines.length ? lines.join('\n') + '\n' : '(khong co)\n') + more;
       return { code: 0, ...emit({ summary, data: { total: r.total, items: r.items }, truncated: r.truncated }, o) };
+    }
+    if (cmd === 'context') {
+      if (!f.scope.length) { err('knowledge context: thieu --scope'); return { code: 2 }; }
+      const q = {
+        scope: f.scope,
+        text: f.text || (arg && !arg.startsWith('--') ? arg : undefined),
+        tags: f.tag,
+        limit: Number(f.limit) || 5,
+        maxChars: Number(f['max-chars']) || 1200,
+      };
+      const r = context(q, base);
+      if (f.format === 'json') o.json = true;
+      return { code: 0, ...emit({ summary: r.md || '(khong co tri thuc phu hop)\n', data: { total: r.total, count: r.count, items: r.items }, raw: r.md }, o) };
     }
     if (cmd === 'check') {
       const r = check({ ...base, probe: !!f.probe });
