@@ -19,7 +19,6 @@ A Claude Code plugin that adds a deterministic constraint layer around AI agents
 /plugin install harness-kit@synura
 ```
 
-The repository is currently private, so `marketplace add` and updates need GitHub credentials (git credential) with read access.
 
 No further setup is needed. The plugin provides the Claude hooks, and the `harness` CLI is on the Bash tool's PATH.
 
