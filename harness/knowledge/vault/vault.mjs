@@ -287,6 +287,27 @@ export function context(f = {}, opts = {}) {
   return { root: s.root, total: ranked.length, count: items.length, items, md, truncated: s.truncated };
 }
 
+/** Tra cuu lien ket cua 1 ghi chu: outgoing (links[] + refs[] cua note), incoming (backlinks tu scan). */
+export function links(id, opts = {}) {
+  const root = resolveRoot(opts.root);
+  if (typeof id !== 'string' || !ID_RE.test(id)) return { ok: false, error: 'id khong hop le' };
+  const target = get(id, { ...opts, root });
+  if (!target.ok) return target;
+
+  const metaLinks = Array.isArray(target.meta.links) ? target.meta.links : [];
+  const metaRefs = Array.isArray(target.meta.refs) ? target.meta.refs : [];
+  const outgoing = [...metaLinks, ...metaRefs];
+
+  const s = scan({ ...opts, root });
+  const incoming = [];
+  for (const n of s.notes) {
+    const noteLinks = new Set([...(Array.isArray(n.meta.links) ? n.meta.links : []), ...bodyLinks(n.body)]);
+    if (noteLinks.has(id)) incoming.push(n.id);
+  }
+
+  return { ok: true, id, kind: target.kind, outgoing, incoming, links: metaLinks, refs: metaRefs, truncated: s.truncated };
+}
+
 export function check(opts = {}) {
   const today = todayStr(opts.now);
   const s = scan(opts);

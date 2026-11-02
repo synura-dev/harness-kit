@@ -1,8 +1,8 @@
 // harness/knowledge/vault/cli.mjs - domain `knowledge` (vault tri thuc). Goi qua: node harness/cli/harness.mjs knowledge <lenh> ...
-// put  --id <kebab> --kind rule|fact|ref|decision|lesson [--scope global|project:<id>|role:<ten>] [--tags a,b] [--links a,b]
+// put  --id <kebab> --kind rule|fact|ref|decision|lesson [--scope global|project:<id>|role:<ten>] [--tags a,b] [--links a,b] [--refs a,b]
 //      [--source <url|text>] [--quote "<=200"] [--fetched YYYY-MM-DD] [--recheck YYYY-MM-DD | --ttl-days N] [--confidence low|med|high]
 //      [--status active|stale|archived] [--body "..." | --body-file f | --stdin] [--from note.md] [--replace] [--dry-run]
-// get <id> [--kind k] | query [text] [--kind --scope --tag t (lap) --status s|any --text --stale|--fresh --limit N]
+// get <id> [--kind k] | links <id> [--format text|json] | query [text] [--kind --scope --tag t (lap) --status s|any --text --stale|--fresh --limit N]
 // check [--probe] | prune [--apply]. put: [--probe-json '{"cmd":["node","--version"],"expect":"/^v\d+/","timeoutS":5}'] (hoac `probe:` trong --from).
 //  Chung: --root <dir> --json --raw --max-bytes N --timeout-s N.
 import fs from 'node:fs';
@@ -11,11 +11,11 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 import { samePath } from '../../core/io/paths.mjs';
 import { normKind } from './schema.mjs';
 import { parse } from './frontmatter.mjs';
-import { put, get, query, context, check, prune } from './vault.mjs';
+import { put, get, links, query, context, check, prune } from './vault.mjs';
 
 const BOOL = new Set(['replace', 'dry-run', 'stdin', 'stale', 'fresh', 'apply', 'probe']);
 const MAX_INPUT = 65536;
-const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | query [text] [...] | context --scope <scope> [...] | check [--probe] | prune [--apply]  (--root <dir>)';
+const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | links <id> [...] | query [text] [...] | context --scope <scope> [...] | check [--probe] | prune [--apply]  (--root <dir>)';
 
 function parseFlags(rest) {
   const f = { _: [], tag: [], scope: [] };
@@ -52,6 +52,7 @@ function buildInput(f) {
   if (f.tags !== undefined) meta.tags = splitCsv(f.tags);
   if (f.tag.length) meta.tags = [...new Set([...(meta.tags || []), ...f.tag])];
   if (f.links !== undefined) meta.links = splitCsv(f.links);
+  if (f.refs !== undefined) meta.refs = splitCsv(f.refs);
   if (meta.kind !== undefined) meta.kind = normKind(meta.kind);
   if (f.body !== undefined) body = String(f.body);
   else if (f['body-file']) body = readInput(f['body-file']);
@@ -78,6 +79,15 @@ export function run(argv, emitOpts = {}) {
       const r = get(arg, { ...base, kind: f.kind ? normKind(f.kind) : undefined, maxBytes: o.maxBytes });
       if (!r.ok) { err(`knowledge get: ${r.error}`); return { code: 1 }; }
       return { code: 0, ...emit({ summary: r.text, data: { id: arg, kind: r.kind, file: r.file, meta: r.meta, body: r.body }, raw: r.text, truncated: r.cut ? `max-bytes ${o.maxBytes}` : null }, o) };
+    }
+    if (cmd === 'links' && arg) {
+      if (f.format === 'json') o.json = true;
+      const r = links(arg, { ...base, maxBytes: o.maxBytes });
+      if (!r.ok) { err(`knowledge links: ${r.error}`); return { code: 1 }; }
+      const outLines = r.outgoing.length ? r.outgoing.map((x) => `  - ${x}`).join('\n') : '  (khong co)';
+      const inLines = r.incoming.length ? r.incoming.map((x) => `  - ${x}`).join('\n') : '  (khong co)';
+      const summary = [`Outgoing (${r.outgoing.length}):`, outLines, `Incoming (${r.incoming.length}):`, inLines].join('\n');
+      return { code: 0, ...emit({ summary, data: { id: r.id, outgoing: r.outgoing, incoming: r.incoming }, truncated: r.truncated }, o) };
     }
     if (cmd === 'query') {
       const q = { kind: f.kind ? normKind(f.kind) : undefined, scope: f.scope.length ? f.scope : undefined, tags: f.tag, status: f.status, text: f.text || arg, stale: !!f.stale, fresh: !!f.fresh, limit: Number(f.limit) || 10 };

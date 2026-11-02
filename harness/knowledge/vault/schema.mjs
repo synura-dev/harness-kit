@@ -4,8 +4,8 @@ const KIND_ALIASES = Object.freeze({ reference: 'ref', facts: 'fact', rules: 'ru
 const CONFIDENCE =Object.freeze(['low', 'med', 'high']);
 export const STATUS = Object.freeze(['active', 'stale', 'archived']);
 /** Thu tu truong frontmatter khi ghi (on dinh, de diff). */
-export const FIELDS = Object.freeze(['id', 'kind', 'scope', 'status', 'confidence', 'tags', 'links', 'source', 'quote', 'fetched', 'recheck', 'probe', 'created', 'updated']);
-export const LIMITS = Object.freeze({ idMax: 80, quoteMax: 200, sourceMax: 500, bodyMaxBytes: 32768, tagsMax: 20, linksMax: 50 });
+export const FIELDS = Object.freeze(['id', 'kind', 'scope', 'status', 'confidence', 'tags', 'links', 'refs', 'source', 'quote', 'fetched', 'recheck', 'probe', 'created', 'updated']);
+export const LIMITS = Object.freeze({ idMax: 80, quoteMax: 200, sourceMax: 500, bodyMaxBytes: 32768, tagsMax: 20, linksMax: 50, refsMax: 50 });
 
 /** Probe (frontmatter `probe: {"cmd":[argv],"expect":"<regex|substring>","timeoutS":N}`): chay lenh de doi chieu fact voi thuc te (knowledge check --probe). */
 export const PROBE = Object.freeze({ cmdMax: 16, tokenMax: 100, expectMax: 200, timeoutDefaultS: 5, timeoutMaxS: 30, outputMax: 4096 });
@@ -33,6 +33,7 @@ export function validateProbe(p, allow = DEFAULT_PROBE_ALLOW) {
 
 export const ID_RE = /^[a-z0-9]+(-[a-z0-9]+)*$/;
 const TAG_RE = /^[a-z0-9][a-z0-9_/-]{0,59}$/;
+export const REF_RE = /^project:[a-z0-9_-]+\/(notes|facts)\/[a-z0-9_.-]+$/;
 const SCOPE_RE = /^(global|project:[a-z0-9][a-z0-9._-]{0,59}|role:[a-z0-9][a-z0-9_-]{0,59})$/;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const STAMP_RE = /^\d{4}-\d{2}-\d{2}(T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?)?$/;
@@ -104,6 +105,14 @@ export function validate(meta, body = '', opts = {}) {
     const re = k === 'tags' ? TAG_RE : ID_RE;
     const bad = m[k].filter((x) => typeof x !== 'string' || !re.test(x));
     if (bad.length) e.push(`${k} khong hop le: ${bad.slice(0, 3).join(', ')}`);
+  }
+  if (m.refs !== undefined) {
+    if (!Array.isArray(m.refs) || m.refs.length > LIMITS.refsMax) {
+      e.push(`refs phai la mang <= ${LIMITS.refsMax} muc`);
+    } else {
+      const bad = m.refs.filter((x) => typeof x !== 'string' || !REF_RE.test(x));
+      if (bad.length) e.push(`refs khong hop le: ${bad.slice(0, 3).join(', ')}`);
+    }
   }
   if (m.source !== undefined && (typeof m.source !== 'string' || m.source.length > LIMITS.sourceMax || /[\r\n]/.test(m.source))) e.push(`source phai la 1 dong <= ${LIMITS.sourceMax} ky tu`);
   if (m.quote !== undefined && (typeof m.quote !== 'string' || m.quote.length > LIMITS.quoteMax || /[\r\n]/.test(m.quote))) e.push(`quote phai la 1 dong <= ${LIMITS.quoteMax} ky tu`);
