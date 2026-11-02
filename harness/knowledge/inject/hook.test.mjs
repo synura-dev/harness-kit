@@ -146,20 +146,24 @@ test('SubagentStart: nap tri thuc theo scope role:<agentType> va global, fail-op
   // Payload chi co agent_type (suy doan SubagentStart)
   const out1 = handle({ agent_type: 'builder' }, { root, now: NOW });
   const j1 = JSON.parse(out1);
-  expect(j1.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
-  expect(j1.hookSpecificOutput.additionalContext).toContain('global-rule [rule]');
+  expect(j1.hookSpecificOutput.additionalContext).toContain('[builder-rule] (rule)');
+  expect(j1.hookSpecificOutput.additionalContext).toContain('[global-rule] (rule)');
+  expect(j1.hookSpecificOutput.additionalContext).toContain('Chi tiet: harness knowledge get <id>');
   expect(j1.hookSpecificOutput.additionalContext).not.toContain('reviewer-rule');
+  expect(j1.hookSpecificOutput.additionalContext.length).toBeLessThanOrEqual(600);
 
   // Payload day du hook_event_name + agent_type
   const out2 = handle({ hook_event_name: 'SubagentStart', agent_type: 'builder' }, { root, now: NOW });
   const j2 = JSON.parse(out2);
   expect(j2.hookSpecificOutput.hookEventName).toBe('SubagentStart');
-  expect(j2.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+  expect(j2.hookSpecificOutput.additionalContext).toContain('[builder-rule] (rule)');
+  expect(j2.hookSpecificOutput.additionalContext.length).toBeLessThanOrEqual(600);
 
   // Goi dang hop dong module handle('SubagentStart', payload, ctx)
   const r1 = handle('SubagentStart', { agent_type: 'builder' }, { root, now: NOW });
-  expect(r1.additionalContext).toContain('builder-rule [rule]');
-  expect(r1.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+  expect(r1.additionalContext).toContain('[builder-rule] (rule)');
+  expect(r1.hookSpecificOutput.additionalContext).toContain('[builder-rule] (rule)');
+  expect(r1.additionalContext.length).toBeLessThanOrEqual(600);
 
   // Chay that qua stdin tien trinh con HOOK
   const env = { ...process.env, HARNESS_KNOWLEDGE_ROOT: root };
@@ -171,7 +175,8 @@ test('SubagentStart: nap tri thuc theo scope role:<agentType> va global, fail-op
   });
   expect(subproc.status).toBe(0);
   const jProc = JSON.parse(subproc.stdout);
-  expect(jProc.hookSpecificOutput.additionalContext).toContain('builder-rule [rule]');
+  expect(jProc.hookSpecificOutput.additionalContext).toContain('[builder-rule] (rule)');
+  expect(jProc.hookSpecificOutput.additionalContext.length).toBeLessThanOrEqual(600);
 
   // Khong co agent_type -> fail-open khong chen
   expect(handle({ hook_event_name: 'SubagentStart' }, { root, now: NOW })).toBe('');

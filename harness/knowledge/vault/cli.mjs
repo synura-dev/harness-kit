@@ -11,11 +11,11 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 import { samePath } from '../../core/io/paths.mjs';
 import { normKind } from './schema.mjs';
 import { parse } from './frontmatter.mjs';
-import { put, get, links, query, context, check, prune, migrate, index } from './vault.mjs';
+import { put, get, links, query, context, map, check, prune, migrate, index } from './vault.mjs';
 
-const BOOL = new Set(['replace', 'dry-run', 'stdin', 'stale', 'fresh', 'apply', 'probe', 'rebuild']);
+const BOOL = new Set(['replace', 'dry-run', 'stdin', 'stale', 'fresh', 'apply', 'probe', 'rebuild', 'compact']);
 const MAX_INPUT = 65536;
-const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | links <id> [...] | query [text] [...] | context --scope <scope> [...] | index [--rebuild] | check [--probe] | prune [--apply] | migrate [--apply]  (--root <dir>)';
+const USAGE = 'usage: knowledge put --id <id> --kind <k> [...] | get <id> | links <id> [...] | query [text] [...] | context --scope <scope> [...] | map [...] | index [--rebuild] | check [--probe] | prune [--apply] | migrate [--apply]  (--root <dir>)';
 
 function parseFlags(rest) {
   const f = { _: [], tag: [], scope: [] };
@@ -104,11 +104,26 @@ export function run(argv, emitOpts = {}) {
         text: f.text || (arg && !arg.startsWith('--') ? arg : undefined),
         tags: f.tag,
         limit: Number(f.limit) || 5,
-        maxChars: Number(f['max-chars']) || 1200,
+        maxChars: Number(f['max-chars']) || (f.compact ? 600 : 1200),
+        compact: !!f.compact,
       };
       const r = context(q, base);
       if (f.format === 'json') o.json = true;
-      return { code: 0, ...emit({ summary: r.md || '(khong co tri thuc phu hop)\n', data: { total: r.total, count: r.count, items: r.items }, raw: r.md }, o) };
+      const outText = r.text || r.md || '(khong co tri thuc phu hop)\n';
+      return { code: 0, ...emit({ summary: outText, data: { total: r.total, count: r.count, items: r.items }, raw: r.text || r.md }, o) };
+    }
+    if (cmd === 'map') {
+      const q = {
+        scope: f.scope.length ? f.scope : undefined,
+        text: f.text || (arg && !arg.startsWith('--') ? arg : undefined),
+        tags: f.tag,
+        limit: Number(f.limit) || 25,
+        maxChars: Number(f['max-chars']) || 800,
+      };
+      const r = map(base.root, { ...base, ...q });
+      if (f.format === 'json' || f.json) o.json = true;
+      const outText = r.text || '(khong co tri thuc phu hop)\n';
+      return { code: 0, ...emit({ summary: outText, data: { ok: true, count: r.count, total: r.total, items: r.items, text: r.text }, raw: r.text, truncated: r.truncated }, o) };
     }
     if (cmd === 'index') {
       const r = index(base.root, { ...base, rebuild: !!f.rebuild });

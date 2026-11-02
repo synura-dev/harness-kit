@@ -49,10 +49,11 @@ const itemTs = (item) => String(item.updated || (item.meta && item.meta.updated)
  * @returns {Array} Danh sach da xep hang kem truong score (khi co text/kws)
  */
 export function rankItems(items = [], opts = {}) {
+  const options = typeof opts === 'string' ? { text: opts } : (opts || {});
   const list = [...items];
-  const kws = opts.kws || (opts.text ? keywords(opts.text) : []);
+  const kws = options.kws || (options.text ? keywords(options.text) : []);
   if (kws.length) {
-    const minScore = typeof opts.minScore === 'number' ? opts.minScore : 2;
+    const minScore = typeof options.minScore === 'number' ? options.minScore : 2;
     const scored = [];
     for (const it of list) {
       const s = scoreItem(it, kws);
@@ -83,4 +84,104 @@ export function rankItems(items = [], opts = {}) {
     return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
   });
   return list;
+}
+
+/** Chuan hoa mang scope tu input chuoi hoac mang. */
+export const normScopes = (s) => (Array.isArray(s) ? s.filter(Boolean) : typeof s === 'string' && s.trim() ? [s.trim()] : null);
+
+/** Loc ung vien active, khong stale, khong secret, dung scope (OR) va tags (AND), kem metadata line/source/updated. */
+export function filterCandidates(items = [], opts = {}, { isStale, noteLine } = {}) {
+  const today = opts.today || '';
+  const tags = (opts.tags || opts.tag || []).filter(Boolean);
+  const scopes = normScopes(opts.scope || opts.scopes);
+  return items.filter((m) => {
+    if (m.status !== 'active' || m.secret) return false;
+    if (isStale && isStale(m, today)) return false;
+    if (scopes && scopes.length && !scopes.includes(m.scope)) return false;
+    if (tags.length && !tags.every((t) => Array.isArray(m.tags) && m.tags.includes(t))) return false;
+    return true;
+  }).map((m) => ({
+    ...m,
+    meta: m,
+    line: (noteLine && noteLine(m)) || m.title || (m.quote && m.quote.trim()) || '',
+    source: typeof m.source === 'string' ? m.source : '',
+    updated: m.updated || m.created || '',
+  }));
+}
+
+/** Chuan hoa danh sach item compact cho ket qua tra ve. */
+export function cleanCompactItems(chosen = []) {
+  return chosen.map((n) => ({
+    id: n.id, kind: n.kind, scope: n.scope || null, tags: n.tags || [], status: n.status || null,
+    source: typeof n.source === 'string' ? n.source : null, created: n.created || null, updated: n.updated || null,
+    ...(n.score !== undefined ? { score: n.score } : {}),
+    ...(n.quote ? { quote: n.quote } : {}),
+    ...(n.title ? { title: n.title } : {}),
+  }));
+}
+
+/** Dinh dang 1 dong sieu gon: - [<id>] (<kind>${tags}): <quote/title <= maxLen>. */
+export function formatCompactLine(item, maxLen = 100) {
+  const tagsList = (Array.isArray(item.tags) ? item.tags : (item.meta && Array.isArray(item.meta.tags) ? item.meta.tags : [])).filter(Boolean);
+  const tagStr = tagsList.length ? `:${tagsList.slice(0, 3).join(',')}` : '';
+  const raw = (item.quote && item.quote.trim()) || (item.title && item.title.trim()) || (item.meta && item.meta.quote && item.meta.quote.trim()) || (item.meta && item.meta.title && item.meta.title.trim()) || '';
+  const clean = String(raw).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const summary = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
+  return summary ? `- [${item.id}] (${item.kind}${tagStr}): ${summary}` : `- [${item.id}] (${item.kind}${tagStr})`;
+}
+
+/** Format context dang compact: moi note 1 dong <= 100 chars, kem footer huong dan, tong <= maxChars. */
+export function formatCompactContext(items = [], { maxChars = 600, limit = 5 } = {}) {
+  const footer = 'Chi tiet: harness knowledge get <id>';
+  const chosen = [];
+  const lines = [];
+  for (const it of items) {
+    if (chosen.length >= limit) break;
+    const line = formatCompactLine(it, 100);
+    const candidateLines = [...lines, line];
+    const candidateText = [...candidateLines, footer].join('\n');
+    if (candidateText.length <= maxChars) {
+      lines.push(line);
+      chosen.push(it);
+    } else if (chosen.length === 0) {
+      const budget = maxChars - (footer.length + 1);
+      if (budget > 10) {
+        lines.push(line.slice(0, budget));
+        chosen.push(it);
+      }
+      break;
+    } else {
+      break;
+    }
+  }
+  const text = chosen.length > 0 ? [...lines, footer].join('\n') : '';
+  return { text, items: chosen };
+}
+
+/** Format map tri thuc: moi note 1 dong <= 90 chars, kem footer map, tong <= maxChars. */
+export function formatMap(items = [], { maxChars = 800, limit = 25 } = {}) {
+  const footer = 'Chi tiet: harness knowledge get <id> | Tim: harness knowledge query --tags <tag>';
+  const chosen = [];
+  const lines = [];
+  for (const it of items) {
+    if (chosen.length >= limit) break;
+    const line = formatCompactLine(it, 90);
+    const candidateLines = [...lines, line];
+    const candidateText = [...candidateLines, footer].join('\n');
+    if (candidateText.length <= maxChars) {
+      lines.push(line);
+      chosen.push(it);
+    } else if (chosen.length === 0) {
+      const budget = maxChars - (footer.length + 1);
+      if (budget > 10) {
+        lines.push(line.slice(0, budget));
+        chosen.push(it);
+      }
+      break;
+    } else {
+      break;
+    }
+  }
+  const text = chosen.length > 0 ? [...lines, footer].join('\n') : '';
+  return { text, items: chosen };
 }

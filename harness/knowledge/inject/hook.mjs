@@ -19,6 +19,7 @@ export const DEFAULTS = {
   timeoutMs: 2000, // tran cho truy van vault (tien trinh con); hook tu thoat sau timeoutMs + 300
   maxFacts: 5,
   maxChars: 1500, // tong additionalContext
+  subagentMaxChars: 600,
   maxLineChars: 300,
   maxScan: 500, // so muc toi da lay tu vault moi lan
   minScore: 2, // diem toi thieu: khop id/tag = 3, khop y chinh/nguon = 1
@@ -107,11 +108,13 @@ function queryVault(cfg, { root, now } = {}) {
 /** Truy van context tu vault qua CLI theo role va global (tien trinh con, co timeout). Tra text chuoi hoac '' (loi/timeout -> fail-open). */
 function queryContextVault(cfg, { root, now } = {}, agentType) {
   const r0 = root || cfg.root || '';
+  const maxChars = String(cfg.subagentMaxChars ?? 600);
   const args = [
     VAULT_CLI, 'context',
     '--scope', `role:${agentType}`,
     '--scope', 'global',
-    '--max-chars', '1200',
+    '--compact',
+    '--max-chars', maxChars,
     '--limit', '5',
     '--raw',
     '--timeout-s', String(Math.max(0.1, cfg.timeoutMs / 1000)),
@@ -136,12 +139,13 @@ function fetchContext(cfg, opts, agentType) {
     try {
       const r = opts.context({
         scope: [`role:${agentType}`, 'global'],
-        maxChars: 1200,
+        compact: true,
+        maxChars: cfg.subagentMaxChars ?? 600,
         limit: 5,
         root: opts.root || cfg.root || '',
         now: opts.now,
       });
-      const md = (r && typeof r === 'object' ? r.md : String(r || '')) || '';
+      const md = (r && typeof r === 'object' ? (r.text || r.md) : String(r || '')) || '';
       return md.trim();
     } catch {
       return '';

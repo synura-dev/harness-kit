@@ -2,7 +2,8 @@ import { test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { put, query, context, resolveRoot } from './vault.mjs';
+import { put, query, context, map, resolveRoot } from './vault.mjs';
+import { syncIndex } from './index.mjs';
 import { run } from './cli.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 
@@ -177,4 +178,93 @@ test('CLI context: --format json va kiem tra thieu --scope', () => {
   expect(parsed.total).toBe(1);
   expect(parsed.items[0].id).toBe('json-rule');
   expect(parsed.items[0].body).toBe('Content.');
+});
+
+test('context compact: khong nap full body, 1 dong - [id] (kind:tags): quote + footer huong dan, <= 600 chars', () => {
+  P({
+    meta: { id: 'compact-rule', kind: 'rule', scope: 'project:p1', status: 'active', tags: ['auth', 'security'], quote: 'Rule compact quote' },
+    body: 'VERY_LONG_BODY_LINE_1\nVERY_LONG_BODY_LINE_2\nVERY_LONG_BODY_LINE_3',
+  });
+  P({
+    meta: { id: 'compact-fact', kind: 'fact', scope: 'project:p1', status: 'active' },
+    body: 'First line fact title\nSecond line fact body',
+  });
+
+  // compact = true
+  const res = context({ scope: 'project:p1', compact: true }, { root, now: NOW });
+  expect(res.items.length).toBe(2);
+  expect(res.text).toContain('- [compact-rule] (rule:auth,security): Rule compact quote');
+  expect(res.text).toContain('- [compact-fact] (fact): First line fact title');
+  expect(res.text).toContain('Chi tiet: harness knowledge get <id>');
+  expect(res.text).not.toContain('VERY_LONG_BODY_LINE_1');
+  expect(res.text).not.toContain('Second line fact body');
+  expect(res.text.length).toBeLessThanOrEqual(600);
+
+  // CLI voi co --compact
+  const out = [];
+  const r = run(['context', '--scope', 'project:p1', '--compact', '--root', root, '--now', NOW], { out: (s) => out.push(s), err: () => {} });
+  expect(r.code).toBe(0);
+  const outStr = out.join('\n');
+  expect(outStr).toContain('- [compact-rule] (rule:auth,security): Rule compact quote');
+  expect(outStr).toContain('Chi tiet: harness knowledge get <id>');
+  expect(outStr).not.toContain('VERY_LONG_BODY_LINE_1');
+  expect(outStr.length).toBeLessThanOrEqual(600);
+});
+
+test('map va CLI knowledge map: gom gon tu .index.json, parsedCount === 0 khi cache hit', () => {
+  P({
+    meta: { id: 'map-rule-1', kind: 'rule', scope: 'global', status: 'active', tags: ['core', 'sys'], quote: 'Rule 1 quote' },
+    body: 'Body rule 1',
+  });
+  P({
+    meta: { id: 'map-fact-2', kind: 'fact', scope: 'project:alpha', status: 'active', quote: 'Fact 2 quote' },
+    body: 'Body fact 2',
+  });
+  P({
+    meta: { id: 'map-stale', kind: 'fact', scope: 'global', status: 'active', recheck: '2026-01-01' },
+    body: 'Stale fact',
+  });
+  P({
+    meta: { id: 'map-archived', kind: 'rule', scope: 'global', status: 'archived' },
+    body: 'Archived rule',
+  });
+
+  // .index.json da duoc put dong bo tu dong, kiem tra cache hit parsedCount === 0
+  const hitSync = syncIndex(root);
+  expect(hitSync.parsedCount).toBe(0);
+  expect(hitSync.cachedHits).toBe(hitSync.count);
+
+  // map() loc bo stale va archived, format <= 90 chars + footer map
+  const res = map(root, { now: NOW });
+  expect(res.ok).toBe(true);
+  expect(res.total).toBe(2);
+  expect(res.count).toBe(2);
+  expect(res.text).toContain('- [map-rule-1] (rule:core,sys): Rule 1 quote');
+  expect(res.text).toContain('- [map-fact-2] (fact): Fact 2 quote');
+  expect(res.text).toContain('Chi tiet: harness knowledge get <id> | Tim: harness knowledge query --tags <tag>');
+  expect(res.text).not.toContain('map-stale');
+  expect(res.text).not.toContain('map-archived');
+  expect(res.text.length).toBeLessThanOrEqual(800);
+
+  // map voi filter scope
+  const resScope = map(root, { scope: 'project:alpha', now: NOW });
+  expect(resScope.count).toBe(1);
+  expect(resScope.items[0].id).toBe('map-fact-2');
+
+  // CLI knowledge map
+  const outMap = [];
+  const rMap = run(['map', '--root', root, '--now', NOW], { out: (s) => outMap.push(s), err: () => {} });
+  expect(rMap.code).toBe(0);
+  const outMapStr = outMap.join('\n');
+  expect(outMapStr).toContain('- [map-rule-1] (rule:core,sys): Rule 1 quote');
+  expect(outMapStr).toContain('Chi tiet: harness knowledge get <id> | Tim: harness knowledge query --tags <tag>');
+
+  // CLI knowledge map voi --json
+  const jsonMap = [];
+  const rJson = run(['map', '--json', '--root', root, '--now', NOW], { out: (s) => jsonMap.push(s), err: () => {} });
+  expect(rJson.code).toBe(0);
+  const parsedMap = JSON.parse(jsonMap.join('\n'));
+  expect(parsedMap.ok).toBe(true);
+  expect(parsedMap.count).toBe(2);
+  expect(parsedMap.items.map((x) => x.id).sort()).toEqual(['map-fact-2', 'map-rule-1']);
 });

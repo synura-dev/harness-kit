@@ -9,7 +9,7 @@ import { loadConfig } from '../../core/config/config.mjs';
 import { KINDS, ID_RE, DEFAULT_PROBE_ALLOW, validate, validateProbe, isStale, bodyLinks, todayStr, addDays, findSecret, metaText, isWebSource, scopeToDir, dirToScope } from './schema.mjs';
 import { parse, stringify } from './frontmatter.mjs';
 import { probeNotes } from './probe.mjs';
-import { rankItems } from './rank.mjs';
+import { rankItems, formatCompactContext, formatMap, filterCandidates, cleanCompactItems } from './rank.mjs';
 import { syncIndex, renameRetry, doMigrate } from './index.mjs';
 
 export { renameRetry } from './index.mjs';
@@ -256,63 +256,35 @@ export function query(f = {}, opts = {}) {
  * Cat theo maxChars; kind=ref chi hien id + quote (khong nap body). Zero-Scan qua syncIndex, chi doc body cho top limit.
  */
 export function context(f = {}, opts = {}) {
-  const root = resolveRoot(opts.root);
-  const today = todayStr(opts.now);
-  const idx = syncIndex(root, opts);
-  const tags = (f.tags || []).filter(Boolean);
-  const scopes = Array.isArray(f.scope) ? f.scope.filter(Boolean) : (Array.isArray(f.scopes) ? f.scopes.filter(Boolean) : (typeof f.scope === 'string' && f.scope.trim() ? [f.scope.trim()] : null));
+  const isStr = typeof f === 'string';
+  const root = resolveRoot(isStr ? f : (opts.root || f.root));
+  const options = isStr ? opts : f, execOpts = isStr ? {} : opts;
+  const idx = syncIndex(root, execOpts);
+  const prepared = filterCandidates(idx.items, { ...options, today: todayStr(execOpts.now || options.now) }, { isStale, noteLine });
+  const ranked = rankItems(prepared, { text: options.text, minScore: typeof options.minScore === 'number' ? options.minScore : 2 });
+  const limit = options.limit > 0 ? options.limit : 5;
 
-  const valid = idx.items.filter((m) => {
-    if (m.status !== 'active') return false;
-    if (isStale(m, today)) return false;
-    if (scopes && scopes.length && !scopes.includes(m.scope)) return false;
-    if (tags.length && !tags.every((t) => Array.isArray(m.tags) && m.tags.includes(t))) return false;
-    if (m.secret) return false;
-    return true;
-  });
+  if (options.compact === true) {
+    const { text, items: chosen } = formatCompactContext(ranked, { limit, maxChars: options.maxChars > 0 ? options.maxChars : 600 });
+    const items = cleanCompactItems(chosen);
+    return { root, total: ranked.length, count: items.length, items, text, md: text, truncated: idx.truncated };
+  }
 
-  const prepared = valid.map((m) => ({
-    ...m,
-    meta: m,
-    line: noteLine(m),
-    source: typeof m.source === 'string' ? m.source : '',
-    updated: m.updated || m.created || '',
-  }));
-
-  const ranked = rankItems(prepared, { text: f.text, minScore: typeof f.minScore === 'number' ? f.minScore : 2 });
-  const limit = f.limit > 0 ? f.limit : 5;
-  const maxChars = f.maxChars > 0 ? f.maxChars : 1200;
-
-  const chosen = [];
-  const blocks = [];
+  const maxChars = options.maxChars > 0 ? options.maxChars : 1200;
+  const chosen = [], blocks = [];
   let totalChars = 0;
-
   for (const it of ranked) {
     if (chosen.length >= limit) break;
     let body = '';
     if (it.kind !== 'ref') {
-      try {
-        const filePath = path.join(root, it.relPath);
-        const r = readVaultFile(filePath, opts.maxBytes || READ_CAP.fileBytes);
-        body = parse(r.text).body;
-      } catch {}
+      try { const r = readVaultFile(path.join(root, it.relPath), execOpts.maxBytes || READ_CAP.fileBytes); body = parse(r.text).body; } catch {}
     }
     const content = it.kind === 'ref' ? (it.quote ? `> ${it.quote}` : '') : String(body || '').trim();
     const block = `### ${it.id} [${it.kind}]\n${content}`.trim();
     const addLen = (blocks.length ? 2 : 0) + block.length;
-    if (totalChars + addLen <= maxChars) {
-      blocks.push(block);
-      totalChars += addLen;
-      chosen.push({ ...it, body });
-    } else if (chosen.length === 0) {
-      const cutBlock = block.slice(0, maxChars);
-      blocks.push(cutBlock);
-      totalChars = cutBlock.length;
-      chosen.push({ ...it, body });
-      break;
-    } else {
-      break;
-    }
+    if (totalChars + addLen <= maxChars) { blocks.push(block); totalChars += addLen; chosen.push({ ...it, body }); }
+    else if (chosen.length === 0) { const cut = block.slice(0, maxChars); blocks.push(cut); totalChars = cut.length; chosen.push({ ...it, body }); break; }
+    else break;
   }
 
   const md = blocks.join('\n\n');
@@ -322,7 +294,21 @@ export function context(f = {}, opts = {}) {
     ...(n.score !== undefined ? { score: n.score } : {}),
     ...(n.kind === 'ref' ? { quote: n.quote || '' } : { body: String(n.body || '').trim(), ...(n.quote ? { quote: n.quote } : {}) }),
   }));
-  return { root, total: ranked.length, count: items.length, items, md, truncated: idx.truncated };
+  return { root, total: ranked.length, count: items.length, items, md, text: md, truncated: idx.truncated };
+}
+
+/** Ban do tri thuc thu gon (Zero-Scan). Loc active, bo stale/secret, scope (OR), tags (AND). rankItems. */
+export function map(rootOrOpts = {}, opts = {}) {
+  const isStr = typeof rootOrOpts === 'string';
+  const root = resolveRoot(isStr ? rootOrOpts : rootOrOpts.root);
+  const options = isStr ? opts : rootOrOpts;
+  const idx = syncIndex(root, options);
+  const candidates = filterCandidates(idx.items, { ...options, today: todayStr(options.now) }, { isStale, noteLine });
+  const ranked = rankItems(candidates, options.text || '');
+  const limit = Number(options.limit) > 0 ? Number(options.limit) : 25;
+  const maxChars = Number(options.maxChars) > 0 ? Number(options.maxChars) : 800;
+  const { text, items: included } = formatMap(ranked, { limit, maxChars });
+  return { ok: true, count: included.length, total: candidates.length, truncated: idx.truncated || null, text, items: cleanCompactItems(included) };
 }
 
 /** Tra cuu lien ket cua 1 ghi chu: outgoing (links[] + refs[]), incoming (backlinks tu syncIndex). 0 lan doc file body! */

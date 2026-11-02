@@ -249,5 +249,6 @@ test('SubagentStart: khop role vault tam -> additionalContext chua ghi chu role'
   expect(neu.status).toBe(0);
   const j = parse(neu.stdout);
   expect(j.hookSpecificOutput.hookEventName).toBe('SubagentStart');
-  expect(j.hookSpecificOutput.additionalContext).toContain('builder-role-note [rule]');
+  expect(j.hookSpecificOutput.additionalContext).toContain('[builder-role-note] (rule)');
+  expect(j.hookSpecificOutput.additionalContext.length).toBeLessThanOrEqual(600);
 }, 60000);
