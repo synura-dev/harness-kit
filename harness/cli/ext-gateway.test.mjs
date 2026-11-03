@@ -24,3 +24,19 @@ test('cong chay domain external qua ctx; domain core khong bi ext de', () => {
   expect(core.code).toBe(0);
   expect(core.stdout || core.text || '').not.toContain('demo:');
 }, 60000);
+
+test('cong chuyen lai co chung --json/--raw/--max-bytes cho ext; khong co co thi giu nguyen', () => {
+  const ext = path.join(tmp, 'echoflags'); fs.mkdirSync(ext);
+  fs.writeFileSync(path.join(ext, 'main.mjs'), `export const main = (ctx, argv) => argv.includes('--json') ? JSON.stringify({ argv }) : 'plain:' + argv.join('+');`);
+  fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify({ id: 'echoflags', entry: 'main.mjs', domains: ['echoflags'] }));
+  const externals = [{ id: 'echoflags', root: ext }];
+  const j = run(['echoflags', 'list', '--json'], root, { capture: true, externals });
+  expect(j.code).toBe(0);
+  expect(JSON.parse(j.stdout).argv).toEqual(['list', '--json']);
+  const raw = run(['echoflags', 'list', '--raw', '--max-bytes', '5000'], root, { capture: true, externals });
+  expect(raw.code).toBe(0);
+  expect(raw.stdout).toContain('plain:list+--raw+--max-bytes+5000');
+  const plain = run(['echoflags', 'list'], root, { capture: true, externals });
+  expect(plain.stdout).toContain('plain:list');
+  expect(plain.stdout).not.toContain('--');
+}, 60000);

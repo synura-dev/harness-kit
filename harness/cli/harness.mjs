@@ -180,7 +180,8 @@ export function run(argv, root, opts = {}) {
     if (Object.hasOwn(byDomain, domain)) {
       // Tin cay theo id + root tu dang ky (loadExternals da ep m.id === id dang ky); hash dung cay root se chay.
       if (!opts.externals && !isExtensionTrusted(byDomain[domain].id, { ...regOpts, root: byDomain[domain].root })) { const b = blockExternal(byDomain[domain], domain); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
-      const r = runExternal(byDomain[domain], domain, rest0, { timeoutS: opts.timeoutS || c.timeoutS, workspace: regOpts.workspace, json: c.json });
+      // Gateway boc co chung (parseCommon) nen chuyen lai cho ext; --timeout-s do gateway tu dung.
+      const r = runExternal(byDomain[domain], domain, [...rest0, ...(c.json ? ['--json'] : []), ...(c.raw ? ['--raw'] : []), ...(c.maxBytes ? ['--max-bytes', String(c.maxBytes)] : [])], { timeoutS: opts.timeoutS || c.timeoutS, workspace: regOpts.workspace, json: c.json });
       return { code: r.code, stdout: r.stdout, stderr: r.stderr };
     }
     if (!opts.externals && Object.hasOwn(blocked, domain)) { const b = blockExternal(blocked[domain], domain, blocked[domain].reason); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
