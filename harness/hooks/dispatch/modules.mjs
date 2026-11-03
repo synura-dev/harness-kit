@@ -23,12 +23,11 @@ const MODEL_POLICY = { id: 'model-policy', gate: true, load: () => import('../..
 const VERIFY_GATE = { id: 'verify-gate', load: () => import('../../constrain/verify-gate/hook.mjs') };
 const PROC_ORPHANS = { id: 'proc-orphans', load: () => import('../../constrain/proc-orphans/hook.mjs') };
 const DATA_CHECK = { id: 'data-check', load: () => import('../../observe/data-check/hook.mjs') };
-const INJECT = { id: 'knowledge-inject', load: () => import('../../knowledge/inject/hook.mjs') };
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
-export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'knowledge-inject', 'verify-gate', 'user-shim']);
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'verify-gate', 'user-shim']);
 
 export const ORDER = Object.freeze({
   PreToolUse: [GUARD, DATA_GATE, APPROVAL, BASH_GUARD, MODEL_POLICY, AUDIT],
@@ -37,12 +36,12 @@ export const ORDER = Object.freeze({
   PermissionRequest: [AUDIT],
   PermissionDenied: [AUDIT],
   Notification: [AUDIT],
-  SubagentStart: [AUDIT, INJECT],
+  SubagentStart: [AUDIT],
   SessionEnd: [AUDIT],
   Stop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
   SubagentStop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
-  SessionStart: [AUDIT, INJECT, WORKTREE, DATA_CHECK, USER_SHIM],
-  UserPromptSubmit: [AUDIT, INJECT],
+  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM],
+  UserPromptSubmit: [AUDIT],
   WorktreeCreate: [WORKTREE],
   WorktreeRemove: [WORKTREE],
 });

@@ -22,11 +22,7 @@ const groupWarn = {};
 const DOCTOR_DUP_ALLOW = [
   { name: 'parseArgs', files: ['harness/build/skills/cli.mjs', 'harness/evolve/eval/bench/hook-latency.mjs', 'harness/evolve/eval/cli.mjs', 'harness/evolve/loop/cli.mjs', 'harness/observe/evidence/cli.mjs'], reason: 'moi CLI co bo co rieng' },
   { name: 'render', files: ['harness/evolve/loop/cli.mjs', 'harness/hooks/dispatch/merge.mjs', 'harness/observe/cost/cli.mjs', 'harness/observe/evidence/cli.mjs'], reason: 'moi CLI dinh dang output rieng; dispatch/merge ghep ket qua hook (khac nghia)' },
-  { name: 'build', files: ['harness/build/skills/skills.mjs', 'harness/knowledge/inject/hook.mjs'], reason: 'build skills (sinh ban sao) khac build payload inject' },
-  { name: 'check', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs', 'harness/knowledge/vault/vault.mjs'], reason: 'API cung ten cua ba domain khac nhau (skills/loop/vault)' },
-  { name: 'prune', files: ['harness/build/skills/skills.mjs', 'harness/knowledge/vault/vault.mjs', 'harness/observe/views/prune.mjs'], reason: 'API cung ten cua ba domain khac nhau' },
-  { name: 'scan', files: ['harness/core/registry/plugin-registry.mjs', 'harness/knowledge/vault/vault.mjs'], reason: 'quet registry khac quet vault' },
-  { name: 'validate', files: ['harness/evolve/eval/eval.mjs', 'harness/knowledge/vault/schema.mjs'], reason: 'validate case eval khac validate schema vault' },
+  { name: 'check', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs'], reason: 'API cung ten cua hai domain khac nhau (skills/loop)' },
   { name: 'ctx', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs', 'harness/observe/cost/cost.mjs'], reason: 'ngu canh rieng moi module (truong khac nhau)' },
   { name: 'summary', files: ['harness/observe/cost/cost.mjs', 'harness/observe/evidence/evidence.mjs'], reason: 'tong hop so lieu cost khac evidence' },
   { name: 'redact', files: ['harness/evolve/loop/loop.mjs', 'harness/observe/audit/redact.mjs'], reason: 'loop.redact che mot chuoi mau bang maskSecrets; audit.redact ap danh sach regex cau hinh (khac chu ky)' },

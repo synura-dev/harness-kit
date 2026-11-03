@@ -20,7 +20,7 @@ test('bo ca: >=15 ca, id duy nhat, khong loi schema, du cac nhom', () => {
   expect(errors).toEqual([]);
   expect(cases.length).toBeGreaterThanOrEqual(15);
   expect(new Set(cases.map((c) => c.id)).size).toBe(cases.length);
-  expect([...new Set(cases.map((c) => c.group))]).toEqual(expect.arrayContaining(['approval', 'fingerprint', 'guard', 'knowledge', 'skills', 'verify-gate']));
+  expect([...new Set(cases.map((c) => c.group))]).toEqual(expect.arrayContaining(['approval', 'fingerprint', 'guard', 'skills', 'verify-gate']));
 });
 
 test('cong harness: eval run --json toan pass tren code hien tai, dung hinh ket qua', () => {

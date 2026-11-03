@@ -49,12 +49,12 @@ test('groups: index nhom theo vung, 4 nhom chinh luon co tieu de, domain cu o le
   const x = idx(r);
   expect(x.code).toBe(0);
   const t = x.text;
-  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tri thuc (knowledge) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Cu (plugins/tools/hooks) (legacy) ==']) expect(t).toContain(h);
+  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Cu (plugins/tools/hooks) (legacy) ==']) expect(t).toContain(h);
   expect(t.indexOf('ev - EV')).toBeGreaterThan(t.indexOf('(observe)'));
   expect(t.indexOf('ev - EV')).toBeLessThan(t.indexOf('(constrain)'));
   expect(t.indexOf('old - OLD')).toBeGreaterThan(t.indexOf('(legacy)'));
   expect(t.indexOf('tl - TL')).toBeGreaterThan(t.indexOf('(legacy)'));
-  expect(t).toMatch(/\(knowledge\) ==\n\(chua co domain\)/);
+  expect(t).toMatch(/\(evolve\) ==\n\(chua co domain\)/);
   expect(t.split('\n').length).toBeLessThanOrEqual(INDEX_MAX_LINES);
 });
 
@@ -68,12 +68,12 @@ test('groups: --flat in nhu cu (khong tieu de), domain cu giu hanh vi spawn', ()
 });
 
 test('groups: <nhom> va --group liet ke domain cua nhom; domain trung ten nhom uu tien domain', () => {
-  const r = hub({ ev: { zone: 'observe' }, old: { zone: 'plugins' }, knowledge: { zone: 'knowledge', dir: 'vault' } });
+  const r = hub({ ev: { zone: 'observe' }, old: { zone: 'plugins' }, evolve: { zone: 'evolve', dir: 'vault' } });
   const g = idx(r, ['observe']);
   expect(g.code).toBe(0);
   expect(g.text).toBe('== Quan sat (observe) ==\nev - EV - (khong co lenh con)');
-  expect(idx(r, ['knowledge']).text).toBe('knowledge - KNOWLEDGE - (khong co lenh con)');
-  expect(idx(r, ['--group', 'knowledge']).text).toContain('== Tri thuc (knowledge) ==');
+  expect(idx(r, ['evolve']).text).toBe('evolve - EVOLVE - (khong co lenh con)');
+  expect(idx(r, ['--group', 'evolve']).text).toContain('== Tien hoa (evolve) ==');
   expect(idx(r, ['--group=legacy']).text).toContain('old - OLD');
   expect(JSON.parse(idx(r, ['--group', 'observe', '--json']).text)).toEqual({ ev: { desc: 'EV', cmds: null, default: 'index', available: true, group: 'observe' } });
   const bad = idx(r, ['--group', 'zzz']);
