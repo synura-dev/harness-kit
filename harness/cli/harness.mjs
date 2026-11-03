@@ -93,6 +93,25 @@ function groupedLines(root, doms, errors, only) {
 
 export const DEFAULT_TIMEOUT_S = 120;
 
+// Hop dong ext: nhan argv nhu nguoi dung go (tru domain); parseCommon cua ext la noi parse duy nhat. Cong chi loai co rieng cua no.
+export const GATEWAY_ONLY_FLAGS = ['--timeout-s'];
+export function stripFlags(args, names) {
+  const out = [];
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (names.includes(a)) { i++; continue; }
+    if (names.some((n) => a.startsWith(n + '='))) continue;
+    out.push(a);
+  }
+  return out;
+}
+function externalArgv(argv, domain, typed, rest0) {
+  if (domain !== typed) return rest0; // alias: lenh con da dich, giu nhu cu
+  const idx = argv.indexOf(domain);
+  if (idx < 0) return rest0;
+  const pre = stripFlags(stripFlags(argv.slice(0, idx), GATEWAY_ONLY_FLAGS), ['--group']).filter((x) => x !== '--flat');
+  return [...pre, ...stripFlags(argv.slice(idx + 1), GATEWAY_ONLY_FLAGS)];
+}
 const available = (root, d) => !!(d.script && fs.existsSync(path.resolve(root, d.script)));
 
 // "domain - mo ta - lenh con"; khong co CLI => (chua co). Toi da 25 dong.
@@ -154,6 +173,7 @@ export function run(argv, root, opts = {}) {
     else break;
   }
   let [domain, ...rest0] = c.rest;
+  const typedDomain = domain;
   const { doms, errors, aliases } = loadRegistryInfo(root);
   // Alias (manifest `aliases`): ten cu -> domain dich; co tham so thi dich lenh con theo aliasMap. Domain that luon thang (alias trung domain that bi registry bo + bao loi).
   if (domain && !group && !Object.hasOwn(doms, domain) && Object.hasOwn(aliases, domain)) {
@@ -165,6 +185,7 @@ export function run(argv, root, opts = {}) {
     } else if (al.map && Array.isArray(al.map.onEmpty)) rest0 = [...al.map.onEmpty]; // alias khong tham so: aliasMap.onEmpty (vd doctor/install chay mac dinh)
     domain = al.domain;
   }
+  const extArgv = externalArgv(argv, domain, typedDomain, rest0);
   const known = domain && Object.hasOwn(doms, domain) ? doms[domain] : null;
   // External (ctx + tien trinh con, song song extRoots). Chi khi domain khong phai cua core (core thang). opts.externals = [{id, root}] (tam thoi, chua co ext register).
   if (!known && domain && !group) {
@@ -180,8 +201,7 @@ export function run(argv, root, opts = {}) {
     if (Object.hasOwn(byDomain, domain)) {
       // Tin cay theo id + root tu dang ky (loadExternals da ep m.id === id dang ky); hash dung cay root se chay.
       if (!opts.externals && !isExtensionTrusted(byDomain[domain].id, { ...regOpts, root: byDomain[domain].root })) { const b = blockExternal(byDomain[domain], domain); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }
-      // Gateway boc co chung (parseCommon) nen chuyen lai cho ext; --timeout-s do gateway tu dung.
-      const r = runExternal(byDomain[domain], domain, [...rest0, ...(c.json ? ['--json'] : []), ...(c.raw ? ['--raw'] : []), ...(c.maxBytes ? ['--max-bytes', String(c.maxBytes)] : [])], { timeoutS: opts.timeoutS || c.timeoutS, workspace: regOpts.workspace, json: c.json });
+      const r = runExternal(byDomain[domain], domain, extArgv, { timeoutS: opts.timeoutS || c.timeoutS, workspace: regOpts.workspace, json: c.json });
       return { code: r.code, stdout: r.stdout, stderr: r.stderr };
     }
     if (!opts.externals && Object.hasOwn(blocked, domain)) { const b = blockExternal(blocked[domain], domain, blocked[domain].reason); return { code: b.code, stdout: b.stdout, stderr: b.stderr }; }

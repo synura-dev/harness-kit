@@ -25,18 +25,21 @@ test('cong chay domain external qua ctx; domain core khong bi ext de', () => {
   expect(core.stdout || core.text || '').not.toContain('demo:');
 }, 60000);
 
-test('cong chuyen lai co chung --json/--raw/--max-bytes cho ext; khong co co thi giu nguyen', () => {
+test('ext nhan argv dung nhu go (tru domain); chi loai --timeout-s cua cong', () => {
   const ext = path.join(tmp, 'echoflags'); fs.mkdirSync(ext);
-  fs.writeFileSync(path.join(ext, 'main.mjs'), `export const main = (ctx, argv) => argv.includes('--json') ? JSON.stringify({ argv }) : 'plain:' + argv.join('+');`);
+  fs.writeFileSync(path.join(ext, 'main.mjs'), `export const main = (ctx, argv) => JSON.stringify({ argv });`);
   fs.writeFileSync(path.join(ext, 'manifest.json'), JSON.stringify({ id: 'echoflags', entry: 'main.mjs', domains: ['echoflags'] }));
   const externals = [{ id: 'echoflags', root: ext }];
-  const j = run(['echoflags', 'list', '--json'], root, { capture: true, externals });
-  expect(j.code).toBe(0);
-  expect(JSON.parse(j.stdout).argv).toEqual(['list', '--json']);
-  const raw = run(['echoflags', 'list', '--raw', '--max-bytes', '5000'], root, { capture: true, externals });
-  expect(raw.code).toBe(0);
-  expect(raw.stdout).toContain('plain:list+--raw+--max-bytes+5000');
-  const plain = run(['echoflags', 'list'], root, { capture: true, externals });
-  expect(plain.stdout).toContain('plain:list');
-  expect(plain.stdout).not.toContain('--');
+  const argvOf = (a) => { const r = run(a, root, { capture: true, externals }); expect(r.code).toBe(0); return JSON.parse(r.stdout).argv; };
+  expect(argvOf(['echoflags', 'list'])).toEqual(['list']);
+  expect(argvOf(['echoflags', 'list', '--json'])).toEqual(['list', '--json']);
+  expect(argvOf(['echoflags', '--json', 'list'])).toEqual(['--json', 'list']);
+  expect(argvOf(['echoflags', 'a', '--raw', 'b'])).toEqual(['a', '--raw', 'b']);
+  expect(argvOf(['--json', 'echoflags', 'list'])).toEqual(['--json', 'list']);
+  expect(argvOf(['echoflags', 'list', '--max-bytes=5000'])).toEqual(['list', '--max-bytes=5000']);
+  expect(argvOf(['echoflags', 'list', '--max-bytes', '0'])).toEqual(['list', '--max-bytes', '0']);
+  expect(argvOf(['echoflags', 'list', '--timeout-s', '30', '--json'])).toEqual(['list', '--json']);
+  expect(argvOf(['echoflags', '--timeout-s=30', 'list'])).toEqual(['list']);
+  // cong khong co danh sach co chung rieng: co la/tuong lai di thang toi ext
+  expect(argvOf(['echoflags', 'list', '--future-flag', 'x'])).toEqual(['list', '--future-flag', 'x']);
 }, 60000);
