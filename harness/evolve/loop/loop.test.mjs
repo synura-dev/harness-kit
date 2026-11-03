@@ -26,7 +26,7 @@ beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'evolve-loop-'));
   hub = path.join(tmp, 'hub');
   fs.mkdirSync(hub, { recursive: true });
-  o = { hubRoot: hub, dataBase: path.join(tmp, 'data'), dataRoot: path.join(tmp, 'data', 'evolve'), auditDir: path.join(tmp, 'audit'), vaultRoot: path.join(tmp, 'data', 'memory'), nowMs: NOW };
+  o = { hubRoot: hub, dataBase: path.join(tmp, 'data'), dataRoot: path.join(tmp, 'data', 'evolve'), auditDir: path.join(tmp, 'audit'), nowMs: NOW };
   // fpA: 3 lan / 2 phien trong 7 ngay -> candidate
   writeAudit('2026-10-27', 's1', [fail('2026-10-27T01:00:00Z', 's1', 'aaaaaaaaaa', 'cannot find module foo token=abc123secret')]);
   writeAudit('2026-10-28', 's2', [fail('2026-10-28T01:00:00Z', 's2', 'aaaaaaaaaa', 'cannot find module foo'), fail('2026-10-28T02:00:00Z', 's2', 'aaaaaaaaaa', 'cannot find module foo')]);
@@ -171,7 +171,6 @@ test('dich cam / ngoai allowlist bi tu choi ke ca --approve (deny-by-default)', 
   expect(classifyTarget('.agents/skills/x/SKILL.md', 'skill', o).forbidden).toBe(true);
   expect(classifyTarget('evolve/skills/evolve-x/SKILL.md', 'skill', o).ok).toBe(true);
   expect(classifyTarget('evolve/skills/evolve-x/SKILL.md', 'fact', o).ok).toBe(false);
-  expect(classifyTarget('memory/fact/evolve-x.md', 'fact', o).ok).toBe(true);
   expect(classifyTarget('memory/fact/evolve-x.md', 'skill', o).ok).toBe(false);
 });
 
@@ -194,10 +193,6 @@ test('junction/symlink trong dich bi tu choi (realpath)', () => {
   expect(classifyTarget('evolve/skills/agent/x/SKILL.md', 'skill', o).ok).toBe(false);
   fs.rmSync(path.join(sk, 'agent'), { recursive: true, force: true });
   fs.rmSync(path.join(hub, '.claude'), { recursive: true, force: true });
-  fs.mkdirSync(path.join(o.dataBase, 'memory'), { recursive: true });
-  fs.symlinkSync(outside, path.join(o.dataBase, 'memory', 'fact'), 'junction');
-  expect(classifyTarget('memory/fact/x.md', 'fact', o).ok).toBe(false);
-  fs.rmSync(path.join(o.dataBase, 'memory', 'fact'), { recursive: true, force: true });
 });
 
 test('apply + rollback (can --approve) khoi phuc dung byte (tao file moi va khoi phuc file cu)', async () => {
@@ -239,37 +234,6 @@ test('apply + rollback (can --approve) khoi phuc dung byte (tao file moi va khoi
   expect(readLog(o).items.some((x) => x.op === 'rollback' && x.ok)).toBe(true);
 });
 
-test('fact: apply + rollback deu ghi qua cong knowledge (khong ghi thang vault), khoi phuc than cu', async () => {
-  const gwLog = path.join(tmp, 'gw.log');
-  const gw = path.join(tmp, 'gw-stub.mjs');
-  fs.writeFileSync(gw, `import fs from 'node:fs';import path from 'node:path';
-const a=process.argv.slice(2);const g=(k)=>a[a.indexOf(k)+1];
-fs.appendFileSync(${JSON.stringify(gwLog)}, a.slice(0,2).join(' ')+' '+g('--id')+'\\n');
-const f=path.join(g('--root'),'fact',g('--id')+'.md');fs.mkdirSync(path.dirname(f),{recursive:true});
-fs.writeFileSync(f,'---\\nid: '+g('--id')+'\\nkind: fact\\nupdated: '+Math.random()+'\\n---\\n'+fs.readFileSync(g('--body-file'),'utf8'));
-`);
-  const of = { ...o, gatewayCmd: [process.execPath, gw] };
-  const cid = await candId('aaaaaaaaaa');
-  const p = await propose(cid, { ...of, kind: 'fact' });
-  const file = path.join(o.vaultRoot, 'fact', `${p.change.knowledgeId}.md`);
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, '---\nid: x\nkind: fact\n---\nTHAN-CU\n');
-  const p2 = await propose(cid, { ...of, kind: 'fact' });
-  expect(check(p2.id, of).check.ok).toBe(true);
-  expect(apply(p2.id, of).code).toBe(2); // thieu --approve
-  const r = apply(p2.id, { ...of, approve: true });
-  expect(r.ok).toBe(true);
-  expect(fs.readFileSync(file, 'utf8')).not.toContain('THAN-CU');
-  const rb = rollback(r.ver, { ...of, approve: true });
-  expect(rb.ok).toBe(true);
-  expect(fs.readFileSync(file, 'utf8')).toContain('THAN-CU');
-  expect(fs.readFileSync(file, 'utf8').match(/^---/gm).length).toBe(2); // khong nhan doi frontmatter
-  const lines = fs.readFileSync(gwLog, 'utf8').trim().split('\n');
-  expect(lines).toEqual([`knowledge put ${p.change.knowledgeId}`, `knowledge put ${p.change.knowledgeId}`]); // apply + rollback
-  expect(rollback('vfake-x', { ...of, approve: true }).ok).toBe(false);
-  fs.rmSync(file, { force: true });
-});
-
 test('manifest version gia (abs tro settings.json / target cam) bi tu choi', () => {
   const settings = path.join(hub, '.claude', 'settings.json');
   const guard = path.join(o.dataBase, 'evolve', 'skills', 'fake', 'SKILL.md');
@@ -309,7 +273,8 @@ test('CLI: apply khong --approve -> exit 2; khong co lenh -> usage (khong con --
   const u = spawnSync(process.execPath, [path.join(HERE, 'cli.mjs')], { env, encoding: 'utf8', timeout: 30000 });
   expect(u.status).toBe(0);
   expect(u.stdout).toContain('candidates');
-  expect(u.stdout).toContain('--kind skill|fact');
+  expect(u.stdout).toContain('--kind skill]');
+  expect(u.stdout).not.toContain('fact');
   expect(u.stdout).not.toMatch(/hook-config|--set/);
 });
 
@@ -322,20 +287,19 @@ test('eval branch: tran con luon < tran cong (120s+5s), theo --timeout-s neu co'
   expect(evalTimeoutMs(['run', '--timeout-s', 'x'])).toBe(EVAL_TIMEOUT_MS);
 });
 
-test('layout cau hinh: skillsDir/factDir doi duoc; cam tuong minh van thang; layout xau bi bo ve mac dinh', () => {
-  const lay = { skillsDir: 'ws/skills', factDir: 'ws/facts' };
+test('layout cau hinh: skillsDir doi duoc; cam tuong minh van thang; layout xau bi bo ve mac dinh', () => {
+  const lay = { skillsDir: 'ws/skills' };
   expect(classifyTarget('ws/skills/a/SKILL.md', 'skill', { ...o, layout: lay }).ok).toBe(true);
   expect(classifyTarget('evolve/skills/a/SKILL.md', 'skill', { ...o, layout: lay }).ok).toBe(false);
-  expect(classifyTarget('ws/facts/x.md', 'fact', { ...o, layout: lay }).ok).toBe(true);
   expect(classifyTarget('ws/facts/x.md', 'skill', { ...o, layout: lay }).ok).toBe(false);
   // layout tro vao vung cam: van forbidden, khong nho allowlist
-  const bad = classifyTarget('harness/constrain/x.md', 'skill', { ...o, layout: { skillsDir: 'harness/constrain', factDir: 'data/memory/fact' } });
+  const bad = classifyTarget('harness/constrain/x.md', 'skill', { ...o, layout: { skillsDir: 'harness/constrain' } });
   expect(bad.ok).toBe(false);
   expect(bad.forbidden).toBe(true);
   // layout co .. / tuyet doi -> dung mac dinh
-  expect(classifyTarget('evolve/skills/a/SKILL.md', 'skill', { ...o, layout: { skillsDir: '../x', factDir: '/abs' } }).ok).toBe(true);
+  expect(classifyTarget('evolve/skills/a/SKILL.md', 'skill', { ...o, layout: { skillsDir: '../x' } }).ok).toBe(true);
   // layout tro .claude/skills: khong hop SAFE_DIR -> mac dinh; dich .claude van cam
-  expect(classifyTarget('.claude/skills/a/SKILL.md', 'skill', { ...o, layout: { skillsDir: '.claude/skills', factDir: 'memory/fact' } }).forbidden).toBe(true);
+  expect(classifyTarget('.claude/skills/a/SKILL.md', 'skill', { ...o, layout: { skillsDir: '.claude/skills' } }).forbidden).toBe(true);
 });
 
 test('goc du lieu tro vao workspace/plugin root: .claude/.agents/config/ma plugin bi cam', () => {
