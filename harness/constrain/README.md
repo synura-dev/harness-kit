@@ -63,8 +63,10 @@ Best-effort guard: blocks commands that read/operate on databases (mongo tools, 
 #### protectedPaths (luat constrain/guard, id `protected-path`)
 - Mac dinh RONG trong code (khong co duong dan nao bi bao ve). Them bang khoa `protectedPaths` (mang chuoi) trong config guard: local may (`guard.local.json`/`local.json`) hoac du an (`<du an>/.harness/config/guard/project.json`, `config/guard/projects/<id>.json`); cac lop HOP NHAT (chi them, khong tat duoc).
 - Lenh Bash/PowerShell/run_command (va file_path cua Edit/Write/MultiEdit) nhac toi duong dan do -> deny. So khop khong phan biet hoa thuong, chuan hoa dau gach nguoc (ke ca gap doi) thanh `/` va dang `/e/...`, `/mnt/e/...`, `/cygdrive/e/...` thanh `e:/...`; co ranh gioi: `E:/Vault` khong khop `E:/Vault2`.
-- Ngoai le: lenh DON `harness obsidian ...` hoac `node <...harness...> obsidian ...` (khong co `; & | < >`, backtick, `$(`, xuong dong). Edit/Write khong co ngoai le.
-- Gioi han (best-effort): khong giai duong dan tuong doi/bien moi truong/ten 8.3/symlink; Read tool khong qua guard.
+- Chuan hoa truoc khi so khop: chu thuong, bo backtick PowerShell, gach nguoc (ke ca gap doi) -> `/`, bo doan `/./`, gop `x/../`, bo dau cham va khoang trang cuoi moi thanh phan (`Vault.\a.md`, `E:\Notes\.\Vault`, `Va``ult` deu bi bat).
+- Ngoai le: lenh DON co token dau DUNG `harness obsidian ...` (khong tien to duong dan: `./harness`, `.\harness`, `C:\...\harness` KHONG duoc mien) hoac `node "<bin harness cua plugin dang chay>" obsidian ...` (`harness/cli/harness.mjs` hoac `bin/harness.mjs` cua plugin). Co `; & | < >`, backtick, `$(`, `(`, `)`, `{`, `}` (subexpression/scriptblock PowerShell) hoac xuong dong thi khong duoc mien. Edit/Write khong co ngoai le.
+- Config guard hong JSON: khong am tham thanh rong. Hook van fail-open nhung ghi canh bao `config-broken` (audit guard + stderr) va `harness doctor` bao `[ERROR]` + dong `[check] guard-config` ("config guard hong, protectedPaths mat hieu luc").
+- Gioi han con lai (best-effort, luat chi la lop chan thu): (1) duong tuong doi qua `cd` roi dung ten tuong doi (`cd E:\Notes` roi `cat Vault\a.md`: chi lenh `cd` mang duong dan bi chan, lenh sau thi khong); (2) bien moi truong/bien shell (`$env:X`, `%X%`, `$V`); (3) ten 8.3 (`VAULT~1`) va symlink/junction; (4) Read/Grep/Glob khong di qua hook guard (chi Bash/PowerShell/run_command va Edit/Write/MultiEdit); (5) noi dung file doc tu script khac. Muon bao ve chac chan: quyen he dieu hanh/sandbox, khong chi guard.
 
 Thu tu: loi < goi du an < local.
 

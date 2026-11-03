@@ -6,6 +6,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadFlat as loadConfig, loadConfig as coreLoadConfig, pluginLayerDirs } from '../../core/config/config.mjs';
 import { isPluginMode } from '../../core/io/paths.mjs';
+import { guardConfigHealth } from '../../core/config/guard-health.mjs';
 import { isMain, writeOut } from '../../core/io/stdio.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -106,6 +107,8 @@ export function load(files = configFiles(), opts = {}) {
   const warnings = [];
   const env = opts.env || process.env;
   const hubRoot = opts.hubRoot || HUB_ROOT;
+  // File config guard hong KHONG am tham thanh rong: canh bao ro (handle ghi audit + stderr; doctor bao ERROR). Hook van fail-open.
+  for (const b of guardConfigHealth({ hubRoot, env, repoDir: opts.repoDir })) warnings.push('config-broken: ' + b.file + ' (' + b.problem + ') - config guard hong, protectedPaths va luat tu file nay mat hieu luc');
   let cfg = { ...DEFAULTS };
   let deny = [], allow = [], aliases = [], names = [], paths = [];
   const pile = (c) => {
@@ -191,32 +194,40 @@ const rx = (s) => { try { return new RegExp(s, 'i'); } catch { return null; } };
 
 // ---- protectedPaths (mac dinh RONG trong code; them tu config guard cua may/du an). Lenh/ file nhac toi duong dan duoc bao ve -> deny, tru cong harness obsidian. ----
 const PROTECTED_REASON = 'Duong dan duoc bao ve (guard protectedPaths): chi doc/ghi qua cong co kiem soat (harness obsidian ...). / Protected path: use the gated tool (harness obsidian ...), not raw shell/file access.';
-/** Chuan hoa de so khop: chu thuong, \ (lap) -> /, gop //, dang msys /e/x, /mnt/e/x, /cygdrive/e/x -> e:/x. */
-export function normPathText(s) {
-  return String(s).toLowerCase().replace(/\\+/g, '/').replace(/\/{2,}/g, '/')
+/** Chuan hoa de so khop (ca lenh lan muc protectedPaths): chu thuong; bo backtick PowerShell; \ (lap) -> /; gop //; dang msys /e/x, /mnt/e/x, /cygdrive/e/x -> e:/x;
+ *  bo doan /./; gop x/../; bo dau cham/khoang trang cuoi moi thanh phan (Windows coi "Vault." = "Vault"). */
+export function normPathText(s, spaces = false) {
+  let t = String(s).toLowerCase().replace(/\x60/g, '').replace(/\\+/g, '/').replace(/\/{2,}/g, '/')
     .replace(/(^|[\s"'=(,;])\/(?:mnt|cygdrive)\/([a-z])(?=\/|$|[\s"'])/g, '$1$2:')
     .replace(/(^|[\s"'=(,;])\/([a-z])(?=\/|$|[\s"'])/g, '$1$2:');
+  t = t.replace(/\/\.(?=\/)/g, '');
+  for (let i = 0; i < 8; i++) { const n = t.replace(/\/(?!\.\.(?:\/|$))[^/\s"']+\/\.\.(?=\/|$)/g, ''); if (n === t) break; t = n; }
+  return t.replace(spaces ? /([^\s/.])[. ]+(?=\/)/g : /([^\s/.])\.+(?=\/)/g, '$1').replace(/([^\s/.])\.+(?=[\s"']|$)/g, '$1');
 }
 /** Danh sach protectedPaths da chuan hoa (bo muc rong/qua ngan <3 ky tu, bo '/' cuoi). */
 const protectedList = (cfg) => (Array.isArray(cfg && cfg.protectedPaths) ? cfg.protectedPaths : [])
   .filter((x) => typeof x === 'string').map((x) => normPathText(x.trim()).replace(/\/+$/, '')).filter((x) => x.length >= 3);
-// Ngoai le: lenh DON goi cong harness obsidian (harness obsidian ... | node <...harness...> obsidian ...). Co ; & | < > backtick, $( hoac xuong dong -> khong ap dung (chong noi lenh them).
-const OBSIDIAN_DIRECT_RE = /^\s*(?:"[^"]*harness(?:\.\w+)?"|'[^']*harness(?:\.\w+)?'|(?:[^\s"']*[\\/])?harness(?:\.\w+)?)\s+obsidian(?:\s|$)/i;
-const OBSIDIAN_NODE_RE = /^\s*node(?:\.exe)?\s+(?:--?[\w-]+(?:=\S+)?\s+)*(?:"[^"]*harness[^"]*"|'[^']*harness[^']*'|\S*harness\S*)\s+obsidian(?:\s|$)/i;
-export function isObsidianGateCmd(cmd) {
-  const c = String(cmd).replace(/^\s*&\s+/, ''); // PowerShell: & "...harness.cmd" obsidian ...
-  if (/[;&|<>\x60\n\r]|\$\(/.test(c)) return false;
-  return OBSIDIAN_DIRECT_RE.test(c) || OBSIDIAN_NODE_RE.test(c);
+// Ngoai le: lenh DON, token dau DUNG "harness" (khong tien to duong dan: ./harness, .\harness, C:\...\harness deu khong duoc) hoac node "<bin harness cua plugin dang chay>" roi "obsidian".
+// Co ; & | < > ( ) { } backtick, $( @( hoac xuong dong -> khong ap dung (chong noi lenh/subexpression/scriptblock them).
+const OBSIDIAN_DIRECT_RE = /^\s*harness\s+obsidian(?:\s|$)/i;
+const OBSIDIAN_NODE_RE = /^\s*node(?:\.exe)?\s+(?:--?[\w-]+(?:=\S+)?\s+)*(?:"([^"]+)"|'([^']+)'|(\S+))\s+obsidian(?:\s|$)/i;
+const pluginBins = () => [path.join(HUB_ROOT, 'harness', 'cli', 'harness.mjs'), path.join(HUB_ROOT, 'bin', 'harness.mjs')].map(normPathText);
+export function isObsidianGateCmd(cmd, bins = pluginBins()) {
+  const c = String(cmd).replace(/^\s*&\s+/, ''); // PowerShell: & harness obsidian ...
+  if (/[;&|<>(){}\x60\n\r]|\$\(/.test(c)) return false;
+  if (OBSIDIAN_DIRECT_RE.test(c)) return true;
+  const m = OBSIDIAN_NODE_RE.exec(c);
+  return !!m && bins.includes(normPathText(m[1] || m[2] || m[3]));
 }
 /** -> {id, reason} neu text (lenh hoac duong dan file) nhac toi protectedPaths, nguoc lai null. opts.file = text la duong dan file (khong co ngoai le obsidian). */
 export function protectedPathHit(text, cfg, opts = {}) {
   const list = protectedList(cfg);
   if (!list.length || typeof text !== 'string' || !text) return null;
   if (!opts.file && isObsidianGateCmd(text)) return null;
-  const t = normPathText(text);
+  const ts = [normPathText(text), normPathText(text, true)]; // khoang trang cuoi thanh phan chi bo o dang 2 (dang 1 giu "lenh /abs/path" nguyen)
   for (const p of list) {
     const re = new RegExp('(?<![a-z0-9_.-])' + p.replace(ESC, '\\$&') + '(?![a-z0-9_.-])');
-    if (re.test(t)) return { id: 'protected-path', reason: PROTECTED_REASON };
+    if (ts.some((t) => re.test(t))) return { id: 'protected-path', reason: PROTECTED_REASON };
   }
   return null;
 }
@@ -271,11 +282,13 @@ function extract(inp) {
 export function decide(inp, cfg) {
   const x = extract(inp);
   if (!x) return { out: {}, entry: null };
-  const hit = evaluate(x.cmd, cfg) || (x.filePath ? protectedPathHit(x.filePath, cfg, { file: true }) : null);
+  let subject = x.cmd;
+  let hit = evaluate(x.cmd, cfg);
+  if (!hit && x.filePath) { hit = protectedPathHit(x.filePath, cfg, { file: true }); if (hit) subject = x.filePath; } // log hash/len cua file_path (khong ghi noi dung)
   const audit = cfg.mode === 'audit';
   const base = { out: x.agy ? { decision: 'allow' } : {}, entry: null };
   if (!hit) return base;
-  const entry = { id: hit.id, tool: x.tool, mode: cfg.mode, action: audit ? 'would-block' : 'block', hash: crypto.createHash('sha256').update(x.cmd).digest('hex').slice(0, 16), len: x.cmd.length }; // khong ghi noi dung lenh (co the chua secret): chi hash + do dai + id luat
+  const entry = { id: hit.id, tool: x.tool, mode: cfg.mode, action: audit ? 'would-block' : 'block', hash: crypto.createHash('sha256').update(subject).digest('hex').slice(0, 16), len: subject.length }; // khong ghi noi dung lenh (co the chua secret): chi hash + do dai + id luat
   if (audit) return { out: base.out, entry };
   const reason = `guard[${hit.id}]: ${hit.reason}`;
   const out = x.agy ? { decision: 'deny', reason } : { hookSpecificOutput: { hookEventName: 'PreToolUse', permissionDecision: 'deny', permissionDecisionReason: reason } };
@@ -294,6 +307,8 @@ export async function log(entry, cfg) {
     fs.appendFileSync(f, JSON.stringify({ ts: new Date().toISOString(), hook: 'guard', ...entry }) + '\n');
   } catch {}
 }
+
+const warnBroken = (w) => { try { fs.writeSync(2, 'guard: ' + w.slice(0, 400) + '\n'); } catch { /* stderr dong */ } };
 
 function readStdin(max, ms) {
   return new Promise((resolve) => {
@@ -326,7 +341,7 @@ export async function handle(event, input, ctx = {}) {
     if (!cfg) {
       const L = load(undefined, { hubRoot: ctx && ctx.hubRoot, env: ctx && ctx.env });
       cfg = L.config;
-      for (const w of L.warnings) await emit({ id: 'config-warning', action: w.slice(0, 200) }, cfg);
+      for (const w of L.warnings) { await emit({ id: 'config-warning', action: w.slice(0, 200) }, cfg); if (w.startsWith('config-broken')) warnBroken(w); }
     }
     const d = decide(input, cfg);
     if (d.entry) await emit(d.entry, cfg);
@@ -357,7 +372,7 @@ async function main() {
   let out = {};
   try {
     const L = load(); const cfg = L.config;
-    for (const w of L.warnings) await log({ id: 'config-warning', action: w.slice(0, 200) }, cfg);
+    for (const w of L.warnings) { await log({ id: 'config-warning', action: w.slice(0, 200) }, cfg); if (w.startsWith('config-broken')) warnBroken(w); }
     const r = await readStdin(cfg.maxInputBytes, cfg.hardTimeoutMs);
     if (r.err) await log({ id: 'fail-open', action: r.err }, cfg);
     else out = toOutput(await handle('PreToolUse', r.inp, { config: cfg, write: true }), r.inp);

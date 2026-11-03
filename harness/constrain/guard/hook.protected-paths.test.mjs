@@ -4,12 +4,16 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { load, configFiles, evaluate, decide, handle, protectedPathHit, isObsidianGateCmd, normPathText, DEFAULTS } from './hook.mjs';
+import { load, configFiles, evaluate, decide, handle, protectedPathHit, isObsidianGateCmd, normPathText, DEFAULTS, HUB_ROOT } from './hook.mjs';
+import { guardConfigHealth } from '../../core/config/guard-health.mjs';
 
 const VAULT = 'E:\\Notes\\Vault';
 const cfg = { ...DEFAULTS, protectedPaths: [VAULT] };
 const bash = (command) => ({ tool_name: 'Bash', tool_input: { command } });
 const hit = (cmd, c = cfg) => (evaluate(cmd, c) || {}).id;
+const BIN = path.join(HUB_ROOT, 'harness', 'cli', 'harness.mjs');
+const LAUNCHER = path.join(HUB_ROOT, 'bin', 'harness.mjs');
+const BT = String.fromCharCode(96); // backtick PowerShell
 
 test('mac dinh protectedPaths RONG: moi duong dan deu qua', () => {
   assert.deepEqual(DEFAULTS.protectedPaths, []);
@@ -57,37 +61,63 @@ test('protectedPaths dang /e/... va co dau / cuoi cung duoc chuan hoa', () => {
   assert.equal(normPathText('e:/a/b'), 'e:/a/b'); // khong nuot nham /a/ thanh o dia
 });
 
+test('chuan hoa chong ne: Vault.\\a.md, E:\\Notes\\.\\Vault, backtick PowerShell, x\\..\\Vault, thanh phan co dau cham/khoang trang cuoi', () => {
+  for (const c of [
+    'cat E:\\Notes\\Vault.\\a.md',
+    'cat E:\\Notes\\Vault..\\a.md',
+    'cat E:\\Notes\\.\\Vault\\a.md',
+    'cat E:\\Notes\\.\\.\\Vault',
+    'type E:\\Notes\\Va' + BT + 'ult\\a.md',
+    'type "E:\\No' + BT + 'tes\\Vault\\a.md"',
+    'cat E:\\Notes\\x\\..\\Vault\\a.md',
+    'cat E:/Notes/sub/../Vault/a.md',
+    'cat "E:\\Notes\\Vault \\a.md"',
+    'cat E:\\Notes\\Vault.',
+    'cat /e/Notes/./Vault/a.md',
+  ]) assert.equal(hit(c), 'protected-path', c);
+  assert.equal(hit('cat E:\\Notes\\x\\..\\..\\Vault2\\a.md'), undefined);
+  assert.equal(normPathText('E:\\Notes\\.\\Vault.\\a'), 'e:/notes/vault/a');
+  // duong tuyet doi kieu Unix: khoang trang giua lenh va /abs khong bi nuot
+  assert.equal(hit('ls /home/u/notes', { ...DEFAULTS, protectedPaths: ['/home/u/notes'] }), 'protected-path');
+});
+
 test('muc rong/qua ngan/khong phai chuoi bi bo (khong chan tat ca)', () => {
   const c = { ...DEFAULTS, protectedPaths: ['', ' ', '/', 'e', 5, null] };
   assert.equal(hit('ls /e/notes', c), undefined);
   assert.equal(hit('echo x', c), undefined);
 });
 
-test('ngoai le: harness obsidian / node ...harness... obsidian (lenh don)', () => {
+test('ngoai le: harness obsidian (token dau dung "harness") / node "<bin harness cua plugin>" obsidian (lenh don)', () => {
   for (const c of [
     `harness obsidian query --vault ${VAULT} --tag meta/agent`,
     'harness obsidian query --vault /e/notes/vault',
-    `node "E:\\06. Projects\\harness-kit\\harness\\cli\\harness.mjs" obsidian query --vault ${VAULT}`,
-    `node --no-warnings E:/proj/harness/cli/harness.mjs obsidian put --vault ${VAULT}`,
-    `"C:\\Users\\u\\AppData\\Local\\harness-kit\\bin\\harness.cmd" obsidian query ${VAULT}`,
-    `& "C:\\Users\\u\\bin\\harness.cmd" obsidian query ${VAULT}`,
-    `C:\\bin\\harness obsidian query ${VAULT}`,
+    `node "${BIN}" obsidian query --vault ${VAULT}`,
+    `node --no-warnings "${LAUNCHER}" obsidian put --vault ${VAULT}`,
+    `& harness obsidian query ${VAULT}`,
   ]) { assert.equal(isObsidianGateCmd(c), true, c); assert.equal(hit(c), undefined, c); }
 });
 
-test('ngoai le KHONG ap dung khi noi lenh/redirect/sai cong', () => {
+test('ngoai le KHONG ap dung: tien to duong dan, node bin la, noi lenh, subexpression/scriptblock PowerShell', () => {
   for (const c of [
+    `./harness obsidian query ${VAULT}`,
+    `.\\harness obsidian query ${VAULT}`,
+    `C:\\bin\\harness obsidian query ${VAULT}`,
+    `"C:\\Users\\u\\bin\\harness.cmd" obsidian query ${VAULT}`,
+    `node E:/proj/harness/cli/harness.mjs obsidian query ${VAULT}`,
+    `node "E:\\evil\\harness.mjs" obsidian ${VAULT}`,
+    `harness obsidian query (Get-Content ${VAULT}\\a.md)`,
+    `harness obsidian query @(Get-Content ${VAULT}\\a.md)`,
+    `harness obsidian query { Get-Content ${VAULT}\\a.md }`,
+    `harness obsidian query $(cat ${VAULT}\\a.md)`,
     `harness obsidian query && cat ${VAULT}\\a.md`,
     `harness obsidian query ; type ${VAULT}\\a.md`,
     `harness obsidian query | cat ${VAULT}\\a.md`,
     `harness obsidian query > ${VAULT}\\a.md`,
-    `harness obsidian query $(cat ${VAULT}\\a.md)`,
     `harness obsidian query\ncat ${VAULT}\\a.md`,
     `harness data ls ${VAULT}`,
     `harness obsidianx ${VAULT}`,
     `echo harness obsidian ${VAULT}`,
-    `node evil.mjs obsidian ${VAULT}`,
-    `node harness.mjs query obsidian ${VAULT}`,
+    `node "${BIN}" query obsidian ${VAULT}`,
   ]) assert.equal(hit(c), 'protected-path', c);
 });
 
@@ -109,6 +139,16 @@ test('Edit/Write vao duong dan bao ve -> deny (khong co ngoai le obsidian); ngoa
   }
   assert.deepEqual(decide({ tool_name: 'Write', tool_input: { file_path: 'E:\\Other\\a.md' } }, cfg).out, {});
   assert.equal(protectedPathHit(`harness obsidian ${VAULT}`, cfg, { file: true }).id, 'protected-path');
+});
+
+test('Edit/Write bi chan: log hash/len cua file_path (khong de rong, khong ghi noi dung)', () => {
+  const fp = `${VAULT}\\sub\\a.md`;
+  const r = decide({ tool_name: 'Write', tool_input: { file_path: fp } }, cfg);
+  assert.equal(r.entry.id, 'protected-path');
+  assert.equal(r.entry.len, fp.length);
+  assert.match(r.entry.hash, /^[0-9a-f]{16}$/);
+  assert.equal(r.entry.hash, decide({ tool_name: 'Write', tool_input: { file_path: fp } }, cfg).entry.hash);
+  assert.ok(!JSON.stringify(r.entry).includes('sub'));
 });
 
 test('handle: deny qua ctx.config; ctx.config rong -> khong chan', async () => {
@@ -141,4 +181,27 @@ test('config: protectedPaths khong phai chuoi bi loc; lop du an khong tat duoc m
   fs.writeFileSync(path.join(gd, 'projects', 'p2.json'), JSON.stringify({ protectedPaths: [] }));
   const r = load(configFiles(hubRoot), { env: { GUARD_PROJECT: 'p2' }, hubRoot });
   assert.deepEqual(r.config.protectedPaths, ['E:\\Notes\\Vault']);
+});
+
+test('config guard hong JSON: canh bao config-broken (khong am tham rong), guardConfigHealth bao file, hook van fail-open', async () => {
+  const hubRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'guard-pp-'));
+  const gd = path.join(hubRoot, 'config', 'guard');
+  fs.mkdirSync(path.join(gd, 'projects'), { recursive: true });
+  fs.writeFileSync(path.join(gd, 'guard.local.json'), '{ "protectedPaths": ["E:\\\\Notes\\\\Vault"'); // cut giua chung
+  const h = guardConfigHealth({ hubRoot, env: {} });
+  assert.equal(h.length, 1);
+  assert.match(h[0].file, /guard\.local\.json$/);
+  assert.equal(h[0].problem, 'JSON hong');
+  const L = load(configFiles(hubRoot), { env: {}, hubRoot });
+  assert.deepEqual(L.config.protectedPaths, []);
+  const w = L.warnings.find((x) => x.startsWith('config-broken'));
+  assert.ok(w && w.includes('guard.local.json') && w.includes('protectedPaths'), String(w));
+  // fail-open: khong nem, khong chan; canh bao ghi ra stderr
+  const orig = fs.writeSync; let err = '';
+  fs.writeSync = (fd, d, ...rest) => { if (fd === 2) { err += String(d); return String(d).length; } return orig(fd, d, ...rest); };
+  try { const r = await handle('PreToolUse', bash('ls'), { hubRoot, env: {}, write: false }); assert.equal(r.decision, undefined); assert.ok(r.records.some((x) => /config-broken/.test(x.data.action))); } finally { fs.writeSync = orig; }
+  assert.match(err, /config-broken/);
+  // file tot -> khong canh bao
+  fs.writeFileSync(path.join(gd, 'guard.local.json'), '{ "protectedPaths": [] }');
+  assert.deepEqual(guardConfigHealth({ hubRoot, env: {} }), []);
 });

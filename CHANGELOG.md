@@ -7,6 +7,7 @@ GitHub releases and commit history are the source of truth going forward. This f
 - BREAKING: `evolve propose --kind fact` removed (facts were written through the knowledge gateway); only `--kind skill` remains. Config key `factDir` and env `HARNESS_KNOWLEDGE_ROOT` are no longer read.
 - Data: the `memory` registry entry (`data/knowledge/memory`) is removed; existing directories become unregistered (data scan warns, no data is deleted). The `knowledge` data zone is kept (tasks, evolve, eval write under `data/knowledge/`).
 - Feat(guard): new `protectedPaths` rule (`protected-path`). Empty by default; extend via guard config (machine `guard.local.json`/`local.json`, project `project.json` or `config/guard/projects/<id>.json`; layers merge, add-only). Bash/PowerShell/run_command text or Edit/Write/MultiEdit file_path mentioning a protected path (case-insensitive, `\\` / `/` / `/e/...` forms normalized) is denied, except a single `harness obsidian ...` / `node ...harness... obsidian ...` command.
+- Guard hardening: protectedPaths normalizes `./`, `x/../`, trailing dots/spaces and PowerShell backticks; the `harness obsidian` exemption now requires a bare `harness` first token or `node` + this plugin's own bin, and is refused with `( ) { }`. A broken guard config file is no longer silent: `config-broken` warning (audit + stderr) and a `harness doctor` ERROR. Blocked Edit/Write now log the hash/len of file_path.
 
 ## 0.2.2
 - Fix: extension gateway forwards `--json` and other flags correctly (GATEWAY_ONLY_FLAGS).

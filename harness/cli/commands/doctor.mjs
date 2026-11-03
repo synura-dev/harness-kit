@@ -22,6 +22,7 @@ const groupWarn = {};
 const DOCTOR_DUP_ALLOW = [
   { name: 'parseArgs', files: ['harness/build/skills/cli.mjs', 'harness/evolve/eval/bench/hook-latency.mjs', 'harness/evolve/eval/cli.mjs', 'harness/evolve/loop/cli.mjs', 'harness/observe/evidence/cli.mjs'], reason: 'moi CLI co bo co rieng' },
   { name: 'render', files: ['harness/evolve/loop/cli.mjs', 'harness/hooks/dispatch/merge.mjs', 'harness/observe/cost/cli.mjs', 'harness/observe/evidence/cli.mjs'], reason: 'moi CLI dinh dang output rieng; dispatch/merge ghep ket qua hook (khac nghia)' },
+  { name: 'prune', files: ['harness/build/skills/skills.mjs', 'harness/observe/views/prune.mjs'], reason: 'API cung ten cua hai domain khac nhau (skills/views)' },
   { name: 'check', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs'], reason: 'API cung ten cua hai domain khac nhau (skills/loop)' },
   { name: 'ctx', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs', 'harness/observe/cost/cost.mjs'], reason: 'ngu canh rieng moi module (truong khac nhau)' },
   { name: 'summary', files: ['harness/observe/cost/cost.mjs', 'harness/observe/evidence/evidence.mjs'], reason: 'tong hop so lieu cost khac evidence' },
@@ -251,6 +252,10 @@ try {
   const clu = checkClutter(si.files, si.registry);
   cap(clu.findings.map((f) => `clutter [${f.severity}] ${f.rule} ${f.path}: ${f.message}`));
   rows.push({ name: 'clutter', total: clu.findings.length, errors: clu.findings.filter((f) => f.severity === 'error').length, truncated: clu.truncated ? (clu.reason || true) : false });
+  const { guardConfigHealth } = await import('../../core/config/guard-health.mjs');
+  const gh = guardConfigHealth({ hubRoot: HUB_ROOT });
+  gh.forEach((b) => console.log(`[ERROR] config guard hong, protectedPaths mat hieu luc: ${b.file} (${b.problem})`));
+  rows.push({ name: 'guard-config', total: gh.length, errors: gh.length, truncated: false });
   const src = countSources(si.files);
   console.log('[sources] ' + src.map((s) => `${s.dir}=${s.count}`).join(' '));
   const { LONG_FILE_SOFT, DUP_ALLOW } = await import(new URL('../../core/config/contract.mjs', import.meta.url).href);
