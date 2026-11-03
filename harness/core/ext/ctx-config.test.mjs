@@ -30,7 +30,7 @@ test('ctx.config nap lop may + env HARNESS_REGISTRY_*', () => {
 });
 
 test('khoa nhay cam bi chan o lop du an', () => {
-  expect(CONFIG_DENY_KEYS).toEqual(expect.arrayContaining(['extRoots', 'extensions', 'projectResolver', 'ownerRoots', 'knowledge']));
+  expect(CONFIG_DENY_KEYS).toEqual(expect.arrayContaining(['extRoots', 'extensions', 'projectResolver', 'ownerRoots']));
   const r = loadExtConfig('nothing', { defaults: { a: 1 }, root: ws, env: {} });
   expect(r.config.a).toBe(1);
   expect(Array.isArray(r.warnings)).toBe(true);

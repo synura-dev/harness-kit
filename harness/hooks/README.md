@@ -9,11 +9,10 @@ Mẫu nhóm, giá trị `adapters` và cách thêm CLI: xem [../README.md](../RE
 - Module thật nằm ở các nhóm harness, không ở đây:
   - `constrain/`: guard, approval, bash-guard, model-policy, verify-gate, proc-orphans, worktree.
   - `observe/audit/`: ghi audit.
-  - `knowledge/inject/`: inject ngữ cảnh.
 - Các stub cũ `audit/`, `guard/`, `bash-guard/`, `proc-orphans/`, `worktree/`, `session/` đã xoá. Không còn đường dẫn `hooks/<nhóm>/hook.mjs` nào.
 
 ## Thêm hook mới
-1. Viết module `export default { id, events, timeoutMs, onError, handle }` trong nhóm phù hợp: `constrain/` (chặn/kiểm tất định), `observe/` (ghi nhận), `knowledge/` (inject ngữ cảnh). Kèm README, config JSON, test.
+1. Viết module `export default { id, events, timeoutMs, onError, handle }` trong nhóm phù hợp: `constrain/` (chặn/kiểm tất định), `observe/` (ghi nhận). Kèm README, config JSON, test.
 2. Đăng ký trong `dispatch/modules.mjs` (`ORDER`, và loader). KHÔNG thêm entry mới vào `.claude/settings.json`: settings chỉ có một entry cho mỗi sự kiện, trỏ vào dispatcher.
 3. Hook agy: thêm vào `dispatch/agy.mjs` nếu cần. Ghi `adapters` trong manifest của module.
 4. Kiểm tra: `node harness/tools/sync.mjs --check`, `node harness/cli/commands/doctor.mjs --adapters`.

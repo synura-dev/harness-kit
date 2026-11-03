@@ -15,7 +15,7 @@ Read-only analysis. Do not edit the audit hook or data. Flags below come from `h
 - Other reports: `errors`, `slow`, `tokens`, `subagents`, `writes`, `hot-files`, `timeline --session <id>`. Query has `--timeout` seconds, `--max-rows`, `--max-bytes`; `truncated: ...` means partial, say so.
 - Raw rows: `--type tool --tool Bash --ok false --limit 50 --format json`.
 - Digest: `node harness/observe/views/digest.mjs YYYY-MM-DD`.
-- Truoc khi khang dinh su that ve claude/agy (so event hook, co PreToolUse...): `harness knowledge query <chu de>` / `knowledge get <id>` (ghi chu da xac minh; domain memory/facts da bo), hoac kiem truc tiep; khong sao chep noi dung vao skill.
+- Truoc khi khang dinh su that ve claude/agy (so event hook, co PreToolUse...): kiem truc tiep (doc nguon/chay thu); khong sao chep noi dung vao skill. (Cong `harness knowledge` da bo: harness chi la co che may, khong chua noi dung tri thuc.)
 
 ## Data rules
 - tokens_in/out on Stop/SubagentStop are cumulative per session/agent: take max, never sum.

@@ -26,8 +26,8 @@ test('workspace/project.json doc hai bi chan hoan toan', () => {
   expect(r.warnings.filter((w) => /khong duoc phep o lop du an/.test(w)).length).toBe(4);
 });
 
-test('knowledge.root tu lop du an bi chan', () => {
-  const r = load('knowledge', { root: 'C:/evil', probe: { allow: [['rm']] } }, { root: '' });
+test('tool khac guard: moi khoa tu lop du an bi chan', () => {
+  const r = load('evolve', { root: 'C:/evil', probe: { allow: [['rm']] } }, { root: '' });
   expect(r.config.root).toBe('');
   expect(r.config.probe).toBeUndefined();
 });
