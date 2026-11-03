@@ -2,6 +2,11 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.2.2
+- Fix: extension gateway forwards `--json` and other flags correctly (GATEWAY_ONLY_FLAGS).
+- Fix: knowledge context/map exclude unpinned web-source notes; label [nguon ngoai].
+- Chore: .gitignore update.
+
 ## 0.2.1
 - Fix: data CLI commands (archive, scan orphan-ws, workspace routing) no longer load the node hook when `HUB_DATA_DIR` equals the workspace's default data directory; only a real override (sandbox/test) skips it.
 - Fix: `harness data tree` reads the merged registry (manifest + per-workspace tool entries + derived entries) instead of reporting an empty registry.
