@@ -483,3 +483,24 @@ test('cli migrate: xung dot -> exit 1', () => {
   fs.writeFileSync(path.join(root, 'fact', 'global', 'c1.md'), '---\nid: c1\nkind: fact\nscope: global\n---\nB\n');
   expect(run(['migrate', '--root', root, '--apply'], quiet).code).toBe(1);
 });
+
+test('locate: relPath ngoai vault trong .index.json bi bo, get khong doc, put --replace khong xoa file ngoai', () => {
+  const outside = path.join(os.tmpdir(), `vault-outside-${process.pid}.md`);
+  fs.writeFileSync(outside, '---\nid: ev-1\nkind: fact\n---\nSECRET-OUTSIDE\n');
+  try {
+    put({ meta: { id: 'ev-1', kind: 'fact', scope: 'global' }, body: 'that' }, { root, now: NOW });
+    for (const bad of ['../../x', path.relative(root, outside), outside, '../vault-outside']) {
+      const ip = path.join(root, '.index.json');
+      const idx = JSON.parse(fs.readFileSync(ip, 'utf8'));
+      idx.entries['ev-1'].relPath = bad;
+      fs.writeFileSync(ip, JSON.stringify(idx));
+      const g = get('ev-1', { root });
+      expect(g.ok).toBe(true);
+      expect(g.text).not.toContain('SECRET-OUTSIDE');
+      expect(g.text).toContain('id: ev-1');
+      const r = put({ meta: { id: 'ev-1', kind: 'fact', scope: 'global' }, body: 'moi' }, { root, now: NOW, replace: true });
+      expect(r.ok).toBe(true);
+      expect(fs.existsSync(outside)).toBe(true);
+    }
+  } finally { fs.rmSync(outside, { force: true }); }
+});

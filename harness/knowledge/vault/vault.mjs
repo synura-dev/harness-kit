@@ -66,9 +66,10 @@ function locate(root, id, kind) {
   try {
     if (fs.existsSync(indexPath)) {
       const ent = JSON.parse(fs.readFileSync(indexPath, 'utf8'))?.entries?.[id];
-      if (ent && (!kind || ent.kind === kind)) {
-        const f = path.join(base, ent.relPath);
-        if (lexists(f)?.isFile()) return [{ kind: ent.kind, file: f }];
+      if (ent && (!kind || ent.kind === kind) && KINDS.includes(ent.kind) && typeof ent.relPath === 'string' && ent.relPath && !path.isAbsolute(ent.relPath)) {
+        const f = path.resolve(base, ent.relPath);
+        // cache hong/doc hai: relPath phai nam trong <root>/<kind>/, neu khong bo entry va quet lai
+        if (f !== path.join(base, ent.kind) && isInside(f, path.join(base, ent.kind)) && lexists(f)?.isFile()) return [{ kind: ent.kind, file: f }];
       }
     }
   } catch {}
