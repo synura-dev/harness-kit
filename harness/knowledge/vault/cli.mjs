@@ -147,8 +147,9 @@ export function run(argv, emitOpts = {}) {
       const head = r.dryRun
         ? `${r.count} file can di chuyen (dry-run; dung --apply de thuc hien)`
         : `da di chuyen ${r.count} file sang cau truc thu muc moi`;
-      const summary = [head, ...r.moved.slice(0, 30).map((x) => `${x.id}: ${x.from} -> ${x.to}`)].join('\n');
-      return { code: 0, ...emit({ summary, data: r }, o) };
+      const summary = [head, ...r.moved.slice(0, 30).map((x) => `${x.id}: ${x.from} -> ${x.to}`),
+        ...(r.conflicts || []).slice(0, 30).map((x) => `XUNG DOT (khong ghi de) ${x.id}: ${x.from} -> ${x.to}`)].join('\n');
+      return { code: r.ok === false ? 1 : 0, ...emit({ summary, data: r }, o) };
     }
   } catch (e) { err(`knowledge ${cmd}: ${e.message}`); return { code: 1 }; }
   err(USAGE);

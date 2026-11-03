@@ -181,8 +181,11 @@ export function syncIndex(root, opts = {}) {
 
 /** Di chuyen file flat hoac sai scope-dir sang dung cau truc thu muc. */
 export function doMigrate(root, options = {}, { safeFile } = {}) {
-  const idx = syncIndex(root, options);
+  const apply = options.apply === true;
+  const idx = syncIndex(root, { ...options, write: apply ? options.write : false });
   const moved = [];
+  const conflicts = [];
+  const claimed = new Set();
   for (const it of idx.items) {
     const scope = it.scope || 'global';
     let targetFile;
@@ -193,7 +196,13 @@ export function doMigrate(root, options = {}, { safeFile } = {}) {
     }
     const curFile = path.join(root, it.relPath);
     if (path.resolve(curFile) !== path.resolve(targetFile)) {
-      if (options.apply === true) {
+      const key = path.resolve(targetFile).toLowerCase();
+      if (lexists(targetFile) || claimed.has(key)) {
+        conflicts.push({ id: it.id, from: curFile, to: targetFile, reason: 'dich da ton tai, khong ghi de' });
+        continue;
+      }
+      claimed.add(key);
+      if (apply) {
         fs.mkdirSync(path.dirname(targetFile), { recursive: true });
         renameRetry(curFile, targetFile);
         try { fs.rmdirSync(path.dirname(curFile)); } catch {}
@@ -204,5 +213,5 @@ export function doMigrate(root, options = {}, { safeFile } = {}) {
   if (options.apply === true && moved.length) {
     try { syncIndex(root, { rebuild: true }); } catch {}
   }
-  return { ok: true, dryRun: options.apply !== true, moved, count: moved.length };
+  return { ok: conflicts.length === 0, dryRun: !apply, moved, conflicts, count: moved.length };
 }

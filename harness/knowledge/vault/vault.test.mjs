@@ -448,3 +448,38 @@ test('cli migrate: ho tro dry-run, --apply va --json', () => {
   expect(fs.existsSync(path.join(root, 'fact', 'global', 'cli-mig.md'))).toBe(true);
   expect(fs.existsSync(path.join(root, 'fact', 'cli-mig.md'))).toBe(false);
 });
+
+test('migrate: dich da ton tai -> conflicts, khong ghi de, dry-run khong doi gi', () => {
+  fs.mkdirSync(path.join(root, 'fact', 'global'), { recursive: true });
+  const src = path.join(root, 'fact', 'dup-src.md');
+  const dst = path.join(root, 'fact', 'global', 'dup-1.md');
+  fs.writeFileSync(src, '---\nid: dup-1\nkind: fact\nscope: global\n---\nSRC\n');
+  fs.writeFileSync(dst, '---\nid: dup-1\nkind: fact\nscope: global\n---\nDST\n');
+  const dry = migrate(root);
+  expect(dry.ok).toBe(false);
+  expect(dry.conflicts.length).toBe(1);
+  expect(fs.existsSync(path.join(root, '.index.json'))).toBe(false);
+  const ap = migrate(root, { apply: true });
+  expect(ap.ok).toBe(false);
+  expect(ap.conflicts.length).toBe(1);
+  expect(fs.readFileSync(dst, 'utf8')).toContain('DST');
+  expect(fs.readFileSync(src, 'utf8')).toContain('SRC');
+});
+
+test('migrate: id frontmatter lech ten file khong ghi de file khac', () => {
+  fs.mkdirSync(path.join(root, 'fact', 'global'), { recursive: true });
+  const victim = path.join(root, 'fact', 'global', 'victim.md');
+  fs.writeFileSync(victim, '---\nid: victim\nkind: fact\nscope: global\n---\nKEEP\n');
+  const liar = path.join(root, 'fact', 'liar.md');
+  fs.writeFileSync(liar, '---\nid: victim\nkind: fact\nscope: global\n---\nLIAR\n');
+  migrate(root, { apply: true });
+  expect(fs.readFileSync(victim, 'utf8')).toContain('KEEP');
+  expect(fs.readFileSync(liar, 'utf8')).toContain('LIAR');
+});
+
+test('cli migrate: xung dot -> exit 1', () => {
+  fs.mkdirSync(path.join(root, 'fact', 'global'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'fact', 'c1-src.md'), '---\nid: c1\nkind: fact\nscope: global\n---\nA\n');
+  fs.writeFileSync(path.join(root, 'fact', 'global', 'c1.md'), '---\nid: c1\nkind: fact\nscope: global\n---\nB\n');
+  expect(run(['migrate', '--root', root, '--apply'], quiet).code).toBe(1);
+});
