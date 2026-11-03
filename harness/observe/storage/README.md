@@ -39,7 +39,7 @@ Muc dich: du lieu tool theo NUT (du an/repo) nhom vao WORKSPACE (nhieu nut co th
 
 ## Pham vi enforce
 `HARNESS_DATA_ENFORCE` / `registry.enforce` chi phu cac writer di qua `guardWrite` (storage.mjs): audit, gateway, proc-orphans, play, tasks compact, storage (writeJson/appendJsonl). Khi chan, appendJsonl in 1 dong stderr `data-enforce: ...` va khong ghi.
-CHUA phu (dung fs truc tiep): dispatch-worker, release, vault. Cac writer nay chi bi `data scan`/doctor phat hien sau su kien, khong bi chan luc ghi.
+CHUA phu (dung fs truc tiep): dispatch-worker, release. Cac writer nay chi bi `data scan`/doctor phat hien sau su kien, khong bi chan luc ghi.
 
 ## Cay zone va scan
 Zone cap 1: system, knowledge, workspaces, external, _inbox. Moi muc registry co zone/class/owner (+workspace voi zone=workspaces); `path` = vi tri vat ly hien tai, `target` = dich cuoi. Muc workspace nam o `config/data/workspaces/<ws>.json` (+ `.example`), registry.json chi giu phan chung. Class mac dinh: log 30d, cache 7d, artifact/durable khong tu xoa (override `retentionDays`, `caps`).
@@ -50,7 +50,7 @@ Zone cap 1: system, knowledge, workspaces, external, _inbox. Moi muc registry co
 Quy trinh muc la: `data scan` -> `data adopt --yes` (vao _inbox/<date>/) -> `data inbox ls|restore|rm` -> dang ky dung hoac xoa.
 
 ## Retention (registry.json)
-audit 90d, play/runs/watchdog 14d, worktree 30d, proc-orphans 7d; release/memory/evolve/eval/tasks/ws-demo: giu.
+audit 90d, play/runs/watchdog 14d, worktree 30d, proc-orphans 7d; release/evolve/eval/tasks/ws-demo: giu.
 
 ## Quy tac du lieu la
 Tool moi them domain vao registry truoc khi ghi. Muc la phat hien boi `data scan`/doctor: `data adopt` vao `data/_inbox/<date>/`, sau do dang ky domain dung hoac xoa.
@@ -95,8 +95,6 @@ knowledge/
     -  [artifact] owner=curator (skill eval cu, xem evolve/README) retention=giu
   evolve/
     -  [durable] owner=harness/evolve/loop retention=giu
-  memory/
-    -  [durable] owner=harness/knowledge/vault retention=giu
   tasks/
     -  [durable] owner=<ext>/tasks retention=giu
 workspaces/
