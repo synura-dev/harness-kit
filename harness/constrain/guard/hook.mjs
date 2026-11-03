@@ -9,7 +9,7 @@ import { isPluginMode } from '../../core/io/paths.mjs';
 import { isMain, writeOut } from '../../core/io/stdio.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const DEFAULTS = { mode: 'enforce', logFile: '', maxInputBytes: 1048576, maxCommandChars: 100000, remoteHostAliases: [], sensitiveFileNames: [], allowlist: [], denyPatterns: [], hardTimeoutMs: 2500 };
+export const DEFAULTS = { mode: 'enforce', logFile: '', maxInputBytes: 1048576, maxCommandChars: 100000, remoteHostAliases: [], sensitiveFileNames: [], allowlist: [], denyPatterns: [], protectedPaths: [], hardTimeoutMs: 2500 };
 export const HUB_ROOT = path.resolve(HERE, '..', '..', '..');
 const LEGACY_LOCAL = path.join(HERE, 'hook.config.local.json');
 /** Local: <hubRoot>/config/guard/guard.local.json; neu thieu thi roi ve duong cu trong harness (chuyen tiep, canh bao legacy-local-config). */
@@ -69,7 +69,7 @@ export function stripInertText(cmd) {
   return q ? cmd : out; // quote khong dong: giu nguyen (khong doan)
 }
 const EXT_REASON = 'Cam sua dang ky extension (lop may) hoac ext register/approve tu agent; chi nguoi dung o TTY. / Extension registry is protected; the human must run it in a TTY.';
-const PACK_KEYS =new Set(['remoteHostAliases', 'sensitiveFileNames', 'denyPatterns', 'allowlist']);
+const PACK_KEYS =new Set(['remoteHostAliases', 'sensitiveFileNames', 'denyPatterns', 'allowlist', 'protectedPaths']);
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /** Noi theo id: trung id thi lop sau thang; disable:true tat ro rang. protect = id loi: lop goi khong duoc ghi de/tat (bo qua + canh bao). */
@@ -107,12 +107,12 @@ export function load(files = configFiles(), opts = {}) {
   const env = opts.env || process.env;
   const hubRoot = opts.hubRoot || HUB_ROOT;
   let cfg = { ...DEFAULTS };
-  let deny = [], allow = [], aliases = [], names = [];
+  let deny = [], allow = [], aliases = [], names = [], paths = [];
   const pile = (c) => {
-    const { denyPatterns, allowlist, remoteHostAliases, sensitiveFileNames, ...scalars } = c;
+    const { denyPatterns, allowlist, remoteHostAliases, sensitiveFileNames, protectedPaths, ...scalars } = c;
     cfg = { ...cfg, ...scalars };
     deny = mergeById(deny, norm(denyPatterns)); allow = mergeById(allow, norm(allowlist));
-    aliases = union(aliases, remoteHostAliases); names = union(names, sensitiveFileNames);
+    aliases = union(aliases, remoteHostAliases); names = union(names, sensitiveFileNames); paths = union(paths, protectedPaths);
   };
   if (files.includes(LEGACY_LOCAL)) warnings.push('legacy-local-config: chuyen ' + LEGACY_LOCAL + ' sang config/guard/guard.local.json');
   const read = (f, quiet) => { const l = loadConfig({ defaults: {}, files: [f] }); if (!quiet) warnings.push(...l.warnings); return l.config; };
@@ -137,7 +137,7 @@ export function load(files = configFiles(), opts = {}) {
   pile(coreLayer);
   const coreDeny = deny.map((r) => r.id).filter(Boolean), coreAllow = allow.map((r) => r.id).filter(Boolean);
   for (const m of viaDefaults) pile(m);
-  const defaults = { ...cfg, denyPatterns: deny, allowlist: allow, remoteHostAliases: aliases, sensitiveFileNames: names };
+  const defaults = { ...cfg, denyPatterns: deny, allowlist: allow, remoteHostAliases: aliases, sensitiveFileNames: names, protectedPaths: paths };
   const plugMode = isPluginMode(opts.repoDir || hubRoot) && !env.GUARD_PROJECT;
   const project = plugMode ? 'project' : String(env.GUARD_PROJECT || lscal.project || '').trim();
   // env loc: HARNESS_GUARD_* va HARNESS_CONFIG_DIR khong duoc anh huong guard; chi GUARD_MODE/GUARD_LOG_FILE/GUARD_PROJECT (xu ly rieng).
@@ -176,9 +176,10 @@ export function load(files = configFiles(), opts = {}) {
     });
   }
   aliases = union(b.config.remoteHostAliases, cfg.remoteHostAliases); names = union(b.config.sensitiveFileNames, cfg.sensitiveFileNames);
+  paths = union(b.config.protectedPaths, cfg.protectedPaths).filter((x) => typeof x === 'string' && x.trim()); // chi them (khong tat duoc): lop du an/may chi siet
   deny = norm(cfg.denyPatterns).filter((x) => !tomb.has(x.id)); allow = norm(cfg.allowlist).filter((x) => !tomb.has(x.id));
   deny = [sensitiveRule(names), ...deny.filter((x) => x.id !== 'config-dump')];
-  cfg = { ...cfg, denyPatterns: deny, allowlist: allow, remoteHostAliases: aliases, sensitiveFileNames: names };
+  cfg = { ...cfg, denyPatterns: deny, allowlist: allow, remoteHostAliases: aliases, sensitiveFileNames: names, protectedPaths: paths };
   if (env.GUARD_MODE) cfg.mode = env.GUARD_MODE;
   if (env.GUARD_LOG_FILE) cfg.logFile = env.GUARD_LOG_FILE;
   return { config: cfg, warnings };
@@ -186,6 +187,39 @@ export function load(files = configFiles(), opts = {}) {
 
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const rx = (s) => { try { return new RegExp(s, 'i'); } catch { return null; } };
+
+
+// ---- protectedPaths (mac dinh RONG trong code; them tu config guard cua may/du an). Lenh/ file nhac toi duong dan duoc bao ve -> deny, tru cong harness obsidian. ----
+const PROTECTED_REASON = 'Duong dan duoc bao ve (guard protectedPaths): chi doc/ghi qua cong co kiem soat (harness obsidian ...). / Protected path: use the gated tool (harness obsidian ...), not raw shell/file access.';
+/** Chuan hoa de so khop: chu thuong, \ (lap) -> /, gop //, dang msys /e/x, /mnt/e/x, /cygdrive/e/x -> e:/x. */
+export function normPathText(s) {
+  return String(s).toLowerCase().replace(/\\+/g, '/').replace(/\/{2,}/g, '/')
+    .replace(/(^|[\s"'=(,;])\/(?:mnt|cygdrive)\/([a-z])(?=\/|$|[\s"'])/g, '$1$2:')
+    .replace(/(^|[\s"'=(,;])\/([a-z])(?=\/|$|[\s"'])/g, '$1$2:');
+}
+/** Danh sach protectedPaths da chuan hoa (bo muc rong/qua ngan <3 ky tu, bo '/' cuoi). */
+const protectedList = (cfg) => (Array.isArray(cfg && cfg.protectedPaths) ? cfg.protectedPaths : [])
+  .filter((x) => typeof x === 'string').map((x) => normPathText(x.trim()).replace(/\/+$/, '')).filter((x) => x.length >= 3);
+// Ngoai le: lenh DON goi cong harness obsidian (harness obsidian ... | node <...harness...> obsidian ...). Co ; & | < > backtick, $( hoac xuong dong -> khong ap dung (chong noi lenh them).
+const OBSIDIAN_DIRECT_RE = /^\s*(?:"[^"]*harness(?:\.\w+)?"|'[^']*harness(?:\.\w+)?'|(?:[^\s"']*[\\/])?harness(?:\.\w+)?)\s+obsidian(?:\s|$)/i;
+const OBSIDIAN_NODE_RE = /^\s*node(?:\.exe)?\s+(?:--?[\w-]+(?:=\S+)?\s+)*(?:"[^"]*harness[^"]*"|'[^']*harness[^']*'|\S*harness\S*)\s+obsidian(?:\s|$)/i;
+export function isObsidianGateCmd(cmd) {
+  const c = String(cmd).replace(/^\s*&\s+/, ''); // PowerShell: & "...harness.cmd" obsidian ...
+  if (/[;&|<>\x60\n\r]|\$\(/.test(c)) return false;
+  return OBSIDIAN_DIRECT_RE.test(c) || OBSIDIAN_NODE_RE.test(c);
+}
+/** -> {id, reason} neu text (lenh hoac duong dan file) nhac toi protectedPaths, nguoc lai null. opts.file = text la duong dan file (khong co ngoai le obsidian). */
+export function protectedPathHit(text, cfg, opts = {}) {
+  const list = protectedList(cfg);
+  if (!list.length || typeof text !== 'string' || !text) return null;
+  if (!opts.file && isObsidianGateCmd(text)) return null;
+  const t = normPathText(text);
+  for (const p of list) {
+    const re = new RegExp('(?<![a-z0-9_.-])' + p.replace(ESC, '\\$&') + '(?![a-z0-9_.-])');
+    if (re.test(t)) return { id: 'protected-path', reason: PROTECTED_REASON };
+  }
+  return null;
+}
 
 /** -> {id, reason} cua mau dau tien khop, hoac null. */
 export function evaluate(cmd, cfg) {
@@ -196,6 +230,7 @@ export function evaluate(cmd, cfg) {
   if (LAUNCHER_CMD_RE.test(cmd) && !(isReadOnlyCmd(cmd) && !/\s(?:-o|--output)(?:[\s=]|$)/i.test(cmd))) return { id: 'launcher-protect', reason: LAUNCHER_REASON }; // doc launcher (cat/ls/git diff...) duoc qua; ghi/redirect/rm/node van chan
   if (PLUGIN_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: PLUGIN_REASON };
   const ncmd = cmd.replace(/\\\r?\n|\x60\r?\n/g, ' '); // noi dong (\ hoac backtick + xuong dong) truoc khi so khop
+  const pp = protectedPathHit(ncmd, cfg); if (pp) return pp;
   const aliases = (cfg.remoteHostAliases || []).map(esc).join('|');
   const remote = new RegExp(`\\b(ssh|scp|sftp|rsync)\\b${aliases ? `|\\b(${aliases}):` : ''}`, 'i').test(cmd);
   for (const p of cfg.denyPatterns || []) {
@@ -216,11 +251,12 @@ function extract(inp) {
   if (!inp || typeof inp !== 'object' || Array.isArray(inp)) return null;
   if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(inp.tool_name)) {
     const ti = inp.tool_input || {}; const p = ti.file_path || ti.notebook_path;
-    if (typeof p === 'string' && EXT_CONFIG_RE.test(p)) return { cmd: p, tool: inp.tool_name, agy: false };
+    const fp = typeof p === 'string' ? p : '';
+    if (typeof p === 'string' && EXT_CONFIG_RE.test(p)) return { cmd: p, tool: inp.tool_name, agy: false, filePath: fp };
     const np = typeof p === 'string' ? p.replace(/\\/g, '/') : '';
-    if (np && PLUGIN_FILE_RE.test(np)) return { cmd: '> .claude/plugins/installed_plugins.json', tool: inp.tool_name, agy: false };
+    if (np && PLUGIN_FILE_RE.test(np)) return { cmd: '> .claude/plugins/installed_plugins.json', tool: inp.tool_name, agy: false, filePath: fp };
     const hit = !!np && LAUNCHER_FILE_RE.test(np);
-    return { cmd: hit ? '> bin/harness.mjs' : '', tool: inp.tool_name, agy: false };
+    return { cmd: hit ? '> bin/harness.mjs' : '', tool: inp.tool_name, agy: false, filePath: fp };
   }
   if (inp.tool_name === 'Bash' || inp.tool_name === 'PowerShell') {
     const c = inp.tool_input && inp.tool_input.command;
@@ -235,7 +271,7 @@ function extract(inp) {
 export function decide(inp, cfg) {
   const x = extract(inp);
   if (!x) return { out: {}, entry: null };
-  const hit = evaluate(x.cmd, cfg);
+  const hit = evaluate(x.cmd, cfg) || (x.filePath ? protectedPathHit(x.filePath, cfg, { file: true }) : null);
   const audit = cfg.mode === 'audit';
   const base = { out: x.agy ? { decision: 'allow' } : {}, entry: null };
   if (!hit) return base;

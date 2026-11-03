@@ -106,7 +106,7 @@ const parseEnv = (s) => { try { return clean(JSON.parse(s)); } catch { return s;
 
 // Lop du an (workspace/.harness/config/<tool>/project.json) la dau vao khong tin cay: chi cac khoa nay duoc dat (them luat siet).
 // Moi khoa khac (projectResolver, extRoots, ownerRoots, knowledge.root, duong dan/ma thuc thi...) bi chan.
-export const PROJECT_LAYER_ALLOW = Object.freeze({ guard: Object.freeze(['denyPatterns', 'allowlist']) });
+export const PROJECT_LAYER_ALLOW = Object.freeze({ guard: Object.freeze(['denyPatterns', 'allowlist', 'protectedPaths']) });
 
 export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) {
   const pd = typeof env.CLAUDE_PLUGIN_DATA === 'string' && env.CLAUDE_PLUGIN_DATA.trim();

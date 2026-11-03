@@ -43,8 +43,8 @@ test('extensions/extRoots tu lop du an bi chan o moi tool (ext, workspace, guard
   expect(Object.keys(PROJECT_LAYER_ALLOW)).toEqual(['guard']);
 });
 
-test('guard: lop du an chi duoc them denyPatterns/allowlist; khoa khac bi bo', () => {
-  expect(PROJECT_LAYER_ALLOW.guard).toEqual(['denyPatterns', 'allowlist']);
+test('guard: lop du an chi duoc them denyPatterns/allowlist/protectedPaths; khoa khac bi bo', () => {
+  expect(PROJECT_LAYER_ALLOW.guard).toEqual(['denyPatterns', 'allowlist', 'protectedPaths']);
   const r = load('guard', { logFile: '../../x', denyPatterns: [{ id: 'p1', pattern: 'zz', reason: 'r' }] }, { logFile: 'safe.log', denyPatterns: [] });
   expect(r.config.logFile).toBe('safe.log');
   expect(r.config.denyPatterns.map((d) => d.id)).toEqual(['p1']);

@@ -60,6 +60,12 @@ Best-effort guard: blocks commands that read/operate on databases (mongo tools, 
 2. Goi du an (chi THEM luat moi; trung id luat loi = canh bao + bo qua, khong tat/ghi de duoc loi): `config/guard/<project>.json` (goc hub): `{"remoteHostAliases":[],"sensitiveFileNames":[],"denyPatterns":[{id,pattern,reason}]}` (cung nhan `allowlist`). Chon bang env `GUARD_PROJECT` hoac khoa `project` trong local; KHONG suy tu cwd. `sensitiveFileNames` sinh luat `config-dump` (chan cat/type/head... file do, va `.env`).
 3. Local: `config/guard/guard.local.json` (goc hub, ignore; du lieu may, ngoai harness; fallback cu `hook.config.local.json` trong harness chi de chuyen tiep, canh bao `legacy-local-config`) (tuy chon, cao nhat; DUY NHAT duoc `disable`/ghi de luat loi; co the dat `"project": "<ten>"`).
 
+#### protectedPaths (luat constrain/guard, id `protected-path`)
+- Mac dinh RONG trong code (khong co duong dan nao bi bao ve). Them bang khoa `protectedPaths` (mang chuoi) trong config guard: local may (`guard.local.json`/`local.json`) hoac du an (`<du an>/.harness/config/guard/project.json`, `config/guard/projects/<id>.json`); cac lop HOP NHAT (chi them, khong tat duoc).
+- Lenh Bash/PowerShell/run_command (va file_path cua Edit/Write/MultiEdit) nhac toi duong dan do -> deny. So khop khong phan biet hoa thuong, chuan hoa dau gach nguoc (ke ca gap doi) thanh `/` va dang `/e/...`, `/mnt/e/...`, `/cygdrive/e/...` thanh `e:/...`; co ranh gioi: `E:/Vault` khong khop `E:/Vault2`.
+- Ngoai le: lenh DON `harness obsidian ...` hoac `node <...harness...> obsidian ...` (khong co `; & | < >`, backtick, `$(`, xuong dong). Edit/Write khong co ngoai le.
+- Gioi han (best-effort): khong giai duong dan tuong doi/bien moi truong/ten 8.3/symlink; Read tool khong qua guard.
+
 Thu tu: loi < goi du an < local.
 
 Hop nhat xac dinh: mang noi theo `id`, trung id thi lop sau thang, `"disable": true` tat ro rang (chi tang local tac dung len luat loi); khong lop nao xoa luat chung ngam. Goi thieu/hong/ten sai/khoa la -> van ap luat chung, ghi `config-warning` vao audit log, khong crash.
