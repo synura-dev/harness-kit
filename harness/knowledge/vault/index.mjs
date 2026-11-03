@@ -160,12 +160,18 @@ export function syncIndex(root, opts = {}) {
     )
   );
 
-  if (isDirty && fs.existsSync(root)) {
-    writeIndexAtomic(root, {
-      version: 1,
-      updatedAt: new Date().toISOString(),
-      entries,
-    });
+  // Cache la best-effort: loi ghi (EPERM/EROFS/root chi doc) khong lam lenh doc that bai; index cut (truncated) khong bao gio duoc ghi.
+  let writeError = null;
+  if (isDirty && !truncated && fs.existsSync(root)) {
+    try {
+      writeIndexAtomic(root, {
+        version: 1,
+        updatedAt: new Date().toISOString(),
+        entries,
+      });
+    } catch (e) {
+      writeError = e.code || e.message || 'write failed';
+    }
   }
 
   const items = Object.values(entries);
@@ -176,6 +182,7 @@ export function syncIndex(root, opts = {}) {
     cachedHits,
     parsedCount,
     truncated,
+    ...(writeError ? { writeError } : {}),
   };
 }
 

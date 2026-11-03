@@ -127,8 +127,8 @@ export function run(argv, emitOpts = {}) {
     }
     if (cmd === 'index') {
       const r = index(base.root, { ...base, rebuild: !!f.rebuild });
-      const summary = `da dong bo index: ${r.count} ghi chu (${r.cachedHits} cache, ${r.parsedCount} parse)${r.truncated ? ` (truncated: ${r.truncated})` : ''}`;
-      return { code: 0, ...emit({ summary, data: r, truncated: r.truncated }, o) };
+      const summary = `da dong bo index: ${r.count} ghi chu (${r.cachedHits} cache, ${r.parsedCount} parse)${r.truncated ? ` (truncated: ${r.truncated}, khong ghi index)` : ''}${r.writeError ? ` LOI ghi index: ${r.writeError}` : ''}`;
+      return { code: r.writeError ? 1 : 0, ...emit({ summary, data: r, truncated: r.truncated }, o) };
     }
     if (cmd === 'check') {
       const r = check({ ...base, probe: !!f.probe });

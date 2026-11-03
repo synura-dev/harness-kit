@@ -178,3 +178,24 @@ test('CLI knowledge index: mac dinh, --rebuild va --json', () => {
   expect(r3.code).toBe(0);
   expect(out3.join('\n')).toContain('da dong bo index: 2 ghi chu (2 cache, 0 parse)');
 });
+
+test('doc: loi ghi .index.json khong lam query/context/map/links that bai', () => {
+  put({ meta: { id: 'ro-a', kind: 'fact', scope: 'global', tags: ['t'] }, body: 'noi dung ro a' }, { root, now: NOW });
+  fs.rmSync(path.join(root, '.index.json'));
+  fs.mkdirSync(path.join(root, '.index.json')); // rename len thu muc -> loi ghi
+  const q = query({}, { root, now: NOW });
+  expect(q.items.map((i) => i.id)).toContain('ro-a');
+  expect(context({ root, now: NOW, scope: 'global' }).ok !== false).toBe(true);
+  expect(links('ro-a', { root, now: NOW }).ok).toBe(true);
+  expect(syncIndex(root).writeError).toBeTruthy();
+});
+
+test('index cut (truncated) khong duoc ghi ra .index.json', () => {
+  fs.mkdirSync(path.join(root, 'fact', 'global'), { recursive: true });
+  for (const n of ['tr-a', 'tr-b', 'tr-c']) fs.writeFileSync(path.join(root, 'fact', 'global', `${n}.md`), `---\nid: ${n}\nkind: fact\nscope: global\n---\nx\n`);
+  const r = syncIndex(root, { maxFiles: 1 });
+  expect(r.truncated).toBeTruthy();
+  expect(fs.existsSync(path.join(root, '.index.json'))).toBe(false);
+  expect(syncIndex(root).count).toBe(3);
+  expect(fs.existsSync(path.join(root, '.index.json'))).toBe(true);
+});
