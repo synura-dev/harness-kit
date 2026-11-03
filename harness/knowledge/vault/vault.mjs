@@ -281,7 +281,7 @@ export function context(f = {}, opts = {}) {
       try { const r = readVaultFile(path.join(root, it.relPath), execOpts.maxBytes || READ_CAP.fileBytes); body = parse(r.text).body; } catch {}
     }
     const content = it.kind === 'ref' ? (it.quote ? `> ${it.quote}` : '') : String(body || '').trim();
-    const block = `### ${it.id} [${it.kind}]\n${content}`.trim();
+    const block = `### ${it.id} [${it.kind}]${it.web ? ' [nguon ngoai]' : ''}\n${content}`.trim();
     const addLen = (blocks.length ? 2 : 0) + block.length;
     if (totalChars + addLen <= maxChars) { blocks.push(block); totalChars += addLen; chosen.push({ ...it, body }); }
     else if (chosen.length === 0) { const cut = block.slice(0, maxChars); blocks.push(cut); totalChars = cut.length; chosen.push({ ...it, body }); break; }

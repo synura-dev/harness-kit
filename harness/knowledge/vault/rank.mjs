@@ -94,8 +94,11 @@ export function filterCandidates(items = [], opts = {}, { isStale, noteLine } = 
   const today = opts.today || '';
   const tags = (opts.tags || opts.tag || []).filter(Boolean);
   const scopes = normScopes(opts.scope || opts.scopes);
+  const webTrust = Array.isArray(opts.webTrustTags) ? opts.webTrustTags : ['pinned'];
   return items.filter((m) => {
     if (m.status !== 'active' || m.secret) return false;
+    // nguon web chua duyet (khong co tag webTrustTags, mac dinh pinned) = nguy co prompt injection: khong dua vao context
+    if (m.web && !(Array.isArray(m.tags) && m.tags.some((t) => webTrust.includes(t)))) return false;
     if (isStale && isStale(m, today)) return false;
     if (scopes && scopes.length && !scopes.includes(m.scope)) return false;
     if (tags.length && !tags.every((t) => Array.isArray(m.tags) && m.tags.includes(t))) return false;
@@ -127,7 +130,8 @@ export function formatCompactLine(item, maxLen = 100) {
   const raw = (item.quote && item.quote.trim()) || (item.title && item.title.trim()) || (item.meta && item.meta.quote && item.meta.quote.trim()) || (item.meta && item.meta.title && item.meta.title.trim()) || '';
   const clean = String(raw).replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
   const summary = clean.length > maxLen ? clean.slice(0, maxLen - 1) + '…' : clean;
-  return summary ? `- [${item.id}] (${item.kind}${tagStr}): ${summary}` : `- [${item.id}] (${item.kind}${tagStr})`;
+  const ext = item.web || (item.meta && item.meta.web) ? ' [nguon ngoai]' : '';
+  return summary ? `- [${item.id}] (${item.kind}${tagStr})${ext}: ${summary}` : `- [${item.id}] (${item.kind}${tagStr})${ext}`;
 }
 
 /** Format context dang compact: moi note 1 dong <= 100 chars, kem footer huong dan, tong <= maxChars. */
