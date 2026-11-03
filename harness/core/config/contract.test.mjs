@@ -101,14 +101,14 @@ test('S0: thu tu D3, duong dan, env, chu ky, manifest.config.tool', () => {
 });
 
 test('vung nhom moi: TOP_DIRS + import chi core/cung nhom; skills/config khong import duoc', () => {
-  for (const z of ['observe', 'constrain', 'knowledge', 'evolve', 'build', 'skills', 'config']) expect(c.TOP_DIRS).toContain(z);
-  expect(c.GROUP_ZONES).toEqual(['observe', 'constrain', 'knowledge', 'evolve', 'build']);
+  for (const z of ['observe', 'constrain', 'evolve', 'build', 'skills', 'config']) expect(c.TOP_DIRS).toContain(z);
+  expect(c.GROUP_ZONES).toEqual(['observe', 'constrain', 'evolve', 'build']);
   expect(c.zoneOf('harness/observe/evidence/cli.mjs')).toEqual({ zone: 'observe', group: 'evidence', sub: null });
   expect(c.checkImport('harness/observe/evidence/cli.mjs', 'harness/core/io/out.mjs')).toBe('');
   expect(c.checkImport('harness/observe/evidence/cli.mjs', 'harness/observe/evidence/evidence.mjs')).toBe('');
   expect(c.checkImport('harness/observe/evidence/cli.mjs', 'harness/observe/digest/x.mjs')).not.toBe('');
   expect(c.checkImport('harness/constrain/gate/a.mjs', 'harness/observe/evidence/x.mjs')).not.toBe('');
-  expect(c.checkImport('harness/knowledge/vault/a.mjs', 'harness/observe/tasks/tasks.mjs')).not.toBe('');
+  expect(c.checkImport('harness/evolve/loop/a.mjs', 'harness/observe/tasks/tasks.mjs')).not.toBe('');
   expect(c.checkImport('harness/build/skills/a.mjs', 'harness/skills/x/x.mjs')).not.toBe('');
   expect(c.checkImport('harness/evolve/x/a.mjs', 'harness/cli/harness.mjs')).not.toBe('');
   expect(c.checkImport('harness/core/a.mjs', 'harness/observe/evidence/x.mjs')).not.toBe('');
@@ -134,11 +134,11 @@ test('flatMax: tran phang mac dinh 8, ghi de duoc qua resolveCaps', () => {
   expect(c.SEVERITY.flatMax).toBe('warn');
 });
 
-test('5.0: hooks (composition root) import duoc observe/constrain/knowledge; vung nhom van khong import hooks', () => {
-  for (const z of ['observe', 'constrain', 'knowledge']) expect(c.IMPORT_RULES.hooks).toContain(z);
+test('5.0: hooks (composition root) import duoc observe/constrain; vung nhom van khong import hooks', () => {
+  for (const z of ['observe', 'constrain']) expect(c.IMPORT_RULES.hooks).toContain(z);
   expect(c.checkImport('harness/hooks/dispatch/modules.mjs', 'harness/constrain/guard/hook.mjs')).toBe('');
   expect(c.checkImport('harness/hooks/dispatch/modules.mjs', 'harness/observe/audit/audit.mjs')).toBe('');
-  expect(c.checkImport('harness/hooks/dispatch/modules.mjs', 'harness/knowledge/inject/hook.mjs')).toBe('');
+  expect(c.checkImport('harness/hooks/dispatch/modules.mjs', 'harness/build/user-shim/hook.mjs')).toBe('');
   expect(c.checkImport('harness/hooks/dispatch/modules.mjs', 'harness/evolve/loop/loop.mjs')).not.toBe('');
   expect(c.checkImport('harness/constrain/guard/hook.mjs', 'harness/hooks/dispatch/run.mjs')).not.toBe('');
   expect(c.checkImport('harness/observe/audit/audit.mjs', 'harness/hooks/_shared/config.mjs')).not.toBe('');
@@ -169,7 +169,7 @@ test('5.1: records (sink gate|audit|guard|worktree) trong ket qua handle; DUP_AL
   expect(c.validateHookResult({ records: 'x' }).join()).toContain('records');
   expect(c.validateHookResult({ records: [{ sink: 'zzz', data: {} }, { sink: 'gate' }, 1] }).length).toBe(3);
   expect(c.HOOK_MODULE.sinks).toEqual(['gate', 'audit', 'guard', 'worktree']);
-  expect(c.DUP_ALLOW.find((x) => x.name === 'handle').files.length).toBe(11);
+  expect(c.DUP_ALLOW.find((x) => x.name === 'handle').files.length).toBe(10);
 });
 
 test('5.0: HOOK_MODULE hop dong module + ket qua', () => {

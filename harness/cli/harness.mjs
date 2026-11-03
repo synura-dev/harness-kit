@@ -1,4 +1,4 @@
-// node harness/cli/harness.mjs                -> index nhom theo vung (observe/constrain/knowledge/evolve + build/cli/legacy), dong "domain - mo ta - lenh con"
+// node harness/cli/harness.mjs                -> index nhom theo vung (observe/constrain/evolve + build/cli/legacy), dong "domain - mo ta - lenh con"
 // node harness/cli/harness.mjs --flat         -> index phang nhu cu (<=25 domain)
 // node harness/cli/harness.mjs <nhom> | --group <nhom> -> domain cua nhom (domain trung ten nhom: domain uu tien)
 // node harness/cli/harness.mjs <domain>       -> index cua domain do
@@ -53,8 +53,8 @@ export function loadRegistryInfo(root) {
 export function loadDomains(root) { return loadRegistryInfo(root).doms; }
 
 // Nhom = vung (thu muc cap 1 duoi harness/) chua file domain, suy tu duong dan registry; khong hardcode ten domain.
-const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', knowledge: 'Tri thuc', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Cu (plugins/tools/hooks)' };
-const MAIN_GROUPS = ['observe', 'constrain', 'knowledge', 'evolve']; // luon in tieu de, ke ca rong
+const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Cu (plugins/tools/hooks)' };
+const MAIN_GROUPS = ['observe', 'constrain', 'evolve']; // luon in tieu de, ke ca rong
 const LEGACY_ZONES = new Set(['plugins', 'tools', 'hooks']);
 export const INDEX_MAX_LINES = 40;
 

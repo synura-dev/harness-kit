@@ -1,10 +1,9 @@
-// Vong tien hoa: audit -> candidates (cung error_fp >= 3 lan / 7 ngay, toan may) -> propose (skill|fact) -> check -> apply --approve (version) -> rollback.
+// Vong tien hoa: audit -> candidates (cung error_fp >= 3 lan / 7 ngay, toan may) -> propose (skill) -> check -> apply --approve (version) -> rollback.
 // Tai dung core/audit (scan + candidates + signature). Fail-safe: loi bat ky -> khong ap.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { workspaceRoot, toPosix, readJson, dataDir, codeRoot } from '../../core/io/paths.mjs';
+import { workspaceRoot, toPosix, readJson, dataDir } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { auditRoot } from '../../core/audit/audit-write.mjs';
@@ -15,10 +14,10 @@ import { maskSecrets } from '../../core/audit/gate-event.mjs';
 
 export const LIMITS = Object.freeze({
   days: 7, threshold: 3, scanTimeoutMs: 20000, scanMaxBytes: 128 * 1048576, listLimit: 20,
-  gatewayTimeoutMs: 20000, maxAfterBytes: 256 * 1024, logLimit: 20, sampleChars: 200,
+  maxAfterBytes: 256 * 1024, logLimit: 20, sampleChars: 200,
   patternChars: 1000,
 });
-export const KINDS = Object.freeze(['skill', 'fact']);
+export const KINDS = Object.freeze(['skill']);
 const DAY = 86400000;
 
 const sha = (buf) => (buf == null ? 'absent' : crypto.createHash('sha256').update(buf).digest('hex'));
@@ -29,7 +28,7 @@ const ctx = (o = {}) => {
   const hub = path.resolve(o.hubRoot || workspaceRoot());
   const evo = path.resolve(o.dataRoot || rootFor('evolve'));
   const audits = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);
-  return { hub, evo, audits, vault: path.resolve(o.vaultRoot || rootFor('memory')), base: path.resolve(o.dataBase || dataDir()) };
+  return { hub, evo, audits, base: path.resolve(o.dataBase || dataDir()) };
 };
 const appendLog = (c, rec) => { try { fs.mkdirSync(c.evo, { recursive: true }); fs.appendFileSync(path.join(c.evo, 'applied.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...rec }) + '\n'); } catch {} };
 
@@ -111,8 +110,8 @@ export async function findCandidates(o = {}) {
 }
 
 import { classifyTarget as classifyRaw, same, layoutOf as layoutRaw } from './policy.mjs';
-// Policy luon nhan goc du lieu/evolve/vault THUC (ctx) de suy dich mac dinh: <dataDir>/<evolve>/skills, <dataDir>/<memory>/fact.
-const polOpts = (o = {}) => { const c = ctx(o); return { ...o, hubRoot: c.hub, dataBase: c.base, dataRoot: c.evo, vaultRoot: c.vault }; };
+// Policy luon nhan goc du lieu/evolve THUC (ctx) de suy dich mac dinh: <dataDir>/<evolve>/skills.
+const polOpts = (o = {}) => { const c = ctx(o); return { ...o, hubRoot: c.hub, dataBase: c.base, dataRoot: c.evo }; };
 export const classifyTarget = (target, kind, o = {}) => classifyRaw(target, kind, polOpts(o));
 const layoutOf = (o = {}) => layoutRaw(polOpts(o), ctx(o).hub);
 
@@ -140,7 +139,6 @@ function buildChange(kind, cand, o) {
     if (a && fs.existsSync(a)) throw new Error(`${target} da ton tai`);
     return { target, after: `---\nname: ${slug}\ndescription: Tranh loi lap ${cand.tool} (${cand.fp || cand.id}). Dung khi gap loi khop pattern nay.\n---\n\n${note}\n\n${ev}` };
   }
-  if (kind === 'fact') return { target: `${layoutOf(o).factDir}/${slug}.md`, knowledgeId: slug, after: `${note}\n\n${ev}` };
   throw new Error(`kind la: ${kind} (${KINDS.join('|')})`);
 }
 
@@ -159,7 +157,7 @@ export async function propose(cid, o = {}) {
   const p = {
     id, candidate: cid, kind, created: new Date().toISOString(), status: pol.ok ? 'proposed' : 'blocked',
     evidence: { fp: cand.fp, count: cand.count, sessions: cand.sessions, window_days: scan.days, threshold: scan.threshold, first_ts: cand.first_ts, last_ts: cand.last_ts, tool: cand.tool, sample: cand.sample, pattern: cand.pattern },
-    change: { target: pol.rel || toPosix(String(ch.target)), knowledgeId: pol.knowledgeId || null, before_sha: pol.ok ? sha(readBuf(targetAbs(kind, pol, c))) : null, after: ch.after, after_sha: sha(Buffer.from(ch.after, 'utf8')) },
+    change: { target: pol.rel || toPosix(String(ch.target)), before_sha: pol.ok ? sha(readBuf(targetAbs(kind, pol, c))) : null, after: ch.after, after_sha: sha(Buffer.from(ch.after, 'utf8')) },
     policy: { ok: pol.ok, forbidden: pol.forbidden, reason: pol.reason }, check: null, ver: null,
   };
   saveProposal(p, o);
@@ -167,37 +165,20 @@ export async function propose(cid, o = {}) {
   return p;
 }
 
-// ---- ghi dich (file truc tiep hoac qua cong knowledge). abs LUON suy tu classifyTarget, khong lay tu file proposals/versions ----
-// fact qua cong: noi dung sinh boi vault, sha khong trung after -> chi doi chieu ton tai.
-const targetAbs = (kind, pol, c) => (kind === 'fact' ? path.join(c.vault, 'fact', `${pol.knowledgeId}.md`) : pol.abs);
+// ---- ghi dich (file truc tiep). abs LUON suy tu classifyTarget, khong lay tu file proposals/versions ----
+const targetAbs = (kind, pol) => pol.abs;
 
 function writeTarget(kind, pol, buf, c, o, tag) {
-  const abs = targetAbs(kind, pol, c);
-  if (kind === 'fact') {
-    if (buf == null) { fs.rmSync(abs, { force: true }); return; }
-    const tmp = path.join(c.evo, 'tmp', `${assertSafeId(tag)}-${crypto.randomBytes(4).toString('hex')}.md`);
-    fs.mkdirSync(path.dirname(tmp), { recursive: true });
-    fs.writeFileSync(tmp, buf);
-    // Cong knowledge nam o goc MA (plugin/repo), khong o workspace (du an thuong/hub khong co harness/).
-    const gw = o.gatewayCmd || [process.execPath, path.join(codeRoot(), 'harness', 'cli', 'harness.mjs')];
-    const r = spawnSync(gw[0], [...gw.slice(1), 'knowledge', 'put', '--id', pol.knowledgeId, '--kind', 'fact', '--body-file', tmp, '--replace', '--root', c.vault],
-      { cwd: c.hub, encoding: 'utf8', timeout: LIMITS.gatewayTimeoutMs, windowsHide: true });
-    fs.rmSync(tmp, { force: true });
-    if (r.status !== 0) throw new Error(`knowledge put loi (exit ${r.status}): ${String(r.stderr || r.error || '').slice(0, 200)}`);
-    return;
-  }
+  const abs = targetAbs(kind, pol);
   if (buf == null) { fs.rmSync(abs, { force: true }); return; }
   fs.mkdirSync(path.dirname(abs), { recursive: true });
   fs.writeFileSync(abs, buf);
 }
 
-// Khoi phuc ban truoc (buf = byte file cu | null = chua ton tai). fact: lay phan than (bo frontmatter) roi ghi lai QUA CONG knowledge.
-const factBody = (buf) => { const t = buf.toString('utf8').replace(/^﻿/, ''); const m = t.match(/^---\r?\n[\s\S]*?\r?\n---[ \t]*(?:\r?\n|$)/); return Buffer.from(m ? t.slice(m[0].length) : t, 'utf8'); };
-function restoreTarget(kind, pol, buf, c, o, tag) {
-  writeTarget(kind, pol, buf == null || kind !== 'fact' ? buf : factBody(buf), c, o, tag);
-}
+// Khoi phuc ban truoc (buf = byte file cu | null = chua ton tai).
+const restoreTarget = writeTarget;
 
-// ---- oracle: evolve chi de xuat skill/fact (ngoai config/) nen khong co gi de eval tren ban sao config; oracle luon bo qua (ghi ro). ----
+// ---- oracle: evolve chi de xuat skill (ngoai config/) nen khong co gi de eval tren ban sao config; oracle luon bo qua (ghi ro). ----
 // ok=true nghia la "qua cac kiem policy/sha, khong co eval de chay" (apply phu thuoc ok + after_sha); verdict='skipped' de KHONG goi la PASS.
 export const ORACLE_SKIPPED = 'skipped (khong co dich config de eval)';
 const runOracle = (kind, afterBuf) => ({ ok: true, verdict: 'skipped', reason: null, oracle: ORACLE_SKIPPED, kind, after_sha: sha(afterBuf) });
@@ -214,7 +195,7 @@ export function check(id, o = {}) {
   const after = afterOf(p);
   if (!after || after.length > LIMITS.maxAfterBytes) return done({ ok: false, reason: 'change.after khong hop le/qua lon' });
   if (sha(after) !== p.change.after_sha) return done({ ok: false, reason: 'after_sha lech noi dung after' });
-  if (p.kind !== 'fact' && sha(readBuf(pol.abs)) !== p.change.before_sha) return done({ ok: false, reason: 'dich da doi tu luc propose (stale); propose lai' });
+  if (sha(readBuf(pol.abs)) !== p.change.before_sha) return done({ ok: false, reason: 'dich da doi tu luc propose (stale); propose lai' });
   return done(runOracle(p.kind, after));
 }
 
@@ -238,7 +219,7 @@ export function apply(id, o = {}) {
   if (afterSha !== p.change.after_sha) return refuse(4, 'after_sha lech noi dung after (de xuat bi sua?)');
   if (!p.check || p.check.ok !== true || p.check.after_sha !== afterSha) return refuse(4, 'chua qua oracle cho dung after nay: chay `evolve check <id>` truoc');
   const abs = targetAbs(p.kind, pol, c);
-  const stale = () => p.kind !== 'fact' && sha(readBuf(abs)) !== p.change.before_sha;
+  const stale = () => sha(readBuf(abs)) !== p.change.before_sha;
   if (stale()) return refuse(4, 'dich da doi tu luc propose (stale)');
   const ck = runOracle(p.kind, afterBuf);
   if (!ck.ok || ck.after_sha !== afterSha) return refuse(4, `oracle chay lai trong apply loai: ${ck.reason || 'sha lech'}`, { check: ck });
@@ -254,7 +235,7 @@ export function apply(id, o = {}) {
     writeTarget(p.kind, pol, afterBuf, c, o, p.id);
     const now = readBuf(abs);
     if (now == null) throw new Error('ghi xong nhung khong thay dich');
-    if (p.kind !== 'fact' && sha(now) !== afterSha) throw new Error('ghi xong nhung sha lech after');
+    if (sha(now) !== afterSha) throw new Error('ghi xong nhung sha lech after');
     m.after_sha = sha(now); m.status = 'applied';
     writeJson(path.join(vd, 'manifest.json'), m);
   } catch (e) {
@@ -288,8 +269,7 @@ export function rollback(ver, o = {}) {
   } else if (m.before_sha !== 'absent') return { ok: false, code: 5, reason: 'manifest mau thuan (existed=false nhung before_sha != absent)' };
   try {
     restoreTarget(m.kind, pol, b, c, o, ver);
-    // fact: vault sinh lai frontmatter nen khong doi chieu sha byte, chi doi chieu ton tai/vang mat
-    if (m.kind === 'fact' ? (b != null) !== (readBuf(abs) != null) : sha(readBuf(abs)) !== m.before_sha) throw new Error('khoi phuc khong khop byte');
+    if (sha(readBuf(abs)) !== m.before_sha) throw new Error('khoi phuc khong khop byte');
   } catch (e) { appendLog(c, { op: 'rollback', ver, ok: false, reason: e.message }); return { ok: false, code: 5, reason: e.message }; }
   m.status = 'rolled_back'; m.rolled_back_ts = new Date().toISOString();
   writeJson(path.join(vd, 'manifest.json'), m);

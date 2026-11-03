@@ -7,12 +7,12 @@ const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 export const LAYERS = Object.freeze(['core', 'ext']);
 
 /** Thu muc cap 1 duoc phep trong harness/ (file: README.md). */
-// observe/constrain/knowledge/evolve/build: vung code nhom moi (HARNESS-DESIGN muc 4), cau truc <vung>/<nhom>/manifest.json.
+// observe/constrain/evolve/build: vung code nhom moi (HARNESS-DESIGN muc 4), cau truc <vung>/<nhom>/manifest.json.
 // skills/ (nguon skill viet tay) va config/ (default commit): chi du lieu, khong code, khong quet registry.
 export const TOP_DIRS = Object.freeze(['core', 'cli', 'hooks', 'tools', 'tests',
-  'observe', 'constrain', 'knowledge', 'evolve', 'build', 'skills', 'config']);
+  'observe', 'constrain', 'evolve', 'build', 'skills', 'config']);
 /** Vung code nhom moi (moi thu muc con = mot extension co manifest.json). */
-export const GROUP_ZONES = Object.freeze(['observe', 'constrain', 'knowledge', 'evolve', 'build']);
+export const GROUP_ZONES = Object.freeze(['observe', 'constrain', 'evolve', 'build']);
 export const TOP_FILES = Object.freeze(['README.md']);
 /** File duoc phep o goc repo (TOP_FILES chi cho harness/); scan dung de bao repo-clutter. File mo rong (vd TASKS.md cua hub) lay tu config workspace khoa repoRootFiles. Dotfile va *.code-workspace luon duoc phep. */
 export const REPO_ROOT_FILES = Object.freeze(['README.md', 'AGENTS.md', 'CLAUDE.md', 'package.json', 'skills-lock.json', 'LICENSE']);
@@ -99,12 +99,11 @@ export const IMPORT_RULES = Object.freeze({
   cli: Object.freeze(['core', 'cli']),
   tools: Object.freeze(['core', 'tools']),
   // hooks = composition root duy nhat (Dot 5): dispatcher import module vung nhom de goi handle() (build: hook user-shim); vung nhom van chi core + self (khong vong).
-  hooks: Object.freeze(['core', 'hooks/_shared', 'hooks:self', 'observe', 'constrain', 'knowledge', 'build']),
+  hooks: Object.freeze(['core', 'hooks/_shared', 'hooks:self', 'observe', 'constrain', 'build']),
   plugins: Object.freeze(['core', 'plugins:self']),
   // vung nhom moi: chi core + chinh nhom minh (<zone>:self = cung thu muc con). build doc skills/ nhu DU LIEU (fs), khong import.
   observe: Object.freeze(['core', 'observe:self']),
   constrain: Object.freeze(['core', 'constrain:self']),
-  knowledge: Object.freeze(['core', 'knowledge:self']),
   evolve: Object.freeze(['core', 'evolve:self']),
   build: Object.freeze(['core', 'build:self']),
   tests: Object.freeze(['core', 'cli', 'hooks', 'tools', 'tests', ...GROUP_ZONES]), // test lien vung (harness/tests/)
@@ -115,7 +114,7 @@ export const IMPORT_RULES = Object.freeze({
  * (core=0 < cli,tools=1 < hooks,plugins=2), ke ca khac nhom cung vung. Test cua core van chi duoc import core.
  * Test can cheo vung cao hon -> dat o harness/tests/.
  */
-const TEST_RANK = Object.freeze({ core: 0, cli: 1, tools: 1, hooks: 2, plugins: 2, observe: 2, constrain: 2, knowledge: 2, evolve: 2, build: 2 });
+const TEST_RANK = Object.freeze({ core: 0, cli: 1, tools: 1, hooks: 2, plugins: 2, observe: 2, constrain: 2, evolve: 2, build: 2 });
 /** Vung co nhom (group = thu muc con cap 1). */
 const GROUPED = new Set(['hooks', 'plugins', ...GROUP_ZONES]);
 const isTestFile = (p) => /\.test\.mjs$/.test(String(p || ''));
@@ -216,12 +215,12 @@ export function canDisableCoreRule(layer) {
  * main/run (diem vao CLI) khong nam day: scanCode bo qua khi file la entry (shebang/process.argv[1]/import.meta.main/isMain).
  */
 export const DUP_ALLOW = Object.freeze([
-  { name: 'configFiles', files: ['harness/core/config/audit-config.mjs', 'harness/constrain/bash-guard/hook.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/worktree/hook.mjs', 'harness/constrain/verify-gate/hook.mjs', 'harness/knowledge/inject/hook.mjs'], reason: 'moi hook doc lap, tro dung hook.config cua chinh no (HERE khac nhau); fail-open, khong import module khac' },
+  { name: 'configFiles', files: ['harness/core/config/audit-config.mjs', 'harness/constrain/bash-guard/hook.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/worktree/hook.mjs', 'harness/constrain/verify-gate/hook.mjs'], reason: 'moi hook doc lap, tro dung hook.config cua chinh no (HERE khac nhau); fail-open, khong import module khac' },
   { name: 'decide', files: ['harness/constrain/bash-guard/hook.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/verify-gate/gate.mjs'], reason: 'khac luat: moi hook quyet dinh theo luat rieng; hook doc lap, fail-open, khong import hook khac' },
   { name: 'readStdin', files: ['harness/constrain/approval/hook.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs', 'harness/constrain/verify-gate/hook.mjs'], reason: 'moi hook tu doc stdin voi gioi han/timeout rieng (maxInputBytes, hardTimeoutMs); hook doc lap, fail-open' },
   { name: 'isObj', files: ['harness/core/config/contract.mjs', 'harness/core/io/paths.mjs', 'harness/constrain/guard/hook.mjs'], reason: 'contract.mjs cam import (contract.test) nen giu ban rieng; hook guard doc lap, fail-open; ban dung chung o core/io/paths.mjs' },
   { name: 'log', files: ['harness/constrain/guard/hook.mjs', 'harness/constrain/worktree/hook.mjs'], reason: 'ghi nhat ky rieng cua tung hook; hook doc lap, fail-open, khong import hook khac' },
   { name: 'rel', files: ['harness/core/checks/scan-input.mjs', 'harness/tools/adapters/_util.mjs'], reason: 'tools/adapters khong import core vi sync.test copy rieng tools/ (than ham giong het)' },
-  { name: 'handle', files: ['harness/constrain/approval/hook.mjs', 'harness/constrain/bash-guard/hook.mjs', 'harness/constrain/bash-guard/adapters/agy.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/verify-gate/hook.mjs', 'harness/constrain/worktree/hook.mjs', 'harness/observe/audit/audit.mjs', 'harness/observe/audit/adapters/agy.mjs', 'harness/knowledge/inject/hook.mjs'], reason: 'giao dien chung HOOK_MODULE handle(event, input, ctx) (+ adapter agy cung ten): moi module hook doc lap (cam import hook khac), dispatcher goi cung ten; vinh vien' },
+  { name: 'handle', files: ['harness/constrain/approval/hook.mjs', 'harness/constrain/bash-guard/hook.mjs', 'harness/constrain/bash-guard/adapters/agy.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/verify-gate/hook.mjs', 'harness/constrain/worktree/hook.mjs', 'harness/observe/audit/audit.mjs', 'harness/observe/audit/adapters/agy.mjs'], reason: 'giao dien chung HOOK_MODULE handle(event, input, ctx) (+ adapter agy cung ten): moi module hook doc lap (cam import hook khac), dispatcher goi cung ten; vinh vien' },
   { name: 'run', files: ['harness/tools/adapters/agy.mjs', 'harness/tools/adapters/claude.mjs'], reason: 'giao dien adapter chung run({root,check}) do sync.mjs goi; khong phai entry CLI' },
 ]);

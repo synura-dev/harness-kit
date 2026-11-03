@@ -7,22 +7,22 @@ import { loadConfig } from '../../core/config/config.mjs';
 // ---- policy dich: DENY-BY-DEFAULT ----
 // Dich la duong dan LOGIC tuong doi GOC DU LIEU (dataDir: <du an>/.harness/data | <hub>/data | HUB_DATA_DIR), khong tuong doi workspace.
 // Chi ghi duoc: skill de xuat <evolve>/skills/<ten>/**.md (cho nguoi duyet; KHONG tu ghi .claude/skills, .agents/skills hay plugin),
-// fact <memory>/fact/<id>.md (ghi qua cong knowledge). Moi thu khac tu choi. FORBIDDEN chi de bao "chi sua tay" ro rang.
+// Moi thu khac tu choi. FORBIDDEN chi de bao "chi sua tay" ro rang.
 const FORBIDDEN = [
   [/^harness\/constrain(\/|$)/, 'nhom Han che (constrain)'],
   [/^harness\/hooks(\/|$)/, 'ma hook'],
   [/(^|\/)[^/]*bash-guard[^/]*(\/|$)/, 'bash-guard'],
   [/(^|\/)guard(\/|$)/, 'cau hinh/ma guard'],
-  [/^config\/(approval|verify-gate|guard|hub|knowledge)(\/|$)/, 'config cua hook chan/duyet/hub'],
+  [/^config\/(approval|verify-gate|guard|hub)(\/|$)/, 'config cua hook chan/duyet/hub'],
   [/^harness\/evolve(\/|$)/, 'oracle eval / vong tien hoa'],
   [/^\.claude(\/|$)/, '.claude (settings/agents)'],
   [/^\.agents(\/|$)/, '.agents (hooks/agents)'],
   [/^\.git(\/|$)/, '.git'],
   [/^config(\/|$)/, 'config/'],
 ];
-// Vi tri cho phep ghi (tuong doi goc du lieu) la CAU HINH (tool 'evolve'). Mac dinh suy tu vi tri du lieu evolve/memory thuc.
+// Vi tri cho phep ghi (tuong doi goc du lieu) la CAU HINH (tool 'evolve'). Mac dinh suy tu vi tri du lieu evolve thuc.
 // Cam tuong minh + realpath trong goc du lieu + ngoai plugin root luon thang.
-const FALLBACK_LAYOUT = Object.freeze({ skillsDir: 'evolve/skills', factDir: 'memory/fact' });
+const FALLBACK_LAYOUT = Object.freeze({ skillsDir: 'evolve/skills' });
 const SAFE_DIR = /^[a-z0-9][a-z0-9._-]*(\/[a-z0-9][a-z0-9._-]*)*$/;
 const esc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const okDir = (v) => typeof v === 'string' && SAFE_DIR.test(v.toLowerCase()) && !v.split('/').includes('..');
@@ -34,19 +34,18 @@ function defaultLayout(o, base) {
     const r = toPosix(path.relative(base, path.resolve(abs)));
     return r && !r.startsWith('..') && !path.isAbsolute(r) && okDir(`${r}/${tail}`) ? `${r}/${tail}`.toLowerCase() : fb;
   };
-  return { skillsDir: sub(o.dataRoot, 'skills', FALLBACK_LAYOUT.skillsDir), factDir: sub(o.vaultRoot, 'fact', FALLBACK_LAYOUT.factDir) };
+  return { skillsDir: sub(o.dataRoot, 'skills', FALLBACK_LAYOUT.skillsDir) };
 }
 export function layoutOf(o = {}, root) {
   const def = defaultLayout(o, dataBaseOf(o));
   let raw = o.layout;
   if (!raw) { try { raw = loadConfig('evolve', { root, defaults: {} }).config; } catch { raw = null; } }
   const pick = (k) => (raw && okDir(raw[k]) ? raw[k].toLowerCase() : def[k]);
-  return { skillsDir: pick('skillsDir'), factDir: pick('factDir') };
+  return { skillsDir: pick('skillsDir') };
 }
 function buildAllow(layout) {
   return [
     [new RegExp('^' + esc(layout.skillsDir) + '/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*\\.md$'), ['skill']],
-    [new RegExp('^' + esc(layout.factDir) + '/[a-z0-9][a-z0-9-]*\\.md$'), ['fact']],
   ];
 }
 const CASE_FOLD = process.platform === 'win32' || process.platform === 'darwin';
@@ -88,7 +87,7 @@ const relKey = (root, abs) => { if (!isInside(abs, root)) return null; const r =
 export const same = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
 const hubOf = (o) => path.resolve(o.hubRoot || workspaceRoot());
-/** {ok, forbidden, reason, rel, abs, knowledgeId}. Chuan hoa -> cam -> realpath trong goc du lieu (bat junction/symlink) -> cam theo vi tri that (du lieu/workspace/plugin root) -> allowlist. */
+/** {ok, forbidden, reason, rel, abs}. Chuan hoa -> cam -> realpath trong goc du lieu (bat junction/symlink) -> cam theo vi tri that (du lieu/workspace/plugin root) -> allowlist. */
 export function classifyTarget(target, kind, o = {}) {
   const n = normalizeTarget(target);
   if (n.error) return { ok: false, forbidden: false, reason: n.error };
@@ -114,7 +113,6 @@ export function classifyTarget(target, kind, o = {}) {
   const hit = buildAllow(layoutOf(o, hubOf(o))).find(([re]) => re.test(n.key));
   if (!hit) return { ok: false, forbidden: false, reason: `dich ngoai allowlist (deny-by-default): ${n.rel}`, rel: n.rel };
   if (!hit[1].includes(kind)) return { ok: false, forbidden: false, reason: `kind ${kind} khong duoc ghi vao ${n.rel}`, rel: n.rel };
-  const knowledgeId = kind === 'fact' ? path.posix.basename(n.key, '.md') : null;
-  return { ok: true, forbidden: false, reason: null, rel: n.rel, abs, knowledgeId };
+  return { ok: true, forbidden: false, reason: null, rel: n.rel, abs };
 }
 

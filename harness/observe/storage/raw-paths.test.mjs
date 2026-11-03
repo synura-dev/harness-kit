@@ -6,7 +6,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HUB = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-const KEYS = ['audit', 'runs', 'play', 'worktree', 'watchdog', 'proc-orphans', 'memory', 'evolve', 'eval', 'evals', 'agy-home', 'ai-job-search'];
+const KEYS = ['audit', 'runs', 'play', 'worktree', 'watchdog', 'proc-orphans', 'evolve', 'eval', 'evals', 'agy-home', 'ai-job-search'];
 const K = KEYS.join('|');
 const PATTERNS = [
   new RegExp(`(?:join|resolve)\\(\\s*[A-Za-z_.()]*[dD]ata[A-Za-z_.()]*\\s*,\\s*['"\`](?:${K})['"\`]`),

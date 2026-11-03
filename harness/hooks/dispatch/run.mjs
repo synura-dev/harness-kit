@@ -58,11 +58,6 @@ function failOut(event, why) {
   return { stdout: '{}', stderr: '', code: 0 };
 }
 
-async function vaultQuery() {
-  const v = await import('../../knowledge/vault/vault.mjs');
-  return (a) => v.query({ status: a.status, limit: a.limit }, { root: a.root || undefined, now: a.now, timeoutS: a.timeoutS });
-}
-
 /** Ghi tat ca records MOT lan (moi sink qua writer cua core / nhat ky cua module). Khong nem. */
 export async function writeRecords(records, input) {
   const failed = [];
@@ -106,7 +101,6 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       let res; let kind = '';
       try {
         const ctx = { write: false, deadline: Date.now() + tmo };
-        if (m.id === 'knowledge-inject') ctx.query = await vaultQuery();
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
       if (!kind && validateHookResult(res).length) kind = 'bad-result';

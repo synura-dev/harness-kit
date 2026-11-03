@@ -5,7 +5,7 @@ import path from 'node:path';
 import { loadPluginRegistry } from './plugin-registry.mjs';
 import { isPluginMode } from '../io/paths.mjs';
 
-const EIGHT = {}; // plugins/ da rong: agy -> hub/agy (extRoots); tasks, play -> hub/; audit/runs/data -> observe, memory -> knowledge
+const EIGHT = {}; // plugins/ da rong: agy -> hub/agy (extRoots); tasks, play -> hub/; audit/runs/data -> observe, memory -> (bo)
 // domain alias qua manifest.domains (S10): dom -> [thu muc, file]
 const ALIAS = {};
 
@@ -36,7 +36,7 @@ test('loadHarnessRegistry: 3 vung + cli, khong loi, drift = 0', async () => {
   expect(r.domains.build).toMatch(/build[\\/]skills[\\/]build\.mjs$/);
   expect(r.domains.constrain).toMatch(/constrain[\\/]cli[\\/]cli\.mjs$/);
   expect(Object.keys(r.aliases)).toEqual(expect.arrayContaining(["doctor", "adapters", "skills", "install", "config", "cost", "evidence", "eval"]));
-  expect(Object.keys(r.domains).filter((d) => !r.ext[d]).sort()).toEqual(["agy", "build", "constrain", "data", "evolve", "ext", "knowledge", "observe", "play", ...(isPluginMode() ? [] : ["plugin"])]); // plugin mode ship ext, khong ship tool plugin (xuat)
+  expect(Object.keys(r.domains).filter((d) => !r.ext[d]).sort()).toEqual(["agy", "build", "constrain", "data", "evolve", "ext", "observe", "play", ...(isPluginMode() ? [] : ["plugin"])]); // plugin mode ship ext, khong ship tool plugin (xuat)
   expect(r.manifests.map((m) => m.dir)).toContain('harness/hooks/dispatch');
 });
 
@@ -76,17 +76,17 @@ test('vung nhom moi: <vung>/<nhom>/manifest.json kind cli dang ky domain; kind k
     for (const f of [m.entry, ...Object.values(m.domains || {}).map((v) => (typeof v === 'string' ? v : v.file))]) fs.writeFileSync(path.join(d, f), '// x');
   };
   put('observe/evidence', mk('evidence', { entry: 'cli.mjs' }));
-  put('knowledge/vault', mk('vault', { entry: 'cli.mjs', domain: 'knowledge', domains: { knowledge: { file: 'cli.mjs', cmds: 'get' }, 'knowledge-index': 'index.mjs' } }));
+  put('evolve/vault', mk('vault', { entry: 'cli.mjs', domain: 'vault', domains: { vault: { file: 'cli.mjs', cmds: 'get' }, 'vault-index': 'index.mjs' } }));
   put('constrain/gate', { id: 'gate', kind: 'hook', layer: 'ext', entry: 'hook.mjs' });
   put('skills/x', mk('skx'));
   put('config/y', mk('cfy'));
   const r = loadHarnessRegistry({ harnessDir: hd });
   expect(r.errors).toEqual([]);
-  expect(Object.keys(r.domains).sort()).toEqual(['evidence', 'knowledge', 'knowledge-index']);
+  expect(Object.keys(r.domains).sort()).toEqual(['evidence', 'vault', 'vault-index']);
   expect(r.domains.evidence).toMatch(/observe[\\/]evidence[\\/]cli\.mjs$/);
-  expect(r.meta.knowledge.cmds).toBe('get');
-  expect(r.manifests.map((m) => m.dir).sort()).toEqual(['harness/constrain/gate', 'harness/knowledge/vault', 'harness/observe/evidence']);
-  expect(readManifests(hd).map((x) => x.dir).sort()).toEqual(['harness/constrain/gate', 'harness/knowledge/vault', 'harness/observe/evidence']);
+  expect(r.meta.vault.cmds).toBe('get');
+  expect(r.manifests.map((m) => m.dir).sort()).toEqual(['harness/constrain/gate', 'harness/evolve/vault', 'harness/observe/evidence']);
+  expect(readManifests(hd).map((x) => x.dir).sort()).toEqual(['harness/constrain/gate', 'harness/evolve/vault', 'harness/observe/evidence']);
 });
 
 test('architecture: sinh on dinh, idempotent, phat hien lech', async () => {

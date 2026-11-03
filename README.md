@@ -48,7 +48,6 @@ harness/          core implementation
   core/           audit, config, registry, runtime, agy, io, checks, ext
   evolve/         eval and loop tooling
   hooks/          hook dispatcher
-  knowledge/      inject, vault
   observe/        audit, cost, data-check, evidence, storage, views
   tools/          adapters, sync, play
 hooks/            plugin hook entry points (hooks.json, run.mjs)

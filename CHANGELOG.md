@@ -2,6 +2,12 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## Unreleased
+- BREAKING: removed the knowledge module. `harness knowledge ...` (vault gateway: put/get/links/query/context/map/index/check/prune/migrate) and the `knowledge-inject` hook (UserPromptSubmit/SessionStart/SubagentStart context injection) are gone; the dispatcher keeps only `audit` on UserPromptSubmit/SubagentStart. The harness is a mechanism layer and no longer holds knowledge content; read/write notes via your own tool (e.g. `harness obsidian`).
+- BREAKING: `evolve propose --kind fact` removed (facts were written through the knowledge gateway); only `--kind skill` remains. Config key `factDir` and env `HARNESS_KNOWLEDGE_ROOT` are no longer read.
+- Data: the `memory` registry entry (`data/knowledge/memory`) is removed; existing directories become unregistered (data scan warns, no data is deleted). The `knowledge` data zone is kept (tasks, evolve, eval write under `data/knowledge/`).
+- Feat(guard): new `protectedPaths` rule (`protected-path`). Empty by default; extend via guard config (machine `guard.local.json`/`local.json`, project `project.json` or `config/guard/projects/<id>.json`; layers merge, add-only). Bash/PowerShell/run_command text or Edit/Write/MultiEdit file_path mentioning a protected path (case-insensitive, `\\` / `/` / `/e/...` forms normalized) is denied, except a single `harness obsidian ...` / `node ...harness... obsidian ...` command.
+
 ## 0.2.2
 - Fix: extension gateway forwards `--json` and other flags correctly (GATEWAY_ONLY_FLAGS).
 - Fix: knowledge context/map exclude unpinned web-source notes; label [nguon ngoai].

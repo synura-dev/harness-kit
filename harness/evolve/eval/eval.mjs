@@ -1,5 +1,5 @@
 // harness/evolve/eval/eval.mjs - oracle tat dinh cho CHINH harness: bo ca co dinh (cases/*.json), moi ca spawn hook/CLI that
-// voi stdin, co lap trong thu muc tam (env tro audit/vault/config/data tam), timeout moi ca + tran tong. KHONG goi LLM.
+// voi stdin, co lap trong thu muc tam (env tro audit/config/data tam), timeout moi ca + tran tong. KHONG goi LLM.
 // Ca: { id, desc, run: {kind: hook|cli|fn, entry|args|module+export}, stdin, setup: {audit, files, cli}, env, expect }.
 // expect: exit, decision (ask|deny|block|inject|none), reason (regex), contains/notContains (stdout), value (fn), exists/missing.
 import fs from 'node:fs';
@@ -151,10 +151,10 @@ function runCase(c, { hub = workspaceRoot(), timeoutMs = LIMITS.caseTimeoutMs, n
   try {
     const cc = subst(c, vars);
     if (configDir) fs.cpSync(configDir, path.join(tmp, 'config'), { recursive: true, dereference: false });
-    for (const d of ['audit', 'config', 'data', 'vault', 'home']) fs.mkdirSync(path.join(tmp, d), { recursive: true });
+    for (const d of ['audit', 'config', 'data', 'home']) fs.mkdirSync(path.join(tmp, d), { recursive: true });
     const cfg = path.join(tmp, 'config'); const home = path.join(tmp, 'home');
     const env = { ...baseEnv(), HUB_DIR: hub, HOME: home, USERPROFILE: home, CLAUDE_AUDIT_DIR: path.join(tmp, 'audit'), HUB_CONFIG_DIR: cfg, HARNESS_CONFIG_DIR: cfg,
-      HUB_DATA_DIR: path.join(tmp, 'data'), HARNESS_KNOWLEDGE_ROOT: path.join(tmp, 'vault'), GUARD_LOG_FILE: path.join(tmp, 'guard.log'), ...(cc.env || {}) };
+      HUB_DATA_DIR: path.join(tmp, 'data'), GUARD_LOG_FILE: path.join(tmp, 'guard.log'), ...(cc.env || {}) };
     const deadline = t0 + timeoutMs;
     const left = () => Math.max(1000, deadline - Date.now());
     const harness = path.join(hub, 'harness', 'cli', 'harness.mjs');

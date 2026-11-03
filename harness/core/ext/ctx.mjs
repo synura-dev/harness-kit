@@ -81,7 +81,7 @@ export function normalizeDataEntries(list, extId, dRoot = dataRoot()) {
 }
 
 // Khoa nhay cam: external KHONG duoc dat/nhan tu lop du an hay qua ctx.config (giu 0fe94d1).
-export const CONFIG_DENY_KEYS = Object.freeze(['extRoots', 'extensions', 'projectResolver', 'ownerRoots', 'knowledge']);
+export const CONFIG_DENY_KEYS = Object.freeze(['extRoots', 'extensions', 'projectResolver', 'ownerRoots']);
 const isO = (v) => !!v && typeof v === 'object' && !Array.isArray(v);
 const BADK = new Set(['__proto__', 'constructor', 'prototype']);
 const deepMerge = (a, b) => { const o = { ...a }; for (const [k, v] of Object.entries(b)) { if (BADK.has(k)) continue; o[k] = isO(v) && isO(o[k]) ? deepMerge(o[k], v) : v; } return o; };

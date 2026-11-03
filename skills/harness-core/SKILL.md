@@ -16,7 +16,7 @@ description: "Logic cốt lõi của harness: vai trò tay chân, cổng CLI, c�
 - Data-gate (hook) chặn lệnh đọc/ghi thẳng vào thư mục dữ liệu; thấy báo chặn thì đổi sang `harness data ...` hoặc `harness observe ...`.
 
 ## Cây dữ liệu
-- Zone: `system` (audit, registry, trạng thái máy), `knowledge` (tri thức), `workspaces` (dữ liệu theo không gian làm việc), `external` (nguồn ngoài), `_inbox` (chưa phân loại, chờ `adopt`).
+- Zone: `system` (audit, registry, trạng thái máy), `knowledge` (tên zone dữ liệu giữ nguyên: tasks/evolve/eval của ext; harness không còn module tri thức), `workspaces` (dữ liệu theo không gian làm việc), `external` (nguồn ngoài), `_inbox` (chưa phân loại, chờ `adopt`).
 - Mỗi tool ghi dữ liệu có một class, quyết định retention: `log` (xoay vòng, xóa sớm), `cache` (dựng lại được), `artifact` (kết quả có hạn dùng), `durable` (giữ lâu, không tự xóa).
 - Đăng ký trước lần ghi đầu: `harness data register <zone>/<domain|ws>/<tool> --class <log|cache|artifact|durable>`. Thiếu đăng ký hệ thống tự cảnh báo.
 - Dọn: `harness data ls|stat|scan|clean|prune|sizes`; mặc định dry-run, chỉ xóa khi có `--yes`.
