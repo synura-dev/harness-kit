@@ -232,7 +232,7 @@ if (!BARE) try {
 // module hook khong co tac dung: CHI CANH BAO (khong tu go). Nguon: gate `module-acted` (run.mjs) + gate `hook:<id>` san co. Chi khi audit da chay du retention_days voi tinh nang nay (tranh bao nham sau khi nang cap).
 try {
   const { ORDER } = await import(new URL('../../hooks/dispatch/modules.mjs', import.meta.url).href);
-  const { CORE_MODULES } = await import(new URL('../../hooks/dispatch/run.mjs', import.meta.url).href);
+  const { CORE_MODULES, MAINTENANCE_MODULES } = await import(new URL('../../hooks/dispatch/run.mjs', import.meta.url).href);
   const { auditRoot } = await import(new URL('../../core/audit/audit-write.mjs', import.meta.url).href);
   const { loadAuditConfig } = await import(new URL('../../core/config/audit-config.mjs', import.meta.url).href);
   const { listFiles } = await import(new URL('../../observe/views/query/files.mjs', import.meta.url).href);
@@ -241,7 +241,7 @@ try {
   const deadline = Date.now() + Math.min(Number((ac.limits || {}).query_timeout_ms) || 30000, 5000);
   const dayStr = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
   const cand = new Map(); // id -> Set(su kien)
-  for (const [ev, list] of Object.entries(ORDER)) for (const e of list) if (!CORE_MODULES.includes(e.id)) (cand.get(e.id) || cand.set(e.id, new Set()).get(e.id)).add(ev);
+  for (const [ev, list] of Object.entries(ORDER)) for (const e of list) if (!CORE_MODULES.includes(e.id) && !MAINTENANCE_MODULES.includes(e.id)) (cand.get(e.id) || cand.set(e.id, new Set()).get(e.id)).add(ev);
   const seen = new Set(); let firstActed = ''; let truncated = false;
   const root = auditRoot();
   const files = cand.size ? listFiles(root, { type: ['gate', 'proc'], since: dayStr(days) }) : [];
@@ -262,8 +262,9 @@ try {
   if (files.length > MAX_FILES && !truncated) { console.log('[warn] unused-modules truncated: files'); truncated = true; }
   if (truncated) { if (Date.now() > deadline) console.log('[warn] unused-modules truncated: timeout'); }
   else if (!cand.size) { /* chi con module loi */ }
-  else if (!firstActed || firstActed > dayStr(days - SLACK)) console.log(`[skip] unused-modules: audit chua co ${days} ngay du lieu module-acted`);
-  else for (const [id, evs] of cand) if (!seen.has(id)) warn('unused', `${id} (${[...evs].join(', ')}) khong co tac dung trong ${days} ngay o du an nay; neu chac chan khong can, go khoi ORDER trong harness/hooks/dispatch/modules.mjs`);
+  else if (!firstActed) console.log(`[skip] unused-modules: chua co ban ghi module-acted nao trong audit; bat dau xet khi co ban ghi dau tien + ${days - SLACK} ngay (tranh bao nham sau nang cap)`);
+  else if (firstActed > dayStr(days - SLACK)) console.log(`[skip] unused-modules: module-acted dau tien ${firstActed}; bat dau xet tu ${new Date(Date.parse(firstActed) + (days - SLACK) * 86400000).toISOString().slice(0, 10)} (tranh bao nham sau nang cap)`);
+  else for (const [id, evs] of cand) if (!seen.has(id)) console.log(`[info] ${id} (${[...evs].join(', ')}) khong co tac dung trong ${days} ngay o audit nay; neu moi du an deu vay, can nhac bo khoi plugin`);
 } catch (e) { console.log('[warn] unused-modules check loi:', e.message); }
 // ba check dai han (ref/import/clutter): mac dinh chi canh bao (D6); --strict exit 1 neu co muc error
 try {
