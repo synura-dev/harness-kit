@@ -5,7 +5,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { workspaceRoot, samePath } from '../../core/io/paths.mjs';
-import { build, check, prune } from './skills.mjs';
+import fs from 'node:fs';
+import { build, check, prune, DEFAULT_SRC } from './skills.mjs';
 
 const USAGE = 'skills <build|check|prune> [--apply] [--force] [--adopt] [--src D] [--target D]... [--root D] [--json] [--timeout-s N] [--max-bytes N]';
 
@@ -35,6 +36,11 @@ export function main(argv, io = {}) {
   if (o.err || !['build', 'check', 'prune'].includes(o.cmd)) { emit({ summary: (o.err ? o.err + '\n' : '') + USAGE }, out); return 2; }
   const root = path.resolve(o.root || workspaceRoot());
   const base = { root, src: o.src, targets: o.targets, timeoutS: c.timeoutS };
+  const srcDir = path.resolve(root, o.src || DEFAULT_SRC);
+  if (!o.src && o.cmd !== 'prune' && !fs.existsSync(srcDir)) { // khong co nguon mac dinh: khong false-OK im lang, khong ghi gi
+    emit({ summary: `skills ${o.cmd}: không có nguồn skill tại ${srcDir}; ở chế độ plugin, Claude tự nạp skills/ của plugin, chỉ cần --src khi đồng bộ cho agy (.agents/skills)` }, out);
+    return 0;
+  }
   if (o.cmd === 'build') {
     const r = build({ ...base, apply: o.apply, force: o.force, adopt: o.adopt });
     const lines = [`skills build${r.apply ? '' : ' (dry-run, them --apply de ghi)'}: ${r.items.length} muc, ${r.problems.length} loi`];

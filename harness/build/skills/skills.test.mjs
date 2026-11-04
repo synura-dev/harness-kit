@@ -211,3 +211,16 @@ test('adopt: chi thay dich khong marker khi noi dung trung nguon; khac nguon thi
   expect(r('t/claude/alpha/SKILL.md')).toBe('viet tay khac nguon');
   expect(r('t/claude/ai-job-search/SKILL.md')).toBe('installed');
 });
+
+test('khong --src va nguon mac dinh khong ton tai: build/check in 1 dong giai thich, exit 0, khong ghi gi', () => {
+  for (const cmd of ['check', 'build']) {
+    const lines = [];
+    const code = main([cmd, '--root', root, '--target', 't/claude', '--apply'], { out: (s) => lines.push(s), err: () => {} });
+    expect(code).toBe(0);
+    const txt = lines.join('\n');
+    expect(txt).toContain('không có nguồn skill tại');
+    expect(txt).toContain('--src');
+    expect(txt).toContain('.agents/skills');
+  }
+  expect(ex('t/claude/alpha')).toBe(false); // khong ghi gi
+});
