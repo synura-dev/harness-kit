@@ -11,6 +11,12 @@ import { mergeResults, applyUpdate, render } from './merge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TIMEOUT = Symbol('timeout');
+/** Module loi (luon bat, khong go): bo qua khi ghi `module-acted` va khi doctor tim module khong dung. Module khac (OPTIONAL...) co the go khoi ORDER. */
+export const CORE_MODULES = Object.freeze(['audit', 'guard', 'data-gate', 'approval', 'bash-guard', 'worktree-hook']);
+/** Module bao tri lam viec im lang (data-check: don nen khong de vet; user-shim: tra `{}` khi shim on): doctor khong bao gio xet "khong dung". Van ghi module-acted khi co tac dung (lam moc "tinh nang da bat"). */
+export const MAINTENANCE_MODULES = Object.freeze(['data-check', 'user-shim']);
+/** Ket qua co tac dung ma chua de lai dau trong audit: chan (decision deny hoac block:true; decision 'block' khong hop le voi hop dong), hoi, sua input, context; khong tinh `{}`/undefined/allow tran (verify-gate tra allow moi lan). Module tra `records` da tu hien trong audit (gate hook:<id>, type=proc...) -> khong ghi trung. */
+export const hasEffect = (r) => isObj(r) && !(Array.isArray(r.records) && r.records.length > 0) && (r.decision === 'deny' || r.decision === 'ask' || r.block === true || isObj(r.updatedInput) || !!r.additionalContext);
 
 function withTimeout(promise, ms) {
   let t;
@@ -112,6 +118,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       }
       if (!res) continue;
       state.items.push({ id: m.id, result: res });
+      if (!m.gate && !CORE_MODULES.includes(m.id) && hasEffect(res)) state.traces.push(traceRec('module-acted', `${m.id}:${ev}`));
       if (res.decision === 'deny') { if (m.gate) state.denied = true; }
       else if (res.updatedInput) state.input = applyUpdate(state.input, res.updatedInput);
     }
