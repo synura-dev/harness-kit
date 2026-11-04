@@ -55,9 +55,9 @@ test('--out: ghi file khi co, tu choi doc mac dinh va file co san neu thieu --fo
   const before = fs.existsSync(doc) ? fs.readFileSync(doc, 'utf8') : null;
   expect(() => writeDocOut(doc, 'x', { force: true, protect: doc })).toThrow(/doc mac dinh/);
   // plugin mode: goc workspace = CLAUDE_PROJECT_DIR (cwd); ep = HUB de doc mac dinh trung doc o tren (hub mode bo qua bien nay)
-  const oldP = process.env.CLAUDE_PROJECT_DIR; process.env.CLAUDE_PROJECT_DIR = HUB;
+  const oldP = process.env.CLAUDE_PROJECT_DIR; const oldH = process.env.HUB_DIR; process.env.CLAUDE_PROJECT_DIR = HUB; delete process.env.HUB_DIR; // playbook export HUB_DIR
   try { expect(main(['--settings', settingsFile, '--event', 'Stop', '--n', '1', '--out', doc, '--force'], quiet)).toBe(2); }
-  finally { if (oldP === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = oldP; }
+  finally { if (oldP === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = oldP; if (oldH === undefined) delete process.env.HUB_DIR; else process.env.HUB_DIR = oldH; }
   expect(fs.existsSync(doc) ? fs.readFileSync(doc, 'utf8') : null).toBe(before);
 });
 
