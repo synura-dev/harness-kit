@@ -53,7 +53,7 @@ export function loadRegistryInfo(root) {
 export function loadDomains(root) { return loadRegistryInfo(root).doms; }
 
 // Nhom = vung (thu muc cap 1 duoi harness/) chua file domain, suy tu duong dan registry; khong hardcode ten domain.
-const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Cu (plugins/tools/hooks)' };
+const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Chay (play, plugins/tools/hooks)' };
 const MAIN_GROUPS = ['observe', 'constrain', 'evolve']; // luon in tieu de, ke ca rong
 const LEGACY_ZONES = new Set(['plugins', 'tools', 'hooks']);
 export const INDEX_MAX_LINES = 40;
