@@ -4,18 +4,19 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DEFAULTS, run } from './hook.mjs';
-import { decide, localKind, evidenceOf, runnerSpec } from './gate.mjs';
-import { verifyKind } from '../../core/audit/fingerprint.mjs';
+import { decide, runnerSpec } from './gate.mjs';
+import { verifyKind, verifierOutcome } from '../../core/audit/fingerprint.mjs';
 
 let n = 0;
 const T = () => new Date(Date.UTC(2026, 9, 29, 9, 0, n++)).toISOString();
 const cwd = 'e:/p';
 const rootOf = () => 'e:/p';
 const edit = (f) => ({ ts: T(), type: 'tool', event: 'PostToolUse', tool: 'Edit', target: 'E:/p/' + f, cwd, ok: true, data: { files_touched: [f] } });
-// Phong envelope audit that: lenh core khong nhan -> verify_kind null, verifier_outcome none.
-const sh = (c, extra = {}, data = {}) => {
-  const k = verifyKind(c);
-  return { ts: T(), type: 'tool', event: 'PostToolUse', tool: 'Bash', target: c, cwd, ok: true, data: { bg: false, verify_kind: k, verifier_outcome: k ? 'pass' : 'none', ...data }, ...extra };
+// Phong envelope audit that: verify_kind/verifier_outcome tinh bang chinh ham cua core (verifyKind/verifierOutcome).
+const sh = (c, extra = {}, extraData = {}) => {
+  const k = verifyKind(c), event = extra.event || 'PostToolUse', ok = extra.ok !== false;
+  const o = verifierOutcome({ isVerify: !!k, event, ok, exitCode: extraData.exit_code, interrupted: false, background: extraData.bg === true });
+  return { ts: T(), type: 'tool', event, tool: 'Bash', target: c, cwd, ok, data: { bg: false, verify_kind: k, verifier_outcome: o, ...extraData }, ...extra };
 };
 const D = (evs, opts = {}) => decide(evs, DEFAULTS, { cwd, rootOf, ...opts }).decision;
 
@@ -36,13 +37,10 @@ test('lenh test theo stack tinh la bang chung pass sau khi sua', () => {
 });
 
 test('khong co bang chung: lenh khong phai test, help/dry-run, pipe, that bai, truoc lan sua cuoi', () => {
-  for (const c of ['ls', 'python main.py', 'npm install', 'npm run build:docs-test-x', 'make build', 'pytest --collect-only', 'cargo nextest run --dry-run', 'dotnet test --help',
-    'npm t | tail -5', 'pytest; echo ok', 'tox || true', 'npm t &', 'mvn -v'])
-    expect([c, localKind(c) === null || D([edit('a.py'), sh(c)]) === 'block']).toEqual([c, true]);
   for (const c of ['ls', 'pytest --collect-only', 'cargo nextest run --dry-run', 'dotnet test --help', 'npm t | tail -5', 'tox || true', 'npm t &'])
     expect([c, D([edit('a.py'), sh(c)])]).toEqual([c, 'block']);
   // that bai (PostToolUseFailure / exit != 0) -> block
-  expect(D([edit('a.py'), { ...sh('uv run pytest'), event: 'PostToolUseFailure', ok: false }])).toBe('block');
+  expect(D([edit('a.py'), sh('uv run pytest', { event: 'PostToolUseFailure', ok: false })])).toBe('block');
   expect(D([edit('a.py'), sh('uv run pytest', {}, { exit_code: 1 })])).toBe('block');
   expect(D([edit('a.py'), sh('uv run pytest', {}, { bg: true })])).toBe('block');
   // test truoc lan sua cuoi
@@ -54,9 +52,6 @@ test('khong co bang chung: lenh khong phai test, help/dry-run, pipe, that bai, t
 test('audit da nhan loai (verify_kind) thi giu nguyen, khong du phong de ghi de', () => {
   // verify_kind null cua audit cho lenh core nhan (vd co pipe) van duoc tin: du phong chi them lenh core khong nhan
   expect(D([edit('a.ts'), sh('bun test', {}, { verify_kind: null, verifier_outcome: 'pass' })])).toBe('block');
-  expect(evidenceOf(sh('bun test'))).toEqual({ kind: 'test', outcome: 'pass' });
-  expect(evidenceOf(sh('uv run pytest'))).toEqual({ kind: 'test', outcome: 'pass' });
-  expect(evidenceOf(sh('echo hi'))).toEqual({ kind: null, outcome: 'none' });
 });
 
 test('runnerSpec: JS/sh luon tinh, stack khac can manifest', () => {

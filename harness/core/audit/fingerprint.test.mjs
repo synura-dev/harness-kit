@@ -98,3 +98,16 @@ test('validateEvent: truong moi hop le, du lieu cu van doc duoc, gia tri sai bi 
   expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool', task_id: null, error_fingerprint: 'abc', retry_of: 2, attempt: 3, files_touched: ['a.js'], verifier_outcome: 'pass' })).toEqual([]);
   expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool', verifier_outcome: 'maybe', files_touched: 'a', retry_of: 'x' }).length).toBe(3);
 });
+
+test('verifyKind: lenh test theo stack (npm/pnpm/yarn, Python, Go, Rust, JVM, .NET, make) la test', () => {
+  for (const c of ['npm t', 'pnpm -r test', 'pnpm --filter web test', 'yarn workspace x test', 'npm --prefix pkg test', './node_modules/.bin/jest', 'deno test', 'CI=1 npm t',
+    'cd pkg && npm t', 'timeout 90 pnpm -r test', 'python3.11 -m pytest', 'python -m unittest discover', 'uv run pytest', 'poetry run pytest', '.venv/bin/pytest', 'tox', 'hatch run test',
+    'cargo +nightly test', 'cargo nextest run', 'dotnet test', 'mvn test', './mvnw verify', './gradlew test', 'phpunit', 'php artisan test', 'bundle exec rspec', 'rake test', 'make test', 'ctest'])
+    expect([c, verifyKind(c), isVerifyCommand(c)]).toEqual([c, 'test', true]);
+});
+
+test('verifyKind: lenh test theo stack co help/no-run/pipe/nen -> khong phai verify', () => {
+  for (const c of ['pytest --collect-only', 'cargo nextest run --dry-run', 'dotnet test --help', 'make test --just-print', 'npm t | tail -5', 'pytest; echo ok', 'tox || true', 'npm t &', 'mvn -v', 'make build', 'python main.py', 'npm install'])
+    expect([c, verifyKind(c)]).toEqual([c, null]);
+  expect(verifyKind('pytest -n auto')).toBe('test'); // -n la so worker xdist, khong phai no-run
+});

@@ -40,57 +40,6 @@ export function outcomeOf(e, kind) {
   return 'pass';
 }
 
-// ---------- lenh test theo stack (du phong khi audit/core khong nhan ra) ----------
-// Chi bo sung nhung lenh core/audit/fingerprint.verifyKind CHUA nhan (npm t, pnpm -r test, uv run pytest, python -m unittest,
-// tox, cargo nextest, dotnet/mvn/gradle test, make test...). Cung rang buoc cau truc nhu core: 1 dong, khong pipe/;/||/nen.
-const PKG_FLAGS = String.raw`(?:(?:-{1,2}(?:prefix|filter|workspace|cwd|dir|F|C|w)[=\s]\S+|-{1,2}[\w-]+(?:=\S+)?)\s+|workspaces?\s+(?:foreach\s+)?\S+\s+)*`;
-const EXE = String.raw`(?:\S*[\\/])?`;
-const LOCAL_TEST = [
-  new RegExp(String.raw`^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+${PKG_FLAGS}(?:run(?:-script)?\s+)?(?:t|test)(?::[\w:-]+)?(?=\s|$)`),
-  new RegExp(String.raw`^${EXE}(?:jest|vitest|mocha|ava|tap|pytest|py\.test|phpunit|rspec|bats)(?:\.cmd|\.exe)?(?=\s|$)`),
-  /^(?:npx|bunx|pnpm\s+(?:exec|dlx)|yarn\s+dlx)\s+(?:mocha|ava|tap|playwright\s+test|cypress\s+run)\b/, /^deno\s+test\b/,
-  new RegExp(String.raw`^(?:${EXE}python[\d.]*(?:\.exe)?|py(?:\s+-[\d.]+)?)\s+-m\s+(?:pytest|unittest|nose2|tox)\b`),
-  /^(?:uv|poetry|pipenv|pdm|rye)\s+run\s+(?:python[\d.]*\s+-m\s+)?(?:pytest|unittest|tox|nox)\b/, /^hatch\s+(?:run\s+)?test\b/, /^(?:tox|nox)(?=\s|$)/,
-  /^cargo\s+(?:\+\S+\s+)?(?:nextest\s+run|test|t)\b/, /^dotnet\s+test\b/,
-  new RegExp(String.raw`^(?:${EXE}mvnw?(?:\.cmd)?|${EXE}gradlew?(?:\.bat)?)\s+(?:\S+\s+)*?(?:test|verify|check)(?=\s|$)`),
-  /^bundle\s+exec\s+(?:rspec|minitest)\b/, /^(?:bundle\s+exec\s+)?rake\s+(?:test|spec)\b/, /^(?:bin[\\/])?rails\s+test\b/, /^php\s+artisan\s+test\b/, /^composer\s+(?:run\s+)?test\b/,
-  /^mix\s+test\b/, /^swift\s+test\b/, /^(?:flutter|dart)\s+test\b/, /^ctest\b/, /^Invoke-Pester\b/i,
-  /^(?:make|gmake|just|task)\s+(?:\S+\s+)*?(?:test|tests|check)(?=\s|$)/,
-];
-const LOCAL_NO_RUN = new Set(['--help', '-h', '-?', '/?', '--version', '-V', '--list', '--list-tests', '--listTests', '--collect-only', '--co', '--no-run', '--dry-run', '--dryrun', '-n', '--just-print']);
-const localUnsafe = (s) => /[|;]/.test(s) || s.replace(/"[^"]*"|'[^']*'/g, '""').replace(/\d*[<>]&(?:\d+|-)?/g, ' ').replace(/&>>?/g, ' ').replace(/&&/g, ' ').includes('&');
-
-/** Lenh co phai test theo stack (du phong) khong: 'test' hoac null. Chi dung khi kindOf (audit/core) khong nhan loai nao. */
-export function localKind(cmd) {
-  let s = String(cmd ?? '').trim();
-  if (!s || /\n/.test(s)) return null;
-  s = s.replace(/^\s*cd\s+(?:\/d\s+)?(?:"[^"]*"|'[^']*'|[^\s&;|]+)\s*&&\s*/i, '');
-  if (localUnsafe(s)) return null;
-  let hit = false;
-  for (const seg of s.split('&&')) {
-    let r = seg.trim();
-    for (let i = 0; i < 10; i++) { const m = r.match(/^\w+=(?:"[^"]*"|'[^']*'|\S*)\s+/); if (!m) break; r = r.slice(m[0].length); }
-    r = r.replace(/^timeout\s+\d+[smh]?\s+/, '');
-    if (r.split(/\s+/).some((t) => LOCAL_NO_RUN.has(t.replace(/^["']|["']$/g, '')))) continue;
-    if (LOCAL_TEST.some((re) => re.test(r))) hit = true;
-  }
-  return hit ? 'test' : null;
-}
-
-/** Bang chung cua su kien shell: { kind, outcome }. Uu tien kindOf; neu khong co loai -> localKind (audit chua nhan ra nen
- *  verifier_outcome = none: tu suy ra pass/fail tu event/ok/exit code). */
-export function evidenceOf(e) {
-  const k = kindOf(e);
-  if (k) return { kind: k, outcome: outcomeOf(e, k) };
-  const cmd = commandOf(e);
-  const lk = verifyKind(cmd) ? null : localKind(cmd); // core nhan lenh nhung audit ghi null = audit biet ro hon (vd lenh day du khac): khong ghi de
-  if (!lk) return { kind: null, outcome: 'none' };
-  const d = e.data || {};
-  if (d.verifier_outcome === 'fail' || e.event === 'PostToolUseFailure') return { kind: lk, outcome: 'fail' };
-  if (e.event !== 'PostToolUse' || e.ok !== true || d.bg === true || d.interrupted === true) return { kind: lk, outcome: 'none' };
-  return { kind: lk, outcome: Number.isFinite(d.exit_code) && d.exit_code !== 0 ? 'fail' : 'pass' };
-}
-
 // ---------- du an co runner khong (suy ra tu file du an; hook tiem hasRunner, gate khong I/O) ----------
 const ANY_RUNNER = /^(?:package\.json|makefile|gnumakefile|justfile|taskfile\.ya?ml|deno\.jsonc?|bunfig\.toml)$/i;
 const STACK_RUNNER = {
@@ -303,8 +252,8 @@ export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf
     for (let i = from + 1; i < ev.length; i++) {
       const e = ev[i];
       if (!e.tool || !SHELL_TOOLS.test(e.tool) || (e.event !== 'PostToolUse' && e.event !== 'PostToolUseFailure')) continue;
-      const { kind: k, outcome } = evidenceOf(e);
-      if (!k || outcome !== 'pass') continue;
+      const k = kindOf(e);
+      if (!k || outcomeOf(e, k) !== 'pass') continue;
       kinds.add(k);
       if (wantCode && CODE_KINDS.has(k)) codeDirs.push(runDir(i));
     }
