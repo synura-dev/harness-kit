@@ -113,7 +113,7 @@ test('cli: nhanh 3 file, base main, gom thay doi chua commit, khong lo secret', 
   expect(lines.length).toBeLessThanOrEqual(40);
   expect(lines[0]).toContain('base=main@');
   expect(r.stdout).toContain('3 file');
-  expect(r.stdout).toContain('git diff ');
+  expect(r.stdout).toContain(' diff ');
   expect(r.stdout).toContain('secret-like');
   expect(r.stdout).toContain('src/auth/login.mjs:2');
   expect(r.stdout).toContain('sensitive-path');
@@ -129,7 +129,7 @@ test('cli: --json dung schema, --base tuong minh', () => {
   expect(typeof j.base).toBe('string'); expect(typeof j.head).toBe('string');
   expect(Array.isArray(j.bundles)).toBe(true);
   for (const b of j.bundles) {
-    expect(typeof b.id).toBe('string'); expect(typeof b.lines).toBe('number'); expect(b.cmd.startsWith('git diff ')).toBe(true);
+    expect(typeof b.id).toBe('string'); expect(typeof b.lines).toBe('number'); expect(/^git .*diff /.test(b.cmd)).toBe(true);
     for (const f of b.files) expect(Object.keys(f)).toEqual(expect.arrayContaining(['path', 'add', 'del', 'status', 'flags']));
   }
   expect(j.flags).toMatchObject({ 'secret-like': 1, unverified: 2 }); // audit tam rong -> chua co test pass
@@ -178,7 +178,70 @@ test('dispatcher: SubagentStart chuyen additionalContext (A1), ten khac -> khong
   expect(a.status).toBe(0);
   const ctx = JSON.parse(a.stdout).hookSpecificOutput;
   expect(ctx.hookEventName).toBe('SubagentStart');
-  expect(ctx.additionalContext).toContain('git diff ');
+  expect(ctx.additionalContext).toContain(' diff ');
   expect(ctx.additionalContext).not.toContain(SECRET);
   expect(JSON.parse(run('builder').stdout).hookSpecificOutput?.additionalContext).toBeUndefined();
+});
+
+// ---- Dot sua sau review: cong, thu muc con, ten Unicode, secret it on, hook het han ----
+const GATE = path.join(HERE, '..', '..', 'cli', 'harness.mjs');
+const runGate = (cwd, ...args) => spawnSync(process.execPath, [GATE, 'review', ...args], { cwd, encoding: 'utf8', env: { ...env, HARNESS_GATEWAY: '' }, timeout: 60000 });
+const toplevel = (d) => git(d, 'rev-parse', '--show-toplevel').trim();
+
+test('cong: harness review pack <repo> tu cwd khac thay dung repo, lenh dung git -C', () => {
+  const r = runGate(plain, 'pack', repo);
+  expect(r.status).toBe(0);
+  const top = toplevel(repo);
+  expect(r.stdout.split('\n')[0]).toContain(`repo=${top}`);
+  expect(r.stdout).toContain('3 file');
+  expect(r.stdout).toContain(`git -C '${top}' diff `);
+  expect(r.stdout).not.toContain(SECRET);
+});
+
+test('cong: khong co dir -> bao ro can chi repo (cong chay voi cwd plugin)', () => {
+  const r = runGate(repo, 'pack');
+  expect(r.status).toBe(2);
+  expect(r.stderr).toContain('harness review pack <dir>');
+});
+
+test('cli: cwd la thu muc con van ra goc repo, pathspec tinh tu goc', () => {
+  const r = runCli(path.join(repo, 'src'), 'pack', '--json');
+  const j = JSON.parse(r.stdout);
+  expect(j.repo).toBe(toplevel(repo));
+  expect(j.bundles.flatMap((b) => b.files).map((f) => f.path)).toContain('docs/a.md');
+  const b = j.bundles.find((x) => x.files.some((f) => f.path === 'src/util.mjs'));
+  const shown = spawnSync('git', ['-C', j.repo, 'diff', '--name-only', j.base, '--', ...b.files.map((f) => f.path)], { encoding: 'utf8' }).stdout;
+  expect(shown.trim().split('\n').sort()).toEqual(b.files.map((f) => f.path).sort());
+});
+
+test('cli: ten tieng Viet + dau cach, cat tab cuoi, secret tai dung dong', () => {
+  const r2 = path.join(tmp, 'repo-vi');
+  fs.mkdirSync(r2);
+  git(r2, 'init', '-q', '-b', 'main'); git(r2, 'config', 'user.email', 't@example.com'); git(r2, 'config', 'user.name', 't');
+  wr(path.join(r2, 'a.txt'), 'x\n'); git(r2, 'add', '.'); git(r2, 'commit', '-q', '-m', 'i');
+  git(r2, 'checkout', '-q', '-b', 'feat');
+  const rel = 'tài liệu/Báo cáo xác thực.mjs';
+  wr(path.join(r2, rel), `export const a = 1;\nexport const b = 2;\nconst apiKey = "${SECRET}";\n`);
+  git(r2, 'add', '.'); git(r2, 'commit', '-q', '-m', 'f');
+  const j = JSON.parse(runCli(r2, 'pack', '--json').stdout);
+  const f = j.bundles.flatMap((b) => b.files)[0];
+  expect(f.path).toBe(rel);
+  expect(f.status).toBe('A');
+  expect(f.at).toEqual([`${rel}:3`]);
+  expect(JSON.stringify(j)).not.toContain(SECRET);
+  expect(j.bundles[0].cmd).toContain(`'${rel}'`);
+});
+
+test('pack: secret-like it on - khong co voi kieu/tham chieu, co voi literal dai va tien to token', async () => {
+  const { secretLike } = await import('./pack.mjs');
+  for (const t of ['token: string', 'password = req.body.password', 'const token = getToken();', 'const password = "abc";', 'apiKey: process.env.API_KEY', 'const secret = opts.secret || null;']) expect(secretLike(t)).toBe(false);
+  for (const t of [`const k = "${'ghp_' + 'A1b2C3d4E5f6G7h8'}";`, 'password = "hunter2hunter2"', `x = "${'AKIA' + 'ABCDEFGHIJKLMNOP'}"`, `-----${'BEGIN'} PRIVATE KEY-----`, `u = "postgres://admin:p4ssw0rd@db/x"`]) expect(secretLike(t)).toBe(true);
+});
+
+test('hook: ngan sach nho -> truncated: timeout, khong ket luan khong co thay doi; dong dau co repo=', async () => {
+  const r = await hook.handle('SubagentStart', { agent_type: 'reviewer', cwd: repo }, { deadline: Date.now() + 100 });
+  expect(r.additionalContext).toContain('truncated: timeout');
+  expect(r.additionalContext).not.toContain('khong co thay doi');
+  const ok = await hook.handle('SubagentStart', { agent_type: 'reviewer', cwd: path.join(repo, 'src') }, { deadline: Date.now() + 2000 });
+  expect(ok.additionalContext.split('\n')[0]).toContain(`repo=${toplevel(repo)}`);
 });
