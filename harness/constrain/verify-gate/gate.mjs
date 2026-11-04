@@ -273,7 +273,7 @@ export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf
 
 // ---- route-check: bao cao cuoi subagent co dong `status:` thi kiem serves/assumptions/counter/adopted ----
 const ROUTE_NONE = /^(?:khong\s*co|không\s*có|none|n\/a|na|-+|—+|–+)[\s.]*$/i;
-const ROUTE_EVIDENCE = /[\w.\\/-]+\.\w+:\d+|https?:\/\/\S+|\d/;
+const ROUTE_EVIDENCE = /[\w.\\/-]+\.\w+:\d+|https?:\/\/\S+|\d(?:[.,]\d+)?\s*%|\d(?:[.,]\d+)?\s*(?:ms|s|kb|mb|gb|lượt|luot|turns?|tests?|dòng|dong|lines?)(?![\p{L}\d])/iu;
 const ROUTE_KEYS = ['status', 'serves', 'assumptions', 'counter', 'adopted'];
 const routeKeyRe = (k) => new RegExp(`^[ \\t]*(?:[-*][ \\t]*)?\\**${k}\\**[ \\t]*:\\**[ \\t]*(.*)$`, 'im');
 const anyKeyRe = new RegExp(`^[ \\t]*(?:[-*][ \\t]*)?\\**(?:${ROUTE_KEYS.join('|')})\\**[ \\t]*:`, 'i');
@@ -290,10 +290,17 @@ function routeField(text, key) {
   return out.join(' ').trim();
 }
 
+/** Kich hoat: `status:` la dong co noi dung dau tien, hoac gia tri status thuoc PASS|FAIL|BLOCKED|PARTIAL (khong bat YAML `status: todo`). */
+function routeActive(t) {
+  const first = t.split('\n').find((l) => l.trim());
+  if (first && routeKeyRe('status').test(first)) return true;
+  return /^[ \t]*(?:[-*][ \t]*)?\**status\**[ \t]*:\**[ \t]*(?:pass|fail|blocked|partial)(?![\p{L}\d])/imu.test(t);
+}
+
 /** Kiem bao cao theo mau protocol. Khong co dong `status:` -> { applies:false }; else { applies:true, ok, missing:[...] }. Tat dinh, khong nem. */
 export function checkRouteReport(text) {
   const t = typeof text === 'string' ? text : '';
-  if (routeField(t, 'status') === null) return { applies: false, ok: true, missing: [] };
+  if (!routeActive(t)) return { applies: false, ok: true, missing: [] };
   const missing = [];
   for (const k of ['serves', 'assumptions', 'adopted']) if (!routeField(t, k)) missing.push(k);
   const c = routeField(t, 'counter');

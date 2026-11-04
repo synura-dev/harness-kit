@@ -29,6 +29,7 @@ export function mergeResults(items) {
     decision, reason: reason || undefined, updatedInput,
     additionalContext: join(rs.map((x) => x.result.additionalContext), '\n\n') || undefined,
     block: blocked.length > 0, blockReason: join(blocked.map((x) => x.result.reason), ' | ') || 'blocked',
+    systemMessage: join(rs.map((x) => x.result.systemMessage), '\n') || undefined,
     path,
     records: rs.flatMap((x) => (Array.isArray(x.result.records) ? x.result.records : [])),
   };
@@ -49,5 +50,7 @@ export function render(event, m) {
   }
   if (event === 'PreToolUse' && m.updatedInput) hso.updatedInput = m.updatedInput;
   if (m.additionalContext) hso.additionalContext = m.additionalContext;
-  return { stdout: JSON.stringify(Object.keys(hso).length > 1 ? { hookSpecificOutput: hso } : {}), stderr: '', code: 0 };
+  const out = Object.keys(hso).length > 1 ? { hookSpecificOutput: hso } : {};
+  if (m.systemMessage) out.systemMessage = m.systemMessage; // canh bao hien cho nguoi dung, khong chan
+  return { stdout: JSON.stringify(out), stderr: '', code: 0 };
 }

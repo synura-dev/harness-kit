@@ -49,7 +49,7 @@ export const DEFAULTS = {
   ],
 };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
-export const load = (files = configFiles()) => loadHookConfig('verify-gate', { defaults: DEFAULTS, files, env: { HOOK_VERIFY_GATE_ENABLED: 'enabled' } }).config;
+export const load = (files = configFiles()) => loadHookConfig('verify-gate', { defaults: DEFAULTS, files, env: { HOOK_VERIFY_GATE_ENABLED: 'enabled', HOOK_VERIFY_GATE_ROUTEFIELDS: 'routeFields' } }).config;
 
 /** sid giong hooks/audit: 'claude-' + session_id da loc ky tu. Rong -> null (khong doan). */
 export function sidOf(inp) {
@@ -212,10 +212,10 @@ export function handle(event, input, ctx = {}) {
   const warn = rc && !rc.ok && rc.mode === 'warn'
     ? `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')} (can serves, assumptions, counter co path:dong|URL|so do va khong "khong co", adopted)` : undefined;
   if (rc && !rc.ok && rc.mode === 'block') {
-    return { decision: 'deny', block: true, exitCode: 2, reason: `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')}. Bo sung serves, assumptions, counter (>=1 rui ro co path:dong|URL|so do, khong "khong co"), adopted.`, record: { code: 'route_check_block' }, records };
+    return { decision: 'deny', block: true, reason: `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')}. Bo sung serves, assumptions, counter (>=1 rui ro co path:dong|URL|so do, khong "khong co"), adopted.`, record: { code: 'route_check_block' }, records };
   }
   const r = run(inp, { cfg, root, now, deadline: ctx.deadline ?? Infinity, write, records, readRoots });
-  const extra = warn ? { warn } : {};
+  const extra = warn ? { systemMessage: warn } : {};
   if (r.decision === 'block') return { decision: 'deny', block: true, reason: r.out.reason, record: { code: r.code }, records, ...extra };
   return { decision: 'allow', block: false, record: { code: r.code }, records, ...extra };
 }
@@ -242,7 +242,8 @@ function lastReport(input) {
 /** route-check (SubagentStop): { mode, ok, missing } hoac null (tat/khong ap dung). Ghi audit gate rule=route-check. Khong nem. */
 function routeCheck(inp, cfg, root, now, so) {
   try {
-    const mode = cfg.routeFields ?? DEFAULTS.routeFields;
+    let mode = cfg.routeFields ?? DEFAULTS.routeFields;
+    if (mode === 'block' && inp.stop_hook_active === true) mode = 'warn'; // chan toi da 1 lan/luot: lan 2 chi canh bao
     if ((mode !== 'warn' && mode !== 'block') || inp.hook_event_name !== 'SubagentStop') return null;
     const r = checkRouteReport(lastReport(inp));
     if (!r.applies) return null;
@@ -273,12 +274,11 @@ export async function main() {
     const raw = await readStdin(Math.min(1500, budget));
     let inp; try { inp = JSON.parse(raw); } catch { inp = null; }
     const r = handle(String(inp && inp.hook_event_name || ''), inp, { cfg, deadline: Date.now() + budget, write: true });
-    if (r.exitCode === 2) { process.stderr.write(r.reason + '\n'); return 2; }
-    if (r.warn) process.stderr.write(r.warn + '\n');
+    if (r.systemMessage) process.stderr.write(r.systemMessage + '\n');
     if (r.block) process.stdout.write(JSON.stringify({ decision: 'block', reason: r.reason }));
   } catch {} finally { clearTimeout(killer); }
   return 0;
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
-if (isMain) main().then((c) => process.exit(c === 2 ? 2 : 0), () => process.exit(0));
+if (isMain) main().then(() => process.exit(0), () => process.exit(0));
