@@ -8,7 +8,7 @@ description: "Vòng phát triển nhiều agent song song, rút từ số liệu
 Nhãn: [số liệu: lệnh] = lấy từ cổng harness (cửa sổ 3 ngày tính đến 2026-10-30, chạy lại lệnh để cập nhật); [quy tắc] = quy ước, chưa có số liệu kiểm chứng.
 
 ## Số liệu thật
-- 614 lượt chạy: general-purpose 359, builder 70, reviewer 37, scout 23, planner 12 [số liệu: `harness observe cost summary --since 3d --by role`].
+- 614 lượt chạy: general-purpose 359, builder 70, verifier 49, reviewer 37, scout 23, planner 12 [số liệu: `harness observe cost summary --since 3d --by role`]. (verifier agent da bo 2026-11-04, thay bang playbook verify-project)
 - Model: sonnet 471, haiku 90, opus 53; 42 lượt được đánh dấu "có thể dùng model rẻ hơn" (40 trên opus) [số liệu: `harness observe cost summary --since 3d --by model`].
 - Chi phí quy ra tiền: chưa có số liệu (bảng giá chưa cập nhật, cost=null).
 - 253 commit trong 3 ngày: feat 65, refactor 63, fix 39, docs 36, chore 23, test 16, revert 0 [số liệu: `git log --since=3.days --pretty=%s`, đếm theo tiền tố].
