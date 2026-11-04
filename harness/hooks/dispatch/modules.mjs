@@ -25,6 +25,7 @@ const PROC_ORPHANS = { id: 'proc-orphans', load: () => import('../../constrain/p
 const DATA_CHECK = { id: 'data-check', load: () => import('../../observe/data-check/hook.mjs') };
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
+const DIFF_REVIEW = { id: 'diff-review', load: () => import('../../observe/diff-review/hook.mjs') };
 const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
@@ -37,7 +38,7 @@ export const ORDER = Object.freeze({
   PermissionRequest: [AUDIT],
   PermissionDenied: [AUDIT],
   Notification: [AUDIT],
-  SubagentStart: [AUDIT, EXT_INJECT],
+  SubagentStart: [AUDIT, EXT_INJECT, DIFF_REVIEW],
   SessionEnd: [AUDIT],
   Stop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
   SubagentStop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
