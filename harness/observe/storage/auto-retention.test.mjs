@@ -138,3 +138,51 @@ test('file goc chuan khong bi tinh la clutter (data scan + hook); file la van bi
   assert.equal(clutterOf('laketqua.txt', DEFAULTS, repo), 'laketqua.txt');
   assert.equal(clutterOf('rac.log', DEFAULTS, repo), 'rac.log');
 });
+
+test('audit gia vuot tran walk: duyet cu nhat truoc -> van xoa duoc file qua han', () => {
+  const r = mkRoot();
+  const olds = [0, 1, 2].map((i) => put(r, `system/audit/date=2020-01-0${i + 1}/e.jsonl`, 500));
+  const news = [];
+  for (let d = 1; d <= 6; d++) for (let i = 0; i < 3; i++) news.push(put(r, `system/audit/date=2026-02-0${d}/e${i}.jsonl`, 2));
+  const reg = { entries: { audit: { zone: 'system', class: 'log', owner: 'o', retentionDays: 90, path: 'system/audit' } }, reserved: [] };
+  const res = cleanAuto({ root: r, reg, yes: true, walkMax: 5 });
+  assert.equal(res.files, 3, 'walk bi cat o tran nho nhung van cham file qua han truoc');
+  for (const p of olds) assert.ok(!fs.existsSync(p), p);
+  for (const p of news) assert.ok(fs.existsSync(p), p);
+});
+
+test('file don le > maxBytes bi bo qua, khong chan muc sau', () => {
+  const r = mkRoot();
+  const big = put(r, 'system/a/big.log', 100, 1000);
+  const small = put(r, 'system/b/small.log', 100, 10);
+  const reg = { entries: {
+    a: { zone: 'system', class: 'log', owner: 'o', retentionDays: 14, path: 'system/a' },
+    b: { zone: 'system', class: 'log', owner: 'o', retentionDays: 14, path: 'system/b' },
+  }, reserved: [] };
+  const res = cleanAuto({ root: r, reg, yes: true, maxBytes: 100 });
+  assert.equal(res.files, 1); assert.equal(res.byEntry.b, 1); assert.equal(res.more, false);
+  assert.ok(fs.existsSync(big)); assert.ok(!fs.existsSync(small));
+});
+
+test('CLI: luot khong xoa duoc gi -> lastRun tien (khong lap vo ich)', async () => {
+  const hub = mkRoot(); const dd = path.join(hub, 'dd');
+  put(dd, 'system/play/fresh.log', 1); // chua han
+  put(dd, 'system/play/huge.log', 100, 500); // qua han nhung > maxBytes
+  const rf = path.join(hub, 'registry.json');
+  fs.writeFileSync(rf, JSON.stringify({ entries: { play: { zone: 'system', class: 'log', owner: 'o', retentionDays: 14, path: 'system/play' } }, reserved: [] }));
+  const sf = path.join(dd, '.state', 'data-check-clean.json'); fs.mkdirSync(path.dirname(sf), { recursive: true });
+  const prevRun = Date.now() - 30 * 3600e3;
+  fs.writeFileSync(sf, JSON.stringify({ lastRun: prevRun, done: true, seen: true, files: 0 }));
+  const keys = ['HUB_DATA_DIR', 'HARNESS_DATA_REGISTRY', 'HARNESS_DATA_WORKSPACES', 'CLAUDE_AUDIT_DIR'];
+  const saved = Object.fromEntries(keys.map((k) => [k, process.env[k]])); const log = console.log;
+  try {
+    process.env.HUB_DATA_DIR = dd; process.env.HARNESS_DATA_REGISTRY = rf; process.env.HARNESS_DATA_WORKSPACES = path.join(hub, 'ws'); process.env.CLAUDE_AUDIT_DIR = path.join(hub, 'audit');
+    console.log = () => {};
+    assert.equal((await run(['clean', '--auto', '--yes', '--max-bytes', '100'])).code, 0);
+    const st = JSON.parse(fs.readFileSync(sf, 'utf8'));
+    assert.equal(st.files, 0); assert.ok(st.lastRun > prevRun, 'khong xoa duoc gi -> lastRun phai tien');
+  } finally {
+    console.log = log;
+    for (const k of keys) { if (saved[k] === undefined) delete process.env[k]; else process.env[k] = saved[k]; }
+  }
+});
