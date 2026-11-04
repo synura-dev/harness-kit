@@ -8,7 +8,7 @@ export const DEFAULTS = {
   modules: {},
   // tran thoi gian TONG moi su kien (ms), < `timeout` trong settings. Het -> tra phan da co, bo module chua chay.
   budgetsMs: {
-    PreToolUse: 2500, PostToolUse: 2500, PostToolUseFailure: 2500, SubagentStart: 2500, PermissionRequest: 2500, PermissionDenied: 2500,
+    PreToolUse: 2500, PostToolUse: 2500, PostToolUseFailure: 2500, SubagentStart: 3500, PermissionRequest: 2500, PermissionDenied: 2500,
     Notification: 2500, SessionEnd: 2500, UserPromptSubmit: 2800, Stop: 14000, SubagentStop: 14000, SessionStart: 27000,
     WorktreeCreate: 42000, WorktreeRemove: 27000,
   },
@@ -25,9 +25,10 @@ const PROC_ORPHANS = { id: 'proc-orphans', load: () => import('../../constrain/p
 const DATA_CHECK = { id: 'data-check', load: () => import('../../observe/data-check/hook.mjs') };
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
+const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
-export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'verify-gate', 'user-shim']);
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'verify-gate', 'user-shim', 'ext-inject']);
 
 export const ORDER = Object.freeze({
   PreToolUse: [GUARD, DATA_GATE, APPROVAL, BASH_GUARD, MODEL_POLICY, AUDIT],
@@ -36,11 +37,11 @@ export const ORDER = Object.freeze({
   PermissionRequest: [AUDIT],
   PermissionDenied: [AUDIT],
   Notification: [AUDIT],
-  SubagentStart: [AUDIT],
+  SubagentStart: [AUDIT, EXT_INJECT],
   SessionEnd: [AUDIT],
   Stop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
   SubagentStop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
-  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM],
+  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, EXT_INJECT],
   UserPromptSubmit: [AUDIT],
   WorktreeCreate: [WORKTREE],
   WorktreeRemove: [WORKTREE],

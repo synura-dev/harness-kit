@@ -22,6 +22,10 @@ Moi phien: dam bao lenh `harness` dung duoc tu PowerShell/cmd/bash cua user. MOT
 - Tat: `HOOK_USER_SHIM_ENABLED=0` hoac `hook.config.local.json {"enabled": false}`. Import: hooks duoc import `build` (contract IMPORT_RULES) chi de nap module nay.
 Exit 1 khi co buoc LOI.
 
+## ext-inject (hook SessionStart, SubagentStart)
+
+Chen ngu canh tong quat tu extension, khong hard-code ten ext. Manifest extension (cung `manifest.json` ma `harness ext` doc) khai `"inject": { "events": ["SessionStart","SubagentStart"], "args": ["show","--cwd","{cwd}","--inject"] }`. Voi moi ext da dang ky VA hash ok (`extensionStatus`; drift/chua duyet/thieu => bo qua) co event khop: chay `harness <ext-id> <args>` (`bin/harness` cua plugin qua `process.execPath`, khong shell; `{cwd}` = cwd cua su kien), timeout 3s/ext (tong 6s), fail-open (loi/timeout/exit khac 0 => bo qua), cat 12 dong / 1.5KB moi ext, noi vao `additionalContext`. Tat: `HOOK_EXT_INJECT_ENABLED=0` hoac `hook.config.local.json {"enabled": false}`. Dispatcher: budget `SubagentStart` 3500ms (tu 2500) de chua timeout 3s.
+
 ## skills
 
 Domain `skills`: `build | check | prune` (`node harness/cli/harness.mjs skills <lenh>`).
