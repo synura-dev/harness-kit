@@ -106,6 +106,7 @@ export function render(o, cwd = process.cwd()) {
   if (o.cmd !== 'pack') throw new Error(`lenh la: ${o.cmd ?? '(trong)'}\n${USAGE}`);
   // Qua cong `harness` CLI chay voi cwd = thu muc plugin (cong khong truyen cwd cua nguoi goi): khong co dir thi khong biet repo nao.
   if (!o.dir && process.env.HARNESS_GATEWAY === '1') throw new Error('qua cong harness can chi ro repo: harness review pack <dir> (cong chay CLI voi cwd = thu muc plugin)');
+  if (o.dir && process.env.HARNESS_GATEWAY === '1' && !path.isAbsolute(o.dir)) throw new Error('qua cong harness, dir phai la duong dan tuyet doi (cong chay CLI voi cwd = thu muc plugin, khong resolve duoc duong dan tuong doi)');
   const c = collectGit({ cwd: o.dir ? path.resolve(cwd, o.dir) : cwd, base: o.base, timeoutMs: o.timeoutMs });
   if (c.status === 'not-git') return { summary: c.truncated ? `review pack: truncated: ${c.truncated} (chua xac dinh duoc repo)` : 'review pack: khong phai git repo (bo qua)', data: { status: 'not-git', bundles: [], flags: {} }, truncated: c.truncated };
   if (c.status === 'no-base') return { summary: `review pack: ${c.reason} (bo qua)`, data: { status: 'no-base', reason: c.reason, bundles: [], flags: {} }, truncated: c.truncated };

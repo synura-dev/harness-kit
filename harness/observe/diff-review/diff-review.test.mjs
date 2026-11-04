@@ -245,3 +245,9 @@ test('hook: ngan sach nho -> truncated: timeout, khong ket luan khong co thay do
   const ok = await hook.handle('SubagentStart', { agent_type: 'reviewer', cwd: path.join(repo, 'src') }, { deadline: Date.now() + 2000 });
   expect(ok.additionalContext.split('\n')[0]).toContain(`repo=${toplevel(repo)}`);
 });
+
+test('cong: dir tuong doi (review pack .) -> exit 2, bao can duong dan tuyet doi', () => {
+  const r = runGate(repo, 'pack', '.');
+  expect(r.status).toBe(2);
+  expect(r.stderr).toContain('duong dan tuyet doi');
+});
