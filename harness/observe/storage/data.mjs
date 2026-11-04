@@ -11,6 +11,7 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
 import { readJson, readJsonl, appendJsonl, dataPath, dataPathFor, today } from '../../core/io/storage.mjs';
 import { REPO_ROOT_FILES } from '../../core/config/contract.mjs';
+import { isStdRootFile } from './std-root.mjs';
 import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, classRetention, formatWarn, writeAtomic } from '../../core/registry/data-registry.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -22,7 +23,7 @@ const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 export const loadRegistry = (opts = {}) => loadDataRegistry({ registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, workspacesDir: process.env.HARNESS_DATA_WORKSPACES || undefined, ...opts });
 
 // Duyet de quy co gioi han. Tra {files:[{p,size,mtime}], dirs:[p], truncated}. Khong theo symlink.
-export function walk(dir, { maxFiles = LIMITS.maxFiles, deadline = Date.now() + LIMITS.timeoutS * 1000 } = {}) {
+export function walk(dir, { maxFiles = LIMITS.maxFiles, deadline = Date.now() + LIMITS.timeoutS * 1000, oldestFirst = false } = {}) {
   const files = [], dirs = [];
   let truncated = null;
   const stack = [dir];
@@ -31,12 +32,17 @@ export function walk(dir, { maxFiles = LIMITS.maxFiles, deadline = Date.now() + 
     if (files.length >= maxFiles) { truncated = `max-files ${maxFiles}`; break; }
     const d = stack.pop();
     let ents; try { ents = fs.readdirSync(d, { withFileTypes: true }); } catch { continue; }
+    // oldestFirst: ten tang dan (date=YYYY-MM-DD cu truoc); thu muc con day vao stack theo thu tu nguoc de pop ra nho nhat truoc -> cham file qua han truoc khi cat tran.
+    if (oldestFirst) ents = ents.slice().sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+    const subs = [];
     for (const e of ents) {
       const p = path.join(d, e.name);
       if (e.isSymbolicLink()) continue;
-      if (e.isDirectory()) { dirs.push(p); stack.push(p); }
+      if (e.isDirectory()) { dirs.push(p); subs.push(p); }
       else if (e.isFile()) { try { const s = fs.statSync(p); files.push({ p, size: s.size, mtime: s.mtimeMs }); } catch {} }
     }
+    if (oldestFirst) subs.reverse();
+    stack.push(...subs);
   }
   return { files, dirs, truncated };
 }
@@ -58,7 +64,7 @@ export function regUsable(reg, what = 'data') {
   if (!reg.entries || !Object.keys(reg.entries).length) throw new Error(`${what} abort: registry rong bat thuong`);
 }
 
-const rootOk = (n, extra = []) => n.startsWith('.') || REPO_ROOT_FILES.includes(n) || extra.includes(n) || n.endsWith('.code-workspace');
+const rootOk = (n, extra = []) => n.startsWith('.') || REPO_ROOT_FILES.includes(n) || isStdRootFile(n) || extra.includes(n) || n.endsWith('.code-workspace');
 const phys = (key, ent) => (ent && ent.path) || key;
 
 /** Scan theo zone: unregistered, missing-field, over-caps, retention, stray (_inbox cu), clutter (docs/ + goc repo). Ghi cache. */
@@ -145,31 +151,42 @@ export function clean({ root = dataRoot(), reg = loadRegistry(), yes = false, da
   return res;
 }
 
+const NO_AUTO_ZONES = ['knowledge', 'external', 'workspaces'];
+/** Han tu xoa cua muc cho don tu dong: retentionDays khai bao ro (so > 0) luon duoc dung; han suy tu class chi cho muc zone system. knowledge/external/workspaces (theo zone hoac thu muc cap 1) khong khai bao ro -> null (khong bao gio bi dung). */
+export function autoRetention(name, ent) {
+  if (Number.isFinite(ent.retentionDays) && ent.retentionDays > 0) return ent.retentionDays;
+  if (ent.zone !== 'system' || NO_AUTO_ZONES.includes(String(phys(name, ent)).replace(/\\/g, '/').split('/')[0])) return null;
+  const d = classRetention(ent);
+  return Number.isFinite(d) && d > 0 ? d : null;
+}
+
 /** Don tu dong: chi class log/cache, file qua han, bo qua hom nay (gio dia phuong) va audit ngay hien tai; tran file/bytes/giay; khong di theo symlink. */
-export function cleanAuto({ root = dataRoot(), reg = loadRegistry(), yes = false, now = Date.now(), maxFiles = LIMITS.autoMaxFiles, maxBytes = LIMITS.autoMaxBytes, timeoutS = LIMITS.timeoutS } = {}) {
+export function cleanAuto({ root = dataRoot(), reg = loadRegistry(), yes = false, now = Date.now(), maxFiles = LIMITS.autoMaxFiles, maxBytes = LIMITS.autoMaxBytes, timeoutS = LIMITS.timeoutS, walkMax = LIMITS.maxFiles } = {}) {
   regUsable(reg, 'clean');
-  const res = { auto: true, dryRun: !yes, files: 0, bytes: 0, byEntry: {}, truncated: null };
+  const res = { auto: true, dryRun: !yes, files: 0, bytes: 0, byEntry: {}, truncated: null, more: false }; // more = cham tran CUA LUOT NAY (max-files/max-bytes) khi con viec
   const deadline = Date.now() + timeoutS * 1000;
   const d0 = new Date(now); const midnight = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate()).getTime();
   const dateTag = `date=${d0.getFullYear()}-${String(d0.getMonth() + 1).padStart(2, '0')}-${String(d0.getDate()).padStart(2, '0')}`;
   let realRoot; try { realRoot = fs.realpathSync(root); } catch { return res; }
   outer: for (const [name, ent] of Object.entries(reg.entries)) {
     if (ent.class !== 'log' && ent.class !== 'cache') continue;
-    const d = classRetention(ent); if (d == null) continue;
+    const d = autoRetention(name, ent); if (d == null) continue;
     const dir = path.join(root, phys(name, ent));
     if (!isInside(dir, root) || samePath(dir, root)) continue;
     let ls; try { ls = fs.lstatSync(dir); } catch { continue; }
     if (ls.isSymbolicLink() || !ls.isDirectory()) continue;
     try { if (!isInside(fs.realpathSync(dir), realRoot)) continue; } catch { continue; }
-    const w = walk(dir, { deadline });
+    const w = walk(dir, { deadline, maxFiles: walkMax, oldestFirst: true });
     if (w.truncated) res.truncated = w.truncated;
     const cut = Math.min(now - d * 86400000, midnight);
+    w.files.sort((a, b) => a.mtime - b.mtime); // cu nhat truoc
     for (const f of w.files) {
       if (f.mtime >= cut || !isInside(f.p, root)) continue;
       const rel = path.relative(root, f.p).split(path.sep);
       if (rel.includes(dateTag) || rel.some((x) => x === '.state' || x === '_inbox')) continue;
-      if (res.files >= maxFiles) { res.truncated = `max-files ${maxFiles}`; break outer; }
-      if (res.bytes + f.size > maxBytes) { res.truncated = `max-bytes ${maxBytes}`; break outer; }
+      if (res.files >= maxFiles) { res.truncated = `max-files ${maxFiles}`; res.more = true; break outer; }
+      if (f.size > maxBytes) continue; // file don le vuot tran byte: bo qua file do, khong chan cac muc sau
+      if (res.bytes + f.size > maxBytes) { res.truncated = `max-bytes ${maxBytes}`; res.more = true; break outer; }
       if (Date.now() > deadline) { res.truncated = 'timeout'; break outer; }
       try { if (fs.lstatSync(f.p).isSymbolicLink()) continue; if (yes) fs.unlinkSync(f.p); } catch { continue; }
       res.files++; res.bytes += f.size; res.byEntry[name] = (res.byEntry[name] || 0) + 1;
@@ -400,8 +417,12 @@ export async function run(argv = process.argv.slice(2)) {
     if (cmd === 'clean' && r.includes('--auto')) {
       const ai = (n, dflt) => { const i = r.indexOf(n); return i >= 0 && Number(r[i + 1]) > 0 ? Number(r[i + 1]) : dflt; };
       let c; let err = null;
-      try { c = cleanAuto({ root, reg, yes, maxFiles: ai('--max-files', LIMITS.autoMaxFiles), maxBytes: ai('--max-bytes', LIMITS.autoMaxBytes), timeoutS: o.timeoutS || LIMITS.timeoutS }); } catch (e) { err = e; }
-      if (yes) { try { writeAtomic(path.join(root, '.state', 'data-check-clean.json'), JSON.stringify({ lastRun: Date.now(), done: !err, ts: new Date().toISOString(), files: c?.files ?? 0, bytes: c?.bytes ?? 0, truncated: c?.truncated ?? null, error: err ? err.message : null, seen: false })); } catch {} }
+      try { c = cleanAuto({ root, reg, yes, maxFiles: ai('--max-files', LIMITS.autoMaxFiles), maxBytes: o.maxBytes || LIMITS.autoMaxBytes, timeoutS: o.timeoutS || LIMITS.timeoutS }); } catch (e) { err = e; }
+      if (yes) { try {
+        const sf = path.join(root, '.state', 'data-check-clean.json'); let prev = {}; try { prev = JSON.parse(fs.readFileSync(sf, 'utf8')) || {}; } catch {}
+        const more = !err && c?.more && c.files > 0; // chi giu lastRun cu khi luot nay THUC SU xoa duoc va cham tran cua chinh no (phien sau lam tiep, khoa 5 phut chan lap); luot khong xoa gi thi tien
+        writeAtomic(sf, JSON.stringify({ lastRun: more ? (Number(prev.lastRun) || 0) : Date.now(), done: !err, ts: new Date().toISOString(), files: c?.files ?? 0, bytes: c?.bytes ?? 0, truncated: c?.truncated ?? null, error: err ? err.message : null, seen: false }));
+      } catch {} }
       if (err) throw err;
       logAccess('clean', r, { auto: true, files: c.files, bytes: c.bytes, byEntry: c.byEntry, truncated: c.truncated, yes });
       return { code: 0, ...emit({ summary: `${c.dryRun ? 'dry-run auto: se xoa' : 'auto da xoa'} ${c.files} file (${fmtB(c.bytes)})${c.dryRun ? ' - them --yes de xoa' : ''}${Object.keys(c.byEntry).length ? '\n' + Object.entries(c.byEntry).map(([k, v]) => `${k}: ${v}`).join('\n') : ''}`, data: c, truncated: c.truncated }, o) };

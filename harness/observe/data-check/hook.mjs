@@ -7,6 +7,7 @@ import { loadHookConfig } from '../../core/config/config.mjs';
 import { TOP_FILES } from '../../core/config/contract.mjs';
 import { dataRoot, workspaceRoot, toPosix, REPO_DIR } from '../../core/io/paths.mjs';
 import { SCAN_CACHE_REL, formatWarn } from '../../core/registry/data-registry.mjs';
+import { isStdRootFile } from '../storage/std-root.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS = { enabled: true, timeoutMs: 300, scanTimeoutMs: 8000, retryMinutes: 30, lockMinutes: 2, stateMaxDays: 7, pruneMax: 50, cacheMaxAgeHours: 24, allowlist: [], autoClean: { enabled: true, minIntervalHours: 24, maxFiles: 500, maxBytes: 200000000, timeoutS: 20 } };
@@ -24,7 +25,7 @@ export function clutterOf(file, cfg, root = workspaceRoot()) {
   if (!rel || rel.startsWith('..') || path.isAbsolute(rel)) return null;
   if ((cfg.allowlist || []).some((a) => rel === toPosix(a) || rel.startsWith(toPosix(a).replace(/\/?$/, '/')))) return null;
   const parts = rel.split('/');
-  if (parts.length === 1) return !TOP_FILES.includes(rel) && JUNK.test(rel) ? rel : null;
+  if (parts.length === 1) return !TOP_FILES.includes(rel) && !isStdRootFile(rel) && JUNK.test(rel) ? rel : null;
   if (parts[0] === 'docs' && !/\.md$/i.test(rel)) return rel;
   return null;
 }

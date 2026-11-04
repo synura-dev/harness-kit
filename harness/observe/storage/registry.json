@@ -69,14 +69,6 @@
       "class": "artifact",
       "owner": "harness/evolve/eval",
       "target": "knowledge/eval"
-    },
-    "evals": {
-      "zone": "knowledge",
-      "class": "artifact",
-      "owner": "main (skill eval cu, xem evolve/README)",
-      "target": "knowledge/evals",
-      "path": "knowledge/evals",
-      "legacy": "evals"
     }
   },
   "_externalRule": "Du lieu do ben ngoai harness sinh: data scan phat hien -> data adopt vao _inbox -> duyet: dang ky (zone external neu la app-state) hoac xoa; doctor canh bao.",
