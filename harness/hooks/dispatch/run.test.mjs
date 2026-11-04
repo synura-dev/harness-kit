@@ -60,7 +60,8 @@ function check(event, input, golden, { only, seed } = {}) {
   if (seed) seed(b.env);
   const neu = runNew(event, input, b.env, only);
   expect(neu.status, neu.stderr).toBe(0);
-  expect(parse(neu.stdout)).toEqual(golden.json);
+  if (golden.verify) golden.verify(parse(neu.stdout));
+  else expect(parse(neu.stdout)).toEqual(golden.json);
   const sb = signature(b.env.CLAUDE_AUDIT_DIR);
   expect(subset(sb, golden.sa), `vet ${JSON.stringify(sb)} khong la tap con golden ${JSON.stringify(golden.sa)}`).toBe(true);
   return { neu, sb, env: b.env };
@@ -135,8 +136,13 @@ const stopEvent = (cwd) => JSON.stringify({ hook_event_name: 'Stop', session_id:
 test('Stop: sua code khong test -> block (verify-gate); proc-orphans cung chay', () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-cwd-'));
   fs.mkdirSync(path.join(cwd, 'src')); fs.mkdirSync(path.join(cwd, '.git')); fs.writeFileSync(path.join(cwd, 'src', 'a.js'), 'x');
-  const reason = 'verify-gate: Da sua code nhung chua co bang chung pass sau lan sua cuoi, chay trong thu muc/du an (git root) cua moi file da sua: chay test/tsc (hoac build/lint) roi bao ket qua.';
-  check('Stop', stopEvent(cwd), { json: { decision: 'block', reason }, sa: ['gate|verify-gate:missing_code:block', 'session|Stop|', 'tool|PostToolUse|Edit'] }, {
+  const cau = 'verify-gate: Da sua code nhung chua co bang chung pass sau lan sua cuoi, chay trong thu muc/du an (git root) cua moi file da sua: chay test/tsc (hoac build/lint) roi bao ket qua.';
+  const verify = (out) => {
+    expect(out.decision).toBe('block');
+    expect(out.reason.startsWith(cau)).toBe(true);
+    expect(out.reason).toContain(' Goi y lenh: ');
+  };
+  check('Stop', stopEvent(cwd), { verify, sa:['gate|verify-gate:missing_code:block', 'session|Stop|', 'tool|PostToolUse|Edit'] }, {
     seed: (env) => { const s = runNew('PostToolUse', editEvent(cwd), env); expect(s.status).toBe(0); },
   });
 }, 90000);
