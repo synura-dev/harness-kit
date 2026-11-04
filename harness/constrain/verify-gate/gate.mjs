@@ -270,3 +270,35 @@ export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf
   if (missing.includes('deploy')) parts.push('Da deploy nhung chua co bang chung hash (git rev-parse...) va health (curl -f .../health) pass sau deploy.');
   return { decision: 'block', code: 'missing_' + missing.join('_'), missing, reason: 'verify-gate: ' + parts.join(' '), ...base };
 }
+
+// ---- route-check: bao cao cuoi subagent co dong `status:` thi kiem serves/assumptions/counter/adopted ----
+const ROUTE_NONE = /^(?:khong\s*co|không\s*có|none|n\/a|na|-+|—+|–+)[\s.]*$/i;
+const ROUTE_EVIDENCE = /[\w.\\/-]+\.\w+:\d+|https?:\/\/\S+|\d/;
+const ROUTE_KEYS = ['status', 'serves', 'assumptions', 'counter', 'adopted'];
+const routeKeyRe = (k) => new RegExp(`^[ \\t]*(?:[-*][ \\t]*)?\\**${k}\\**[ \\t]*:\\**[ \\t]*(.*)$`, 'im');
+const anyKeyRe = new RegExp(`^[ \\t]*(?:[-*][ \\t]*)?\\**(?:${ROUTE_KEYS.join('|')})\\**[ \\t]*:`, 'i');
+
+/** Gia tri truong `key:` (cung dong; rong thi cac dong sau toi dong truong khac/dong trong). null neu khong co dong truong. */
+function routeField(text, key) {
+  const m = routeKeyRe(key).exec(text);
+  if (!m) return null;
+  const v = m[1].trim();
+  if (v) return v;
+  const rest = text.slice(m.index + m[0].length).split('\n').slice(1);
+  const out = [];
+  for (const l of rest) { if (!l.trim() || anyKeyRe.test(l)) break; out.push(l.trim()); }
+  return out.join(' ').trim();
+}
+
+/** Kiem bao cao theo mau protocol. Khong co dong `status:` -> { applies:false }; else { applies:true, ok, missing:[...] }. Tat dinh, khong nem. */
+export function checkRouteReport(text) {
+  const t = typeof text === 'string' ? text : '';
+  if (routeField(t, 'status') === null) return { applies: false, ok: true, missing: [] };
+  const missing = [];
+  for (const k of ['serves', 'assumptions', 'adopted']) if (!routeField(t, k)) missing.push(k);
+  const c = routeField(t, 'counter');
+  if (!c) missing.push('counter');
+  else if (ROUTE_NONE.test(c)) missing.push('counter(khong-co)');
+  else if (!ROUTE_EVIDENCE.test(c)) missing.push('counter(thieu-dan-chung)');
+  return { applies: true, ok: missing.length === 0, missing };
+}

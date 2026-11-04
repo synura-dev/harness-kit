@@ -120,6 +120,7 @@ Hook `Stop` và `SubagentStop`: chặn đóng 1 lần khi đã sửa code mà ch
 - **Chặn tối đa 1 lần/lượt**: `stop_hook_active=true` hoặc đã có dấu `type=gate decision=block` trong phạm vi -> cho qua + ghi vết.
 - **Fail-open + ghi vết**: thiếu `session_id`/`agent_id`, tỉ lệ dòng audit hỏng > `maxBadRatio` (0.2; dòng hỏng lẻ bị bỏ qua và ghi `bad=N`, dòng cuối chưa ghi xong không tính), đọc quá trần (`maxFileBytes`, `maxTotalBytes`), timeout (`timeoutMs`), lỗi nội bộ.
 - **Ghi vết**: qua API chung `core/audit/gate-event.mjs` `recordGate`: audit `type=gate`, `event=Gate`, `data.gate={kind:gate, decision, hook:verify-gate, rule:<mã>, reason}` (không ghi nội dung lệnh/file).
+- **route-check** (`SubagentStop`, key `routeFields`: `warn` mặc định | `block` | `off`): báo cáo cuối (`last_assistant_message`, thiếu thì transcript) có dòng `status:` thì phải có `serves:`, `assumptions:`, `adopted:` không rỗng và `counter:` không phải "không có/none/N/A/-" và có dẫn chứng (`path:dòng`, URL hoặc con số). Thiếu: `warn` = exit 0 + cảnh báo stderr; `block` = exit 2 + lý do. Ghi audit gate `rule=route-check` (`missing=...`/`ok`). Không có `status:` thì bỏ qua.
 - Kết luận chỉ từ dữ liệu audit/exit code. Phụ thuộc hook audit chạy `PostToolUse`/`PostToolUseFailure`/`UserPromptSubmit`.
 
 Cấu hình: `hook.config.json` (+ `config/verify-gate/local.json`), tắt nhanh bằng env `HOOK_VERIFY_GATE_ENABLED=false`.
