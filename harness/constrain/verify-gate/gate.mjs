@@ -40,6 +40,26 @@ export function outcomeOf(e, kind) {
   return 'pass';
 }
 
+// ---------- du an co runner khong (suy ra tu file du an; hook tiem hasRunner, gate khong I/O) ----------
+const ANY_RUNNER = /^(?:package\.json|makefile|gnumakefile|justfile|taskfile\.ya?ml|deno\.jsonc?|bunfig\.toml)$/i;
+const STACK_RUNNER = {
+  py: /^(?:pyproject\.toml|pytest\.ini|tox\.ini|setup\.cfg|setup\.py|noxfile\.py|conftest\.py|pipfile|requirements[\w.-]*\.txt|uv\.lock|poetry\.lock)$/i,
+  go: /^go\.(?:mod|work)$/i, rs: /^cargo\.toml$/i,
+  jvm: /^(?:pom\.xml|build\.gradle(?:\.kts)?|settings\.gradle(?:\.kts)?|build\.sbt|build\.xml|gradlew|mvnw)$/i,
+  cs: /(?:\.(?:csproj|fsproj|vbproj|sln|slnx)|^global\.json)$/i, rb: /^(?:gemfile|rakefile|[\w.-]+\.gemspec)$/i,
+  php: /^(?:composer\.json|phpunit\.xml(?:\.dist)?)$/i, swift: /^package\.swift$/i, dart: /^pubspec\.yaml$/i,
+  lua: /^(?:\.busted|[\w.-]+\.rockspec)$/i, c: /^(?:cmakelists\.txt|meson\.build|configure\.ac|[\w.-]+\.vcxproj)$/i,
+};
+const EXT_STACK = { py: 'py', go: 'go', rs: 'rs', java: 'jvm', kt: 'jvm', scala: 'jvm', cs: 'cs', rb: 'rb', php: 'php', swift: 'swift', dart: 'dart',
+  lua: 'lua', c: 'c', h: 'c', cpp: 'c', hpp: 'c' };
+/** Regex ten file chung to du an co runner cho file nay, hoac null = luon tinh (JS/TS chay duoc khong can manifest: bun test, node --test; sh/ps1/sql giu hanh vi cu). */
+export function runnerSpec(file) {
+  const m = String(file || '').toLowerCase().match(/\.([a-z0-9]+)$/);
+  const st = m && EXT_STACK[m[1]];
+  return st ? [ANY_RUNNER, STACK_RUNNER[st]] : null;
+}
+const SUGGEST = { py: 'pytest', go: 'go test ./...', rs: 'cargo test', java: 'mvn test | gradle test', kt: 'gradle test', scala: 'sbt test', cs: 'dotnet test', rb: 'bundle exec rspec', php: 'phpunit', swift: 'swift test', dart: 'dart test' };
+
 function isCodeFile(p, exts) {
   const m = String(p || '').toLowerCase().match(/\.([a-z0-9]+)$/);
   return !!m && exts.includes(m[1]);
@@ -191,7 +211,7 @@ export function scopeEvents(events, { event, agentId }) {
  * SAU lan sua code cuoi, o thu muc la to tien cua file hoac cung git root; moi file da sua phai duoc phu.
  * Tra { decision: 'allow'|'block', code, reason?, edits, lastEditTs?, cwdAssumed }.
  */
-export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf = null, tmpDirs = [] } = {}) {
+export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf = null, tmpDirs = [], hasRunner = null } = {}) {
   const deployRes = (cfg.deployPatterns || []).map((s) => new RegExp(s, 'i'));
   const exts = cfg.codeExts || [];
   let lastEdit = -1, lastDeploy = -1, edits = 0, priorBlock = false, cwdAssumed = 0;
@@ -253,6 +273,8 @@ export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf
     if (!r) return false;
     const t = tmps.find((d) => under(f, d));
     if (t && !under(r, t)) return false;
+    // Du an khong co runner nhan ra duoc cho stack cua file (py/go/rs/... khong co manifest): khong chan, khong the bat buoc test.
+    if (typeof hasRunner === 'function' && !hasRunner(f, r)) return false;
     return true;
   });
   if (lastEdit >= 0 && tracked.length) {
@@ -266,7 +288,12 @@ export function decide(events, cfg, { stopHookActive = false, cwd = null, rootOf
   if (stopHookActive) return { decision: 'allow', code: 'already_blocked_stop_hook_active', missing, ...base };
   if (priorBlock) return { decision: 'allow', code: 'already_blocked_audit', missing, ...base };
   const parts = [];
-  if (missing.includes('code')) parts.push('Da sua code nhung chua co bang chung pass sau lan sua cuoi, chay trong thu muc/du an (git root) cua moi file da sua: chay test/tsc (hoac build/lint) roi bao ket qua.');
+  if (missing.includes('code')) {
+    const known = tracked.filter(Boolean);
+    const hint = [...new Set(known.map((f) => SUGGEST[(f.match(/\.([a-z0-9]+)$/) || [])[1]] || 'bun test | npm test'))].slice(0, 3).join(' | ');
+    const shown = known.slice(0, 3).join(', ') + (known.length > 3 ? ` (+${known.length - 3})` : '');
+    parts.push('Da sua code nhung chua co bang chung pass sau lan sua cuoi, chay trong thu muc/du an (git root) cua moi file da sua: chay test/tsc (hoac build/lint) roi bao ket qua.' + (shown ? ` Tep: ${shown}.` : '') + (hint ? ` Goi y lenh: ${hint}.` : ''));
+  }
   if (missing.includes('deploy')) parts.push('Da deploy nhung chua co bang chung hash (git rev-parse...) va health (curl -f .../health) pass sau deploy.');
   return { decision: 'block', code: 'missing_' + missing.join('_'), missing, reason: 'verify-gate: ' + parts.join(' '), ...base };
 }

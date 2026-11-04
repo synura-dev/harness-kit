@@ -98,3 +98,36 @@ test('validateEvent: truong moi hop le, du lieu cu van doc duoc, gia tri sai bi 
   expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool', task_id: null, error_fingerprint: 'abc', retry_of: 2, attempt: 3, files_touched: ['a.js'], verifier_outcome: 'pass' })).toEqual([]);
   expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool', verifier_outcome: 'maybe', files_touched: 'a', retry_of: 'x' }).length).toBe(3);
 });
+
+test('verifyKind: lenh test theo stack (npm/pnpm/yarn, Python, Go, Rust, JVM, .NET, make) la test', () => {
+  for (const c of ['npm t', 'pnpm -r test', 'pnpm --filter web test', 'yarn workspace x test', 'npm --prefix pkg test', './node_modules/.bin/jest', 'deno test', 'CI=1 npm t',
+    'cd pkg && npm t', 'timeout 90 pnpm -r test', 'python3.11 -m pytest', 'python -m unittest discover', 'uv run pytest', 'poetry run pytest', '.venv/bin/pytest', 'tox', 'hatch run test',
+    'cargo +nightly test', 'cargo nextest run', 'dotnet test', 'mvn test', './mvnw verify', './gradlew test', 'phpunit', 'php artisan test', 'bundle exec rspec', 'rake test', 'make test', 'ctest'])
+    expect([c, verifyKind(c), isVerifyCommand(c)]).toEqual([c, 'test', true]);
+});
+
+test('verifyKind: lenh test theo stack co help/no-run/pipe/nen -> khong phai verify', () => {
+  for (const c of ['pytest --collect-only', 'cargo nextest run --dry-run', 'dotnet test --help', 'make test --just-print', 'npm t | tail -5', 'pytest; echo ok', 'tox || true', 'npm t &', 'mvn -v', 'make build', 'python main.py', 'npm install'])
+    expect([c, verifyKind(c)]).toEqual([c, null]);
+  expect(verifyKind('pytest -n auto')).toBe('test'); // -n la so worker xdist, khong phai no-run
+});
+
+test('verifyKind: lenh bo test (mvn -DskipTests, gradle -x test) va chay thu (make/just -n) khong phai bang chung', () => {
+  for (const c of ['mvn verify -DskipTests', 'mvn test -Dmaven.test.skip=true', 'mvn verify -DskipITs', './mvnw verify -DskipTests=true', './gradlew build -x test', 'gradle check -x test',
+    './gradlew check --exclude-task test', 'make -n test', 'make test -n', 'gmake -nk test', 'just -n test', 'make --just-print check', 'make --recon test', 'just --dry-run test'])
+    expect([c, verifyKind(c)]).toEqual([c, null]);
+  for (const c of ['mvn verify -DskipTests=false', 'mvn test -Dtest=FooTest', './gradlew test --tests Foo', './gradlew check -x lint', 'make test -j4', 'make -C build test', 'pytest -n auto', 'just test'])
+    expect([c, verifyKind(c)]).toEqual([c, 'test']);
+});
+
+test('verifyKind: sbt test/testOnly la test', () => {
+  for (const c of ['sbt test', 'sbt testOnly com.x.FooSpec', 'sbt "testOnly com.x.FooSpec"', 'sbt clean test']) expect([c, verifyKind(c)]).toEqual([c, 'test']);
+  for (const c of ['sbt compile', 'sbt test --help']) expect([c, verifyKind(c)]).toEqual([c, null]);
+});
+
+test('verifyKind: ten goi/thu muc la "test" khong lam subcommand bi nham la test', () => {
+  for (const c of ['npm --prefix test install', 'pnpm --filter test build', 'pnpm --filter=test build', 'npm -w test run build', 'yarn workspace test build', 'npm --prefix test run lint'])
+    expect([c, verifyKind(c) === 'test']).toEqual([c, false]);
+  for (const c of ['npm --prefix test test', 'pnpm --filter test test', 'pnpm --filter=test run test', 'npm -w test t', 'yarn workspace test test'])
+    expect([c, verifyKind(c)]).toEqual([c, 'test']);
+});

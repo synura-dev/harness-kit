@@ -41,11 +41,13 @@ const VERIFY = [
 // Co khien lenh khong chay kiem chung that (chi in help/version/danh sach, bien dich khong chay, chay thu): tat dinh theo token.
 // Khong gom `-v` (pytest -v = verbose). go test `-run ^$` / `-run=^$` = khong khop test nao.
 const NO_RUN_TOKENS = new Set(['--help', '-h', '-?', '/?', '--version', '-V', '--listTests', '--list-tests', '--list', '-list', '--collect-only', '--co',
-  '--no-run', '--dry-run', '--dryrun', '--showConfig', '--show-config', '--print-config', '--init', '--listFiles', '--listFilesOnly', '--list-files']);
+  '--no-run', '--dry-run', '--dryrun', '--just-print', '--showConfig', '--show-config', '--print-config', '--init', '--listFiles', '--listFilesOnly', '--list-files']);
 function noRun(seg) {
   const toks = seg.split(/\s+/).map((t) => t.replace(/^["']|["']$/g, ''));
   if (toks.some((t) => NO_RUN_TOKENS.has(t) || /^--(?:help|version)=/.test(t))) return true;
   if (/\s-{1,2}run(?:=|\s+)["']?\^?\$["']?(?=\s|$)/.test(seg)) return true; // go test -run ^$
+  if (/^(?:\S*[\\/])?(?:mvnw?|gradlew?)(?:\.cmd|\.bat)?\s/.test(seg) && (/\s-D(?:skipTests|maven\.test\.skip|skipITs)(?!=false)(?=[=\s]|$)/.test(seg) || /\s(?:-x|--exclude-task)[\s=]+:?(?:\S+:)?(?:test|check)(?=\s|$)/.test(seg))) return true; // mvn -DskipTests, gradle -x test
+  if (/^(?:make|gmake|just)\s/.test(seg) && toks.some((t) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(t) || t === '--recon')) return true; // make -n / just -n: chay thu (khong anh huong pytest -n)
   return /^(?:(?:bunx?|npx|pnpm\s+exec)\s+)?vitest\s+list\b/.test(seg); // vitest list
 }
 
@@ -66,7 +68,7 @@ export function isVerifyCommand(cmd) {
   if (unsafeShape(s)) return false;
   return s.split('&&').some((seg) => {
     const r = stripSeg(seg);
-    return !noRun(r) && VERIFY.some((re) => re.test(r));
+    return !noRun(r) && (VERIFY.some((re) => re.test(r)) || STACK_TEST.some((re) => re.test(r)));
   });
 }
 
@@ -76,8 +78,24 @@ const CURL_FAIL = /\s(?:--fail(?:-with-body)?|-[A-Za-z]*f[A-Za-z]*)(?=\s|$)/; //
 const HEALTH = { test: (r) => HEALTH_URL.test(r) && (!/^curl\b/i.test(r) || CURL_FAIL.test(r)) };
 
 // Phan loai bang chung (tat dinh, chi theo chuoi lenh). Thu tu quan trong: muc dau khop thang.
+// Mau test theo stack (npm t, pnpm -r test, uv run pytest, python -m unittest, tox, cargo nextest, dotnet/mvn/gradle test, make test...).
+const PKG_FLAGS = String.raw`(?:(?:-{1,2}(?:prefix|filter|workspace|cwd|dir|F|C|w)[=\s]\S+|(?!-{1,2}(?:prefix|filter|workspace|cwd|dir|F|C|w)(?:[=\s]|$))-{1,2}[\w-]+(?:=\S+)?)\s+|workspaces?\s+(?:foreach\s+)?\S+\s+)*`;
+const EXE = String.raw`(?:\S*[\\/])?`;
+const STACK_TEST = [
+  new RegExp(String.raw`^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+${PKG_FLAGS}(?:run(?:-script)?\s+)?(?:t|test)(?::[\w:-]+)?(?=\s|$)`),
+  new RegExp(String.raw`^${EXE}(?:jest|vitest|mocha|ava|tap|pytest|py\.test|phpunit|rspec|bats)(?:\.cmd|\.exe)?(?=\s|$)`),
+  /^(?:npx|bunx|pnpm\s+(?:exec|dlx)|yarn\s+dlx)\s+(?:mocha|ava|tap|playwright\s+test|cypress\s+run)\b/, /^deno\s+test\b/,
+  new RegExp(String.raw`^(?:${EXE}python[\d.]*(?:\.exe)?|py(?:\s+-[\d.]+)?)\s+-m\s+(?:pytest|unittest|nose2|tox)\b`),
+  /^(?:uv|poetry|pipenv|pdm|rye)\s+run\s+(?:python[\d.]*\s+-m\s+)?(?:pytest|unittest|tox|nox)\b/, /^hatch\s+(?:run\s+)?test\b/, /^(?:tox|nox)(?=\s|$)/,
+  /^cargo\s+(?:\+\S+\s+)?(?:nextest\s+run|test|t)\b/, /^dotnet\s+test\b/,
+  new RegExp(String.raw`^(?:${EXE}mvnw?(?:\.cmd)?|${EXE}gradlew?(?:\.bat)?)\s+(?:\S+\s+)*?(?:test|verify|check)(?=\s|$)`),
+  /^bundle\s+exec\s+(?:rspec|minitest)\b/, /^(?:bundle\s+exec\s+)?rake\s+(?:test|spec)\b/, /^(?:bin[\\/])?rails\s+test\b/, /^php\s+artisan\s+test\b/, /^composer\s+(?:run\s+)?test\b/,
+  /^sbt\s+(?:\S+\s+)*?["']?(?:test|testOnly|testQuick)\b/, /^mix\s+test\b/, /^swift\s+test\b/, /^(?:flutter|dart)\s+test\b/, /^ctest\b/, /^Invoke-Pester\b/i,
+  /^(?:make|gmake|just|task)\s+(?:\S+\s+)*?(?:test|tests|check)(?=\s|$)/,
+];
+
 const KINDS = [
-  ['test', [/^(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?test\b/, /^(?:bunx?|npx|pnpm\s+exec)\s+(?:vitest|jest)\b/, /^(?:vitest|jest)\b/, /^node\s+--test\b/,
+  ['test', [...STACK_TEST, /^(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?test\b/, /^(?:bunx?|npx|pnpm\s+exec)\s+(?:vitest|jest)\b/, /^(?:vitest|jest)\b/, /^node\s+--test\b/,
     /^(?:python3?\s+-m\s+)?pytest\b/, /^go\s+test\b/, /^cargo\s+test\b/]],
   ['tsc', [/^(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?typecheck\b/, /^(?:bunx?|npx|pnpm\s+exec)\s+tsc\b/, /^tsc\b/, /^cargo\s+check\b/]],
   ['lint', [/^(?:bun|npm|pnpm|yarn)\s+(?:run\s+)?(?:lint|check)\b/, /^(?:bunx?|npx|pnpm\s+exec)\s+(?:eslint|biome\s+(?:check|lint|ci))\b/, /^(?:eslint|biome\s+(?:check|lint|ci))\b/,
