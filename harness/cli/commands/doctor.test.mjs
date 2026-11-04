@@ -170,7 +170,7 @@ test('doctor: .agents/hooks.json co harness-kit nhung thieu shim/local -> exit 1
 import { recordGate } from '../../core/audit/gate-event.mjs';
 import { writeEnvelope } from '../../core/audit/audit-write.mjs';
 const DAY = 86400000;
-// Ung vien con lai sau khi bo loi + bao tri (data-check, user-shim): proc-orphans (type=proc), model-policy + verify-gate (gate hook:<id>).
+// Ung vien con lai sau khi bo loi + bao tri (data-check, user-shim): proc-orphans (type=proc), model-policy + verify-gate (gate hook:<id>), ext-inject + diff-review (module-acted).
 const unusedRun = async (seed) => {
   const hub = await fixHub(true);
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'unused-audit-'));
@@ -198,7 +198,7 @@ test('doctor unused: module-acted dau tien < 30 ngay -> khong bao, [skip] neu ng
   expect(r.skip.join('\n')).toContain(`bat dau xet tu ${start}`);
 }, 60000);
 test('doctor unused: moi ung vien co dau vet (proc, gate hook) -> khong bao', async () => {
-  const r = await unusedRun([[29, acted('data-check')], [5, gateHook('model-policy')], [5, gateHook('verify-gate')], [4, { type: 'proc' }]]);
+  const r = await unusedRun([[29, acted('data-check')], [5, gateHook('model-policy')], [5, gateHook('verify-gate')], [5, acted('ext-inject', 'SubagentStart')], [5, acted('diff-review', 'SubagentStart')], [4, { type: 'proc' }]]);
   expect(r.info).toEqual([]);
 }, 60000);
 test('doctor unused: thieu dau vet verify-gate -> [info] (khong [warn]) kem su kien + goi y; khong bao loi/bao tri/module co dau vet', async () => {
