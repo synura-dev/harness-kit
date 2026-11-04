@@ -5,12 +5,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
 
 export const MARKER = '.generated.json';
 const GENERATOR = 'harness/build/skills';
-// Nguon mac dinh = skills/ goc plugin, suy tu vi tri file nay (harness/build/skills/ -> ../../../skills), khong phu thuoc cwd/--root.
-const DEFAULT_SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../skills');
+const DEFAULT_SRC = 'harness/skills';
 const DEFAULT_TARGETS = Object.freeze(['.claude/skills', '.agents/skills']);
 export const LIMITS = Object.freeze({ timeoutS: 60, maxFilesPerSkill: 200, maxFileBytes: 1024 * 1024, maxDepth: 8, maxDirsPerSkill: 100 });
 const SKIP_SRC = new Set(['shared']); // thu muc dung chung, khong phai skill
