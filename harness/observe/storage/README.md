@@ -24,7 +24,7 @@ Muc dich: du lieu tool theo NUT (du an/repo) nhom vao WORKSPACE (nhieu nut co th
 ## Lenh (qua cong, co log vao data/audit/gateway/)
 - `node harness/cli/harness.mjs data ls [domain]` liet ke file/kich thuoc.
 - `data stat` tong quan + so muc ngoai registry.
-- `data clean` xoa file cu hon retentionDays (mtime); `null` = giu.
+- `data clean` xoa file cu hon retentionDays (mtime); `null` = giu. `enforce` trong registry.json chi dieu khien che do chan ghi (off|warn|enforce), KHONG lien quan tu xoa; tu xoa luon bat qua hook data-check.
 - `data scan` tim muc la (ngoai registry, tru reserved `README.md`, `_inbox`, `.state`).
 - `data adopt` chuyen muc la vao `data/_inbox/<date>/`.
 - `data inbox ls [--limit N]` liet ke `_inbox/<ngay>/<muc>` (file, size).
@@ -91,8 +91,6 @@ system/
 knowledge/
   eval/
     -  [artifact] owner=harness/evolve/eval retention=giu
-  evals/
-    -  [artifact] owner=main (skill eval cu, xem evolve/README) retention=giu
   evolve/
     -  [durable] owner=harness/evolve/loop retention=giu
   tasks/
@@ -111,7 +109,7 @@ external/
 <!-- data-tree:end -->
 
 ## Don tu dong
-`harness data clean --auto [--yes] [--max-files N] [--max-bytes N] [--timeout-s N]` (dry-run neu khong --yes; clean khong --auto giu hanh vi cu). Pham vi: chi muc registry class log/cache (ke ca retentionDays override), chi file qua han theo classRetention. KHONG dong artifact/durable/external/_inbox/.state; bo qua file mtime hom nay (gio dia phuong) va moi thu muc `date=<hom nay>` (audit). Tran moi lan: 500 file, 200MB, 20s (vuot thi dung em, bao `truncated: ...`). Khong di theo symlink/junction, khong xoa dich link. Registry hong/rong: abort ma 2. Vet: audit type=data-access (dem theo muc + tong bytes, khong liet ke file); ket qua o data/.state/data-check-clean.json. Kich hoat tu dong boi hook data-check SessionStart (moi 24h); tat: `HOOK_DATA_CHECK_AUTOCLEAN=0` hoac `autoClean.enabled=false`.
+`harness data clean --auto [--yes] [--max-files N] [--max-bytes N] [--timeout-s N]` (dry-run neu khong --yes; clean khong --auto giu hanh vi cu). Pham vi: chi muc registry class log/cache (ke ca retentionDays override), chi file qua han. Han = `retentionDays` khai bao ro cua muc; muc zone system khong khai bao thi dung mac dinh class; muc knowledge/external/workspaces (theo zone hoac thu muc cap 1) CHI bi dong khi khai bao `retentionDays` ro, muc khong dang ky khong bao gio bi dong. KHONG dong artifact/durable/external/_inbox/.state; bo qua file mtime hom nay (gio dia phuong) va moi thu muc `date=<hom nay>` (audit). Tran moi lan: 500 file, 200MB, 20s (vuot thi dung em, bao `truncated: ...`). Khong di theo symlink/junction, khong xoa dich link. Registry hong/rong: abort ma 2. Vet: audit type=data-access (dem theo muc + tong bytes, khong liet ke file); ket qua o data/.state/data-check-clean.json. Kich hoat tu dong boi hook data-check SessionStart (moi 24h, spawn nen, fail-open; cham tran file/byte thi lastRun khong tien -> phien sau (khoa 5 phut) lam tiep); tat: `HOOK_DATA_CHECK_AUTOCLEAN=0` hoac `autoClean.enabled=false`.
 
 ## Chuyen vi tri: relocate, mvpart, doc gop
 Dung khi du lieu dang ghi lien tuc (audit) nen khong `data mv` ca thu muc duoc.
