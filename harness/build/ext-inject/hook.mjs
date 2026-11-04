@@ -49,6 +49,20 @@ export function coreDomains(repoDir = REPO_DIR) {
   } catch { return null; }
 }
 
+/** Giet tien trinh + chau chat. win32: kill() chi giet tien trinh goc (chau mo coi) nen dung `taskkill /T /F /PID` (khong shell, fail-open); noi khac kill SIGKILL. */
+export function killTree(child) {
+  try {
+    if (process.platform === 'win32' && child && child.pid) {
+      const t = spawn('taskkill', ['/T', '/F', '/PID', String(child.pid)], { windowsHide: true, stdio: 'ignore' });
+      t.on('error', () => { try { child.kill('SIGKILL'); } catch { /* da chet */ } });
+      const g = setTimeout(() => { try { t.kill(); child.kill('SIGKILL'); } catch { /* bo qua */ } }, 2000);
+      t.on('close', () => clearTimeout(g));
+      return;
+    }
+    child.kill('SIGKILL');
+  } catch { /* da chet */ }
+}
+
 /** Chay that, bat dong bo: harness <domain> <args> khong shell; het timeout => kill. -> Promise<stdout | ''> (loi/timeout/exit!=0). Khong reject. */
 export function defaultRun(domain, args, { cwd, timeoutMs, maxBytes, env, bin }) {
   return new Promise((resolve) => {
@@ -58,7 +72,7 @@ export function defaultRun(domain, args, { cwd, timeoutMs, maxBytes, env, bin })
     try {
       child = spawn(process.execPath, [bin || path.join(REPO_DIR, 'bin', 'harness'), domain, ...args], { cwd, env: { ...(env || process.env), CLAUDE_PROJECT_DIR: cwd }, windowsHide: true, stdio: ['ignore', 'pipe', 'ignore'] });
     } catch { return fin(''); }
-    timer = setTimeout(() => { try { child.kill('SIGKILL'); } catch { /* da chet */ } fin(''); }, timeoutMs);
+    timer = setTimeout(() => { killTree(child); fin(''); }, timeoutMs);
     child.stdout.setEncoding('utf8');
     child.stdout.on('data', (d) => { if (out.length < cap) out += d; });
     child.on('error', () => fin(''));

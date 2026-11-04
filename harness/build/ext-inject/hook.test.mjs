@@ -122,6 +122,17 @@ test('defaultRun that: timeout => kill tien trinh con (khong con ghi marker), tr
   await new Promise((r) => setTimeout(r, 2000));
   expect(fs.existsSync(marker)).toBe(false);
 });
+test('defaultRun that: timeout giet ca chau (khong mo coi, khong ghi marker)', async () => {
+  const dir = tmp('ei-tree-');
+  const marker = path.join(dir, 'grand-marker');
+  const grand = path.join(dir, 'grand.mjs');
+  const bin = path.join(dir, 'parent.mjs');
+  fs.writeFileSync(grand, `import fs from 'node:fs'; setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'x'), 1500); setInterval(() => {}, 1000);`);
+  fs.writeFileSync(bin, `import { spawn } from 'node:child_process'; spawn(process.execPath, [${JSON.stringify(grand)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`);
+  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 600, maxBytes: 1536, bin })).toBe('');
+  await new Promise((r) => setTimeout(r, 2500));
+  expect(fs.existsSync(marker)).toBe(false);
+});
 test('defaultRun that: exit 0 tra stdout; exit != 0 tra rong', async () => {
   const dir = tmp('ei-run-');
   const ok = path.join(dir, 'ok.mjs'); const bad = path.join(dir, 'bad.mjs');
