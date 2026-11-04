@@ -36,7 +36,8 @@ test('workspace co hub/dispatch manifest (extRoots hub) -> runs o system/runs ca
 });
 test('HUB_DATA_DIR: runs/play/audit cung nam duoi do', async () => {
   const { dataRoot, isPluginMode } = await import('./paths.mjs');
-  const old = { d: process.env.HUB_DATA_DIR };
+  const old = { d: process.env.HUB_DATA_DIR, h: process.env.HUB_DIR };
+  delete process.env.HUB_DIR; // playbook/hub export HUB_DIR -> test dung workspace gia
   process.env.HUB_DATA_DIR = path.resolve('/tmp-x-data');
   try {
     const base = path.resolve('/tmp-x-data');
@@ -46,5 +47,6 @@ test('HUB_DATA_DIR: runs/play/audit cung nam duoi do', async () => {
     expect(dataRoot('play', { repoDir: '/whatever' })).toBe(path.join(base, 'play'));
   } finally {
     if (old.d === undefined) delete process.env.HUB_DATA_DIR; else process.env.HUB_DATA_DIR = old.d;
+    if (old.h === undefined) delete process.env.HUB_DIR; else process.env.HUB_DIR = old.h;
   }
 });

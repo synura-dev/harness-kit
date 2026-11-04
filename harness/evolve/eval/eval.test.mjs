@@ -8,7 +8,9 @@ import { loadCases, runAll, compare, checkExpect, readBaseline, baseEnv, CASES_D
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const HUB = path.resolve(HERE, '..', '..', '..');
-const H = (...a) => spawnSync(process.execPath, [path.join(HUB, 'harness', 'cli', 'harness.mjs'), 'eval', ...a], { cwd: HUB, encoding: 'utf8', timeout: 120000 });
+// env sach: playbook/hub export HARNESS_*/HUB_DIR/CLAUDE_PROJECT_DIR cho tien trinh con; test khong duoc phu thuoc
+const cleanEnv = (extra = {}) => ({ ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(HARNESS_|HUB_DIR$|CLAUDE_PROJECT_DIR$)/.test(k))), ...extra });
+const H = (...a) => spawnSync(process.execPath, [path.join(HUB, 'harness', 'cli', 'harness.mjs'), 'eval', ...a], { cwd: HUB, encoding: 'utf8', timeout: 120000, env: cleanEnv() });
 const all = () => JSON.parse(fs.readFileSync(path.join(CASES_DIR, 'approval.json'), 'utf8'));
 let tmp;
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'heval-test-')); });
@@ -85,7 +87,7 @@ test('env toi thieu: chi bien he thong, loai HARNESS_/HOOK_/CLAUDE_/HOME; env ch
   expect(baseEnv({ PATH: 'p', Path: 'q', SystemRoot: 's', TEMP: 't', ComSpec: 'c', CLAUDE_AUDIT_DIR: 'x', HARNESS_APPROVAL_MODE: 'audit', HOOK_X: '1', HOME: 'h', USERPROFILE: 'u', NODE_OPTIONS: '--x' }))
     .toEqual({ PATH: 'p', Path: 'q', SystemRoot: 's', TEMP: 't', ComSpec: 'c' });
   const r = spawnSync(process.execPath, [path.join(HUB, 'harness', 'cli', 'harness.mjs'), 'eval', 'run', '--case', 'approval-push-ask', '--json'],
-    { cwd: HUB, encoding: 'utf8', timeout: 60000, env: { ...process.env, HARNESS_APPROVAL_MODE: 'audit', HARNESS_CONFIG_DIR: tmp, CLAUDE_AUDIT_DIR: tmp } });
+    { cwd: HUB, encoding: 'utf8', timeout: 60000, env: cleanEnv({ HARNESS_APPROVAL_MODE: 'audit', HARNESS_CONFIG_DIR: tmp, CLAUDE_AUDIT_DIR: tmp }) });
   expect(r.status).toBe(0);
   expect(JSON.parse(r.stdout)).toMatchObject({ pass: 1, fail: 0, config: 'default' });
 }, 60000);

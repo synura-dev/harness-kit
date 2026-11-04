@@ -40,7 +40,7 @@ const junk = mkExt('junk', `export function main() { return '<<not json>>'; }`);
 const noMain = mkExt('nomain', `export const x = 1;`);
 
 const audit = async () => (await readAuditEvents(AUDIT, 5e6, Date.now() + 5000)).events;
-const core = () => ['data ls', 'doctor'].map((a) => spawnSync(process.execPath, [path.join(HARNESS, 'cli', 'harness.mjs'), ...a.split(' ')], { encoding: 'utf8', timeout: 60000, env: process.env }).status);
+const core = () => ['data ls', 'doctor'].map((a) => spawnSync(process.execPath, [path.join(HARNESS, 'cli', 'harness.mjs'), ...a.split(' ')], { encoding: 'utf8', timeout: 60000, env: Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(HARNESS_|HUB_DIR$|CLAUDE_PROJECT_DIR$)/.test(k))) }).status);
 
 test('external gia nhan ctx: paths/storage/out thanh cong, ghi ngoai zone bi chan', () => {
   const r = runExternal(get(good), 'good', ['a', 'b']);
