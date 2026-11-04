@@ -14,8 +14,7 @@ const DATA = path.join(tmp, 'data');
 const AUDIT = path.join(tmp, 'audit');
 fs.mkdirSync(DATA, { recursive: true });
 const _old = ['HUB_DATA_DIR', 'CLAUDE_AUDIT_DIR', 'GUARD_LOG_FILE'].map((k) => [k, process.env[k]]);
-process.env.HUB_DATA_DIR = DATA; // child ke thua
-process.env.CLAUDE_AUDIT_DIR = AUDIT;
+beforeAll(() => { process.env.HUB_DATA_DIR = DATA; process.env.CLAUDE_AUDIT_DIR = AUDIT; }); // child ke thua; set trong beforeAll de khong ro ri sang file test khac cung process
 afterAll(() => { for (const [k, v] of _old) { if (v === undefined) delete process.env[k]; else process.env[k] = v; } try { fs.rmSync(tmp, { recursive: true, force: true }); } catch { /* ignore */ } });
 
 const mkExt = (name, body, manifest = {}) => {
