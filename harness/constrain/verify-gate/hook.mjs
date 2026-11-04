@@ -209,15 +209,13 @@ export function handle(event, input, ctx = {}) {
   const inp = input.hook_event_name ? input : { ...input, hook_event_name: event };
   const cfg = ctx.cfg ?? load();
   const rc = routeCheck(inp, cfg, root, now, { write, records });
-  const warn = rc && !rc.ok && rc.mode === 'warn'
-    ? `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')} (can serves, assumptions, counter co path:dong|URL|so do va khong "khong co", adopted)` : undefined;
-  if (rc && !rc.ok && rc.mode === 'block') {
-    return { decision: 'deny', block: true, reason: `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')}. Bo sung serves, assumptions, counter (>=1 rui ro co path:dong|URL|so do, khong "khong co"), adopted.`, record: { code: 'route_check_block' }, records };
-  }
+  const bad = rc && !rc.ok;
+  const routeMsg = bad ? `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')}. Bo sung serves, assumptions, counter (>=1 rui ro co path:dong|URL|so do, khong "khong co"), adopted.` : '';
+  // Luon chay gate cu truoc (khong de route-check lam yeu gate test/deploy); route block chi khi gate cho qua.
   const r = run(inp, { cfg, root, now, deadline: ctx.deadline ?? Infinity, write, records, readRoots });
-  const extra = warn ? { systemMessage: warn } : {};
-  if (r.decision === 'block') return { decision: 'deny', block: true, reason: r.out.reason, record: { code: r.code }, records, ...extra };
-  return { decision: 'allow', block: false, record: { code: r.code }, records, ...extra };
+  if (r.decision === 'block') return { decision: 'deny', block: true, reason: bad && rc.mode === 'block' ? `${r.out.reason} ${routeMsg}` : r.out.reason, record: { code: r.code }, records, ...(bad && rc.mode === 'warn' ? { systemMessage: routeMsg } : {}) };
+  if (bad && rc.mode === 'block') return { decision: 'deny', block: true, reason: routeMsg, record: { code: 'route_check_block' }, records };
+  return { decision: 'allow', block: false, record: { code: r.code }, records, ...(bad ? { systemMessage: routeMsg } : {}) };
 }
 
 /** Bao cao cuoi cua subagent: last_assistant_message, thieu thi dong assistant cuoi trong agent_transcript_path (jsonl, doc toi da 1MB cuoi). */
