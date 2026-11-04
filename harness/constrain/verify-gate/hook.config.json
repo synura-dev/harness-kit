@@ -7,5 +7,6 @@
   "days": 2,
   "maxBadRatio": 0.2,
   "traceAllow": false,
+  "routeFields": "warn",
   "ignorePaths": []
 }
