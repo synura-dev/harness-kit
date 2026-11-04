@@ -111,3 +111,23 @@ test('verifyKind: lenh test theo stack co help/no-run/pipe/nen -> khong phai ver
     expect([c, verifyKind(c)]).toEqual([c, null]);
   expect(verifyKind('pytest -n auto')).toBe('test'); // -n la so worker xdist, khong phai no-run
 });
+
+test('verifyKind: lenh bo test (mvn -DskipTests, gradle -x test) va chay thu (make/just -n) khong phai bang chung', () => {
+  for (const c of ['mvn verify -DskipTests', 'mvn test -Dmaven.test.skip=true', 'mvn verify -DskipITs', './mvnw verify -DskipTests=true', './gradlew build -x test', 'gradle check -x test',
+    './gradlew check --exclude-task test', 'make -n test', 'make test -n', 'gmake -nk test', 'just -n test', 'make --just-print check', 'make --recon test', 'just --dry-run test'])
+    expect([c, verifyKind(c)]).toEqual([c, null]);
+  for (const c of ['mvn verify -DskipTests=false', 'mvn test -Dtest=FooTest', './gradlew test --tests Foo', './gradlew check -x lint', 'make test -j4', 'make -C build test', 'pytest -n auto', 'just test'])
+    expect([c, verifyKind(c)]).toEqual([c, 'test']);
+});
+
+test('verifyKind: sbt test/testOnly la test', () => {
+  for (const c of ['sbt test', 'sbt testOnly com.x.FooSpec', 'sbt "testOnly com.x.FooSpec"', 'sbt clean test']) expect([c, verifyKind(c)]).toEqual([c, 'test']);
+  for (const c of ['sbt compile', 'sbt test --help']) expect([c, verifyKind(c)]).toEqual([c, null]);
+});
+
+test('verifyKind: ten goi/thu muc la "test" khong lam subcommand bi nham la test', () => {
+  for (const c of ['npm --prefix test install', 'pnpm --filter test build', 'pnpm --filter=test build', 'npm -w test run build', 'yarn workspace test build', 'npm --prefix test run lint'])
+    expect([c, verifyKind(c) === 'test']).toEqual([c, false]);
+  for (const c of ['npm --prefix test test', 'pnpm --filter test test', 'pnpm --filter=test run test', 'npm -w test t', 'yarn workspace test test'])
+    expect([c, verifyKind(c)]).toEqual([c, 'test']);
+});

@@ -128,3 +128,11 @@ test('hook: du an khong co runner nhan ra (py/go/rs khong manifest) -> khong cha
     expect(verdict(path.join(outer, 'in').replace(/\\/g, '/'), 'a.go').decision).toBe('allow');
   } finally { for (const p of made) fs.rmSync(p, { recursive: true, force: true }); }
 });
+
+test('goi y lenh cua gate qua duoc gate: sbt test cho .scala, lenh bo test khong qua', () => {
+  expect(D([edit('a.scala'), sh('sbt test')])).toBe('allow');
+  expect(D([edit('a.scala'), sh('sbt "testOnly x.FooSpec"')])).toBe('allow');
+  expect(D([edit('a.java'), sh('mvn verify -DskipTests')])).toBe('block');
+  expect(D([edit('a.java'), sh('./gradlew build -x test')])).toBe('block');
+  expect(D([edit('a.c'), sh('make -n test')])).toBe('block');
+});

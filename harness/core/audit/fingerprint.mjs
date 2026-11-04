@@ -46,6 +46,8 @@ function noRun(seg) {
   const toks = seg.split(/\s+/).map((t) => t.replace(/^["']|["']$/g, ''));
   if (toks.some((t) => NO_RUN_TOKENS.has(t) || /^--(?:help|version)=/.test(t))) return true;
   if (/\s-{1,2}run(?:=|\s+)["']?\^?\$["']?(?=\s|$)/.test(seg)) return true; // go test -run ^$
+  if (/^(?:\S*[\\/])?(?:mvnw?|gradlew?)(?:\.cmd|\.bat)?\s/.test(seg) && (/\s-D(?:skipTests|maven\.test\.skip|skipITs)(?!=false)(?=[=\s]|$)/.test(seg) || /\s(?:-x|--exclude-task)[\s=]+:?(?:\S+:)?(?:test|check)(?=\s|$)/.test(seg))) return true; // mvn -DskipTests, gradle -x test
+  if (/^(?:make|gmake|just)\s/.test(seg) && toks.some((t) => /^-[a-zA-Z]*n[a-zA-Z]*$/.test(t) || t === '--recon')) return true; // make -n / just -n: chay thu (khong anh huong pytest -n)
   return /^(?:(?:bunx?|npx|pnpm\s+exec)\s+)?vitest\s+list\b/.test(seg); // vitest list
 }
 
@@ -77,7 +79,7 @@ const HEALTH = { test: (r) => HEALTH_URL.test(r) && (!/^curl\b/i.test(r) || CURL
 
 // Phan loai bang chung (tat dinh, chi theo chuoi lenh). Thu tu quan trong: muc dau khop thang.
 // Mau test theo stack (npm t, pnpm -r test, uv run pytest, python -m unittest, tox, cargo nextest, dotnet/mvn/gradle test, make test...).
-const PKG_FLAGS = String.raw`(?:(?:-{1,2}(?:prefix|filter|workspace|cwd|dir|F|C|w)[=\s]\S+|-{1,2}[\w-]+(?:=\S+)?)\s+|workspaces?\s+(?:foreach\s+)?\S+\s+)*`;
+const PKG_FLAGS = String.raw`(?:(?:-{1,2}(?:prefix|filter|workspace|cwd|dir|F|C|w)[=\s]\S+|(?!-{1,2}(?:prefix|filter|workspace|cwd|dir|F|C|w)(?:[=\s]|$))-{1,2}[\w-]+(?:=\S+)?)\s+|workspaces?\s+(?:foreach\s+)?\S+\s+)*`;
 const EXE = String.raw`(?:\S*[\\/])?`;
 const STACK_TEST = [
   new RegExp(String.raw`^(?:npm|pnpm|yarn|bun)(?:\.cmd)?\s+${PKG_FLAGS}(?:run(?:-script)?\s+)?(?:t|test)(?::[\w:-]+)?(?=\s|$)`),
@@ -88,7 +90,7 @@ const STACK_TEST = [
   /^cargo\s+(?:\+\S+\s+)?(?:nextest\s+run|test|t)\b/, /^dotnet\s+test\b/,
   new RegExp(String.raw`^(?:${EXE}mvnw?(?:\.cmd)?|${EXE}gradlew?(?:\.bat)?)\s+(?:\S+\s+)*?(?:test|verify|check)(?=\s|$)`),
   /^bundle\s+exec\s+(?:rspec|minitest)\b/, /^(?:bundle\s+exec\s+)?rake\s+(?:test|spec)\b/, /^(?:bin[\\/])?rails\s+test\b/, /^php\s+artisan\s+test\b/, /^composer\s+(?:run\s+)?test\b/,
-  /^mix\s+test\b/, /^swift\s+test\b/, /^(?:flutter|dart)\s+test\b/, /^ctest\b/, /^Invoke-Pester\b/i,
+  /^sbt\s+(?:\S+\s+)*?["']?(?:test|testOnly|testQuick)\b/, /^mix\s+test\b/, /^swift\s+test\b/, /^(?:flutter|dart)\s+test\b/, /^ctest\b/, /^Invoke-Pester\b/i,
   /^(?:make|gmake|just|task)\s+(?:\S+\s+)*?(?:test|tests|check)(?=\s|$)/,
 ];
 
