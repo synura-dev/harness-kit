@@ -47,6 +47,25 @@ test('create thieu name => exit 1 + stderr; remove/sweep rac => exit 0', () => {
   expect(run('sweep', '', repo).status).toBe(0);
   fs.rmSync(repo, { recursive: true, force: true });
 });
+test('sweep: du an khong phai git -> bo qua som (khong spawn), repo git van chay', async () => {
+  const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'wt plain '));
+  const prev = { HUB_DIR: process.env.HUB_DIR, HUB_DATA_DIR: process.env.HUB_DATA_DIR };
+  process.env.HUB_DATA_DIR = path.join(plain, 'data');
+  try {
+    process.env.HUB_DIR = plain;
+    const r = await handle('SessionStart', {}, { cfg: DEFAULTS, write: false });
+    expect(r.record).toEqual({ removed: 0, skipped: 'no-git' });
+    expect(validateHookResult(r)).toEqual([]);
+    const repo = tmpRepo();
+    process.env.HUB_DIR = repo;
+    const g = await handle('SessionStart', {}, { cfg: DEFAULTS, write: false });
+    expect(g.record).toEqual({ removed: 0 });
+    fs.rmSync(repo, { recursive: true, force: true });
+  } finally {
+    for (const k of Object.keys(prev)) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; }
+    fs.rmSync(plain, { recursive: true, force: true });
+  }
+});
 test('MODULE hop le; handle(): su kien la hoac cfg tat -> {}', async () => {
   expect(validateHookModule(MODULE)).toEqual([]);
   expect(await handle('PreToolUse', {}, { cfg: DEFAULTS })).toEqual({});

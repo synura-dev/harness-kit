@@ -45,7 +45,21 @@ export async function remove(inp, cfg = DEFAULTS, emit = (rec) => log(rec, cfg))
   return r;
 }
 
+/** Co `.git` (thu muc hoac file cua worktree) o dir hoac tren no khong. Chi stat, khong spawn git. */
+export function hasGitAncestor(dir) {
+  let d = path.resolve(dir);
+  for (;;) {
+    try { fs.statSync(path.join(d, '.git')); return true; } catch {}
+    const up = path.dirname(d);
+    if (up === d) return false;
+    d = up;
+  }
+}
+
 export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg)) {
+  const { workspaceRoot } = await import('../../core/io/paths.mjs');
+  // Du an khong phai git: khong co worktree de don -> bo qua som, khong spawn node + git.
+  if (!hasGitAncestor(workspaceRoot())) return { removed: 0, skipped: 'no-git' };
   const { spawnSync } = await import('node:child_process');
   const cli = path.join(HERE, '..', '..', 'cli', 'commands', 'worktree.mjs');
   const r = spawnSync(process.execPath, [cli, 'prune', '--apply', '--min-age-hours', String(cfg.minAgeHours), '--timeout', String(cfg.sweepTimeoutSec)], { encoding: 'utf8', timeout: (cfg.sweepTimeoutSec + 3) * 1000 });
