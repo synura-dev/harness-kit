@@ -211,3 +211,12 @@ test('adopt: chi thay dich khong marker khi noi dung trung nguon; khac nguon thi
   expect(r('t/claude/alpha/SKILL.md')).toBe('viet tay khac nguon');
   expect(r('t/claude/ai-job-search/SKILL.md')).toBe('installed');
 });
+
+test('nguon mac dinh = skills/ goc plugin, khong phu thuoc root/cwd', () => {
+  const pluginSkills = path.resolve(import.meta.dirname, '../../../skills');
+  const n = fs.readdirSync(pluginSkills, { withFileTypes: true }).filter((e) => e.isDirectory() && !e.name.startsWith('.') && !e.name.startsWith('_') && e.name !== 'shared').length;
+  expect(n).toBeGreaterThan(0);
+  const res = check({ root, targets: ['t/claude', 't/agents'] }); // khong truyen src
+  expect(res.checked).toBe(n * 2);
+  expect(res.issues.every((i) => i.issue === 'unbuilt')).toBe(true);
+});
