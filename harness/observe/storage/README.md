@@ -92,7 +92,7 @@ knowledge/
   eval/
     -  [artifact] owner=harness/evolve/eval retention=giu
   evals/
-    -  [artifact] owner=curator (skill eval cu, xem evolve/README) retention=giu
+    -  [artifact] owner=main (skill eval cu, xem evolve/README) retention=giu
   evolve/
     -  [durable] owner=harness/evolve/loop retention=giu
   tasks/

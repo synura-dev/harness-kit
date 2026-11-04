@@ -65,7 +65,7 @@
     "evals": {
       "zone": "knowledge",
       "class": "artifact",
-      "owner": "curator (skill eval cu, xem evolve/README)",
+      "owner": "main (skill eval cu, xem evolve/README)",
       "target": "knowledge/evals",
       "path": "knowledge/evals",
       "legacy": "evals"

@@ -29,7 +29,7 @@ Mỗi ca một thư mục tạm, xoá sau khi chạy; env trỏ tạm: `CLAUDE_A
 Env tiến trình con KHÔNG kế thừa `process.env`: chỉ allowlist `ENV_ALLOW` (PATH, PATHEXT, SystemRoot, WINDIR, SYSTEMDRIVE, COMSPEC, TEMP/TMP/TMPDIR, BUN_INSTALL...) + biến tạm của ca + `env` của ca — loại `HARNESS_*`, `HOOK_*`, `CLAUDE_*`, HOME thật, `NODE_OPTIONS` để oracle tất định. `exists`/`missing` chỉ nhận đường dẫn trong thư mục tạm.
 
 ### Ghi chú
-- `data/knowledge/evals/skills/` là kết quả eval skill của curator (cũ, khác mục đích), không dùng chung; eval này ghi `data/knowledge/eval/` (resolver, key `eval`).
+- `data/knowledge/evals/skills/` là kết quả eval skill của skill-lifecycle (cũ, khác mục đích), không dùng chung; eval này ghi `data/knowledge/eval/` (resolver, key `eval`).
 - Ca chứa chuỗi bị guard chặn (vd. tên mongo shell) phải ghi bằng công cụ sửa file, không qua heredoc Bash.
 - Tiến hoá KHÔNG tự sửa `cases/` (oracle) khi chưa có người duyệt.
 

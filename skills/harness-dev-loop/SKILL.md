@@ -8,7 +8,7 @@ description: "Vòng phát triển nhiều agent song song, rút từ số liệu
 Nhãn: [số liệu: lệnh] = lấy từ cổng harness (cửa sổ 3 ngày tính đến 2026-10-30, chạy lại lệnh để cập nhật); [quy tắc] = quy ước, chưa có số liệu kiểm chứng.
 
 ## Số liệu thật
-- 614 lượt chạy: general-purpose 359, builder 70, verifier 49, reviewer 37, scout 23, planner 12 [số liệu: `harness observe cost summary --since 3d --by role`].
+- 614 lượt chạy: general-purpose 359, builder 70, reviewer 37, scout 23, planner 12 [số liệu: `harness observe cost summary --since 3d --by role`].
 - Model: sonnet 471, haiku 90, opus 53; 42 lượt được đánh dấu "có thể dùng model rẻ hơn" (40 trên opus) [số liệu: `harness observe cost summary --since 3d --by model`].
 - Chi phí quy ra tiền: chưa có số liệu (bảng giá chưa cập nhật, cost=null).
 - 253 commit trong 3 ngày: feat 65, refactor 63, fix 39, docs 36, chore 23, test 16, revert 0 [số liệu: `git log --since=3.days --pretty=%s`, đếm theo tiền tố].
@@ -24,7 +24,7 @@ Nhãn: [số liệu: lệnh] = lấy từ cổng harness (cửa sổ 3 ngày tí
 6. **Model theo việc.** Việc thực thi nhẹ dùng model rẻ, phân tích/phê bình dùng model mạnh; xem cột "cheaper_possible" để chỉnh. [số liệu: `observe cost summary --by model`]
 7. **Commit từng mục.** Một mục logic một commit, chỉ `git add <file>` cụ thể, thông điệp ghi vào file rồi `git commit -F`. [quy tắc; phân bố commit ở trên]
 8. **Tự sửa tối đa 2 lần.** Mục lỗi: sửa lần 1, lần 2; vẫn lỗi thì hoàn tác mục đó (revert hoặc bỏ thay đổi) và ghi lại, không sa lầy. [quy tắc]
-9. **Một lần full suite.** Gói nhỏ chỉ chạy kiểm tra nhanh (kiểm kiểu + test liên quan); verifier chạy full suite đúng một lần, log ra file, bọc timeout, không chạy lại khi chưa có thay đổi. [quy tắc]
+9. **Một lần full suite.** Gói nhỏ chỉ chạy kiểm tra nhanh (kiểm kiểu + test liên quan); playbook/lệnh verify tất định (`harness play verify-project`) chạy full suite đúng một lần ở nền, log ra file, bọc timeout, không chạy lại khi chưa có thay đổi. [quy tắc]
 10. **Reviewer độc lập.** Reviewer chỉ đọc diff, không dựa kết luận của builder; mỗi reviewer tối đa khoảng 8 PR/commit. [quy tắc]
 11. **Dọn sau đợt.** Dừng tiến trình nền do mình khởi, kiểm tra tiến trình mồ côi, ghi quyết định và trạng thái vào sổ việc. [quy tắc]
 

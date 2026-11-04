@@ -82,7 +82,7 @@ export function renderDigest(date, aggs, { truncated = null, maxRows = 200, agy 
   if (am.rows.length) {
     out.push('', '## Subagent theo agent_type x model', '', '| agent_type | model | luot | tokens (in/out) |', '| --- | --- | ---: | ---: |');
     for (const r of am.rows) out.push(`| ${cell(r.agent)} | ${cell(r.model)} | ${r.n} | ${r.tin}/${r.tout} |`);
-    if (am.warn) out.push('', `CANH BAO: general-purpose chiem ${am.gp}/${am.total} luot subagent (>50%); uu tien agent chuyen biet (builder/verifier/scout...).`);
+    if (am.warn) out.push('', `CANH BAO: general-purpose chiem ${am.gp}/${am.total} luot subagent (>50%); uu tien agent chuyen biet (builder/scout...).`);
   }
   if (agy && agy.tools) out.push('', '## agy Bash', '', `agy bash ratio: ${agy.ratio}% (${agy.bash}/${agy.tools}), replaceable: ${agy.replaceable}, repeat: ${agy.repeat}, denied: ${agy.denied}`);
   if (aggs.length > shown.length) { truncated = truncated || 'max_rows'; }
