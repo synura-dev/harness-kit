@@ -1,0 +1,15 @@
+{
+  "id": "diff-review",
+  "kind": "cli",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "domain": "review",
+  "desc": "goi review tat dinh tu git diff (bundle, co sensitive-path/no-test-change/secret-like/unverified/large); hook SubagentStart tu day cho subagent review (chi doc)",
+  "cmds": "pack [--base R] [--json]",
+  "default": "index",
+  "files": { "helpers": ["pack.mjs", "hook.mjs"] },
+  "tests": ["diff-review.test.mjs"],
+  "config": { "defaults": null, "schema": null },
+  "data": null,
+  "tier": "T1"
+}
