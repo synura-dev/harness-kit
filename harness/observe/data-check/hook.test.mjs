@@ -74,7 +74,7 @@ test('module shape', () => { assert.equal(mod.id, 'data-check'); assert.deepEqua
 test('real dispatcher PostToolUse', () => {
   const run = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'hooks', 'dispatch', 'run.mjs');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dcr-'));
-  const go = (f) => spawnSync(process.execPath, [run, 'PostToolUse'], { env: { ...process.env, HUB_DATA_DIR: tmp, CLAUDE_AUDIT_DIR: path.join(tmp, 'audit'), CLAUDE_PROJECT_DIR: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..') }, input: JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 'dctest', tool_name: 'Write', tool_input: { file_path: f }, cwd: process.cwd() }), encoding: 'utf8', timeout: 8000 }).stdout;
+  const go = (f) => spawnSync(process.execPath, [run, 'PostToolUse'], { env: { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(HARNESS_|HUB_DIR$)/.test(k))), HUB_DATA_DIR: tmp, CLAUDE_AUDIT_DIR: path.join(tmp, 'audit'), CLAUDE_PROJECT_DIR: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..') }, input: JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 'dctest', tool_name: 'Write', tool_input: { file_path: f }, cwd: process.cwd() }), encoding: 'utf8', timeout: 8000 }).stdout;
   assert.match(go(path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', 'docs', 'zz.log')), /rule=clutter/);
   assert.doesNotMatch(go('docs/zz.md'), /clutter/);
 });

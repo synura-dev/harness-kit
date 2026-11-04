@@ -20,7 +20,7 @@ const nums = (list) => list.map(([p, add, del = 0]) => ({ path: p, add, del }));
 
 beforeAll(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'diff-review-'));
-  env = { ...process.env, HUB_DATA_DIR: path.join(tmp, 'data'), CLAUDE_AUDIT_DIR: path.join(tmp, 'audit') };
+  env = { ...Object.fromEntries(Object.entries(process.env).filter(([k]) => !/^(HARNESS_|HUB_DIR$|CLAUDE_PROJECT_DIR$)/.test(k))), HUB_DATA_DIR: path.join(tmp, 'data'), CLAUDE_AUDIT_DIR: path.join(tmp, 'audit') };
   repo = path.join(tmp, 'repo'); plain = path.join(tmp, 'plain');
   fs.mkdirSync(repo); fs.mkdirSync(plain);
   git(repo, 'init', '-q', '-b', 'main');
