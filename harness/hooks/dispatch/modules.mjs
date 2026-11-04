@@ -8,7 +8,7 @@ export const DEFAULTS = {
   modules: {},
   // tran thoi gian TONG moi su kien (ms), < `timeout` trong settings. Het -> tra phan da co, bo module chua chay.
   budgetsMs: {
-    PreToolUse: 2500, PostToolUse: 2500, PostToolUseFailure: 2500, SubagentStart: 3500, PermissionRequest: 2500, PermissionDenied: 2500,
+    PreToolUse: 2500, PostToolUse: 2500, PostToolUseFailure: 2500, SubagentStart: 2500, PermissionRequest: 2500, PermissionDenied: 2500,
     Notification: 2500, SessionEnd: 2500, UserPromptSubmit: 2800, Stop: 14000, SubagentStop: 14000, SessionStart: 27000,
     WorktreeCreate: 42000, WorktreeRemove: 27000,
   },
