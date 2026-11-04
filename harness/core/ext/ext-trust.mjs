@@ -48,10 +48,10 @@ export function hashTree(root, limits = {}) {
 }
 
 /** Workspace la worktree cua repo hub goc => {base: hub goc, isWorktree:true}; khong thi base = ws. Loi git => base = ws. */
-export function registryWorkspace(ws) {
+export function registryWorkspace(ws, gitTimeoutMs = 5000) {
   const w = path.resolve(ws);
   try {
-    const r = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: w, encoding: 'utf8', timeout: 5000 });
+    const r = spawnSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], { cwd: w, encoding: 'utf8', timeout: gitTimeoutMs });
     if (r.status === 0) {
       const common = r.stdout.trim();
       if (common && path.basename(common) === '.git') {
@@ -94,7 +94,7 @@ export const findKey = (all, ws) => Object.keys(all.extensions).find((k) => same
 /** Muc dang ky cua workspace (worktree -> hub goc). -> {ws, base, entries:[{id, root, hash, approvedAt}]} */
 export function readEntries(opts = {}) {
   const ws = path.resolve(opts.workspace || process.cwd());
-  const { base } = registryWorkspace(ws);
+  const { base } = registryWorkspace(ws, opts.gitTimeoutMs);
   const all = readAll({ ...opts, base });
   const k = findKey(all, base);
   const entries = k && Array.isArray(all.extensions[k]) ? all.extensions[k].filter((x) => x && typeof x.id === 'string' && typeof x.root === 'string') : [];
