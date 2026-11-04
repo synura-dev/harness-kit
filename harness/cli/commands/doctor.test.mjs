@@ -165,3 +165,42 @@ test('doctor: .agents/hooks.json co harness-kit nhung thieu shim/local -> exit 1
   expect(p.status).toBe(1);
   expect(p.stdout).toContain('"fix_command":"harness agy init"');
 });
+
+// ---- module khong co tac dung (module-acted) ----
+import { recordGate } from '../../core/audit/gate-event.mjs';
+import { writeEnvelope } from '../../core/audit/audit-write.mjs';
+const DAY = 86400000;
+const OPT_IDS = ['data-check', 'proc-orphans', 'model-policy', 'verify-gate', 'user-shim'];
+const unusedRun = async (seed) => {
+  const hub = await fixHub(true);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'unused-audit-'));
+  for (const [ageDays, ev] of seed) {
+    const now = new Date(Date.now() - ageDays * DAY);
+    if (ev.type === 'proc') writeEnvelope({ v: 2, ts: now.toISOString(), type: 'proc', event: 'ProcOrphans', sid: 's' }, {}, root);
+    else recordGate(ev, { session_id: 's' }, { root, now });
+  }
+  const p = spawnSync('node', [DOCTOR], { encoding: 'utf8', timeout: 60000, env: { ...baseEnv, HUB_DIR: hub, CLAUDE_AUDIT_DIR: root, CLAUDE_AUDIT_RETENTION_DAYS: '30' } });
+  return p.stdout.split('\n').filter((l) => l.startsWith('[warn]') && l.includes('khong co tac dung'));
+};
+const acted = (id, event = 'SessionStart') => ({ kind: 'gate', decision: 'allow', hook: 'dispatch', rule: 'module-acted', reason: `${id}:${event}` });
+
+test('doctor unused: audit rong -> khong bao', async () => {
+  expect(await unusedRun([])).toEqual([]);
+}, 60000);
+test('doctor unused: audit chua du 30 ngay -> khong bao', async () => {
+  expect(await unusedRun([[3, acted('data-check')]])).toEqual([]);
+}, 60000);
+test('doctor unused: moi module co acted trong cua so -> khong bao', async () => {
+  expect(await unusedRun(OPT_IDS.map((id, i) => [i === 0 ? 29 : 5, acted(id)]))).toEqual([]);
+}, 60000);
+test('doctor unused: chi data-check acted (audit du ngay) -> bao cac module con lai kem su kien + goi y; khong bao loi/hook gate san co', async () => {
+  const w = await unusedRun([[29, acted('data-check')], [5, { kind: 'gate', decision: 'allow', hook: 'model-policy', rule: 'r' }], [4, { type: 'proc' }]]);
+  const text = w.join('\n');
+  for (const id of ['verify-gate', 'user-shim']) expect(text).toContain(`${id} (`);
+  expect(text).not.toContain('data-check (');
+  expect(text).not.toContain('model-policy (');
+  expect(text).not.toContain('proc-orphans (');
+  for (const core of ['audit (', 'guard (', 'worktree-hook (', 'approval (', 'bash-guard (', 'data-gate (']) expect(text).not.toContain(core);
+  expect(text).toContain('khong co tac dung trong 30 ngay');
+  expect(text).toContain('go khoi ORDER trong harness/hooks/dispatch/modules.mjs');
+}, 60000);

@@ -11,6 +11,10 @@ import { mergeResults, applyUpdate, render } from './merge.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TIMEOUT = Symbol('timeout');
+/** Module loi (luon bat, khong go): bo qua khi ghi `module-acted` va khi doctor tim module khong dung. Module khac (OPTIONAL...) co the go khoi ORDER. */
+export const CORE_MODULES = Object.freeze(['audit', 'guard', 'data-gate', 'approval', 'bash-guard', 'worktree-hook']);
+/** Ket qua co tac dung ma chua de lai dau trong audit: chan/hoi, sua input, context; khong tinh `{}`/undefined/allow tran (verify-gate tra allow moi lan). Module tra `records` da tu hien trong audit (gate hook:<id>, type=proc...) -> khong ghi trung. */
+export const hasEffect = (r) => isObj(r) && !(Array.isArray(r.records) && r.records.length > 0) && (r.decision === 'deny' || r.decision === 'ask' || r.block === true || isObj(r.updatedInput) || !!r.additionalContext);
 
 function withTimeout(promise, ms) {
   let t;
@@ -112,6 +116,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       }
       if (!res) continue;
       state.items.push({ id: m.id, result: res });
+      if (!m.gate && !CORE_MODULES.includes(m.id) && hasEffect(res)) state.traces.push(traceRec('module-acted', `${m.id}:${ev}`));
       if (res.decision === 'deny') { if (m.gate) state.denied = true; }
       else if (res.updatedInput) state.input = applyUpdate(state.input, res.updatedInput);
     }

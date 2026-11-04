@@ -225,3 +225,39 @@ test('tham so thu hai = loc module (guard rieng)', () => {
   expect(parse(r2.stdout)).toEqual({});
 }, 60000);
 
+
+// ---- module-acted: ghi gate gon khi module co tac dung (khong ghi khi tra rong / module loi / da tu ghi gate) ----
+const actedMod = (id, res, over = {}) => ({ id, events: ['PreToolUse'], timeoutMs: 200, onError: 'open', handle: async () => res, ...over });
+const actedProfile = async (...mods) => { const { CLAUDE } = await import('./run.mjs'); return { ...CLAUDE, order: { PreToolUse: mods.map((m) => ({ id: m.id, gate: false, load: async () => ({ default: m }) })) } }; };
+const actedRun = async (...mods) => {
+  const { dispatch } = await import('./run.mjs');
+  const stdin = JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 's', tool_name: 'Bash', tool_input: { command: 'ls' } });
+  return dispatch({ event: 'PreToolUse', stdin, cfg: { maxInputBytes: 1000000, budgetsMs: { PreToolUse: 1500 } }, profile: await actedProfile(...mods) });
+};
+const actedRecs = (r) => r.records.filter((x) => x.data && x.data.rule === 'module-acted');
+
+test('module-acted: module tra rong -> khong ghi; tra context -> ghi dung 1 ban', async () => {
+  const none = await actedRun(actedMod('x-empty', {}), actedMod('x-undef', undefined));
+  expect(actedRecs(none)).toEqual([]);
+  const ctx = await actedRun(actedMod('x-ctx', { additionalContext: 'hi' }), actedMod('x-empty', {}));
+  const recs = actedRecs(ctx);
+  expect(recs.length).toBe(1);
+  expect(recs[0]).toEqual({ sink: 'gate', data: { kind: 'gate', decision: 'allow', hook: 'dispatch', rule: 'module-acted', reason: 'x-ctx:PreToolUse' } });
+});
+
+test('module-acted: module loi (audit, guard...) va module da tu ghi gate -> khong ghi trung', async () => {
+  const core = await actedRun(actedMod('audit', { additionalContext: 'a' }), actedMod('guard', { reason: 'r' }));
+  expect(actedRecs(core)).toEqual([]);
+  const self = await actedRun(actedMod('x-self', { additionalContext: 'a', records: [{ sink: 'gate', data: { kind: 'gate', decision: 'allow', hook: 'x-self' } }] }));
+  expect(actedRecs(self)).toEqual([]);
+});
+
+test('module-acted: ghi that bai (goc audit la file) -> hook van ok, khong nem', async () => {
+  const { writeRecords } = await import('./run.mjs');
+  const r = await actedRun(actedMod('x-ctx', { additionalContext: 'hi' }));
+  expect(r.code).toBe(0);
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'acted-'));
+  const bad = path.join(d, 'not-a-dir'); fs.writeFileSync(bad, 'x');
+  const old = process.env.CLAUDE_AUDIT_DIR; process.env.CLAUDE_AUDIT_DIR = bad;
+  try { await expect(writeRecords(r.records, {})).resolves.toBeUndefined(); } finally { if (old === undefined) delete process.env.CLAUDE_AUDIT_DIR; else process.env.CLAUDE_AUDIT_DIR = old; }
+});

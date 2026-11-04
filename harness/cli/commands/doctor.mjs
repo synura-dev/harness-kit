@@ -229,6 +229,42 @@ if (!BARE) try {
   else if (ar.problem) warn('arch', ar.problem);
   else if (ar.changed) { warn('arch', 'docs/ARCHITECTURE.md (khoi generated) lech registry; chay: node harness/cli/harness.mjs adapters --write-arch'); if (process.argv.includes('--strict')) { process.exitCode = 1; console.log('[LOI] architecture lech registry (strict)'); } }
 } catch (e) { console.log('[warn] architecture check loi:', e.message); }
+// module hook khong co tac dung: CHI CANH BAO (khong tu go). Nguon: gate `module-acted` (run.mjs) + gate `hook:<id>` san co. Chi khi audit da chay du retention_days voi tinh nang nay (tranh bao nham sau khi nang cap).
+try {
+  const { ORDER } = await import(new URL('../../hooks/dispatch/modules.mjs', import.meta.url).href);
+  const { CORE_MODULES } = await import(new URL('../../hooks/dispatch/run.mjs', import.meta.url).href);
+  const { auditRoot } = await import(new URL('../../core/audit/audit-write.mjs', import.meta.url).href);
+  const { loadAuditConfig } = await import(new URL('../../core/config/audit-config.mjs', import.meta.url).href);
+  const { listFiles } = await import(new URL('../../observe/views/query/files.mjs', import.meta.url).href);
+  const ac = loadAuditConfig().config;
+  const days = Number(ac.retention_days) > 0 ? Number(ac.retention_days) : 30;
+  const deadline = Date.now() + Math.min(Number((ac.limits || {}).query_timeout_ms) || 30000, 5000);
+  const dayStr = (n) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+  const cand = new Map(); // id -> Set(su kien)
+  for (const [ev, list] of Object.entries(ORDER)) for (const e of list) if (!CORE_MODULES.includes(e.id)) (cand.get(e.id) || cand.set(e.id, new Set()).get(e.id)).add(ev);
+  const seen = new Set(); let firstActed = ''; let truncated = false;
+  const root = auditRoot();
+  const files = cand.size ? listFiles(root, { type: ['gate', 'proc'], since: dayStr(days) }) : [];
+  const MAX_FILES = 5000; const SLACK = 2; // sentinel module-acted khong nhat thiet roi dung ngay dau cua cua so
+  for (const f of files.slice(0, MAX_FILES)) {
+    if (Date.now() > deadline) { truncated = true; break; }
+    if (f.type === 'proc') { seen.add('proc-orphans'); continue; } // proc-orphans tu ghi audit type=proc (khong co id module)
+    let txt = '';
+    try { txt = fs.readFileSync(f.path, 'utf8'); } catch { continue; }
+    for (const ln of txt.split('\n')) {
+      if (!ln.includes('"gate"')) continue;
+      let g = null; try { g = (JSON.parse(ln).data || {}).gate; } catch { continue; }
+      if (!g) continue;
+      if (g.rule === 'module-acted' && typeof g.reason === 'string') { seen.add(g.reason.split(':')[0]); if (!firstActed || f.date < firstActed) firstActed = f.date; }
+      else if (g.hook) seen.add(g.hook);
+    }
+  }
+  if (files.length > MAX_FILES && !truncated) { console.log('[warn] unused-modules truncated: files'); truncated = true; }
+  if (truncated) { if (Date.now() > deadline) console.log('[warn] unused-modules truncated: timeout'); }
+  else if (!cand.size) { /* chi con module loi */ }
+  else if (!firstActed || firstActed > dayStr(days - SLACK)) console.log(`[skip] unused-modules: audit chua co ${days} ngay du lieu module-acted`);
+  else for (const [id, evs] of cand) if (!seen.has(id)) warn('unused', `${id} (${[...evs].join(', ')}) khong co tac dung trong ${days} ngay o du an nay; neu chac chan khong can, go khoi ORDER trong harness/hooks/dispatch/modules.mjs`);
+} catch (e) { console.log('[warn] unused-modules check loi:', e.message); }
 // ba check dai han (ref/import/clutter): mac dinh chi canh bao (D6); --strict exit 1 neu co muc error
 try {
   const { buildScanInput, collectStray } = await import(new URL('../../core/checks/scan-input.mjs', import.meta.url).href);
