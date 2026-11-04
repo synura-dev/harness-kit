@@ -10,7 +10,7 @@ import { auditRoot } from '../../core/audit/audit-write.mjs';
 import { dataRoot } from '../../core/io/paths.mjs';
 import { resolveDataRel } from '../../core/registry/data-registry.mjs';
 import { recordGate } from '../../core/audit/gate-event.mjs';
-import { decide, scopeEvents, GATE_HOOK } from './gate.mjs';
+import { decide, scopeEvents, GATE_HOOK, checkRouteReport } from './gate.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -30,6 +30,7 @@ export const DEFAULTS = {
   codeExts: ['mjs', 'cjs', 'js', 'jsx', 'ts', 'tsx', 'mts', 'cts', 'py', 'go', 'rs', 'java', 'kt', 'cs', 'c', 'h', 'cpp', 'hpp',
     'rb', 'php', 'swift', 'vue', 'svelte', 'sh', 'ps1', 'psm1', 'sql', 'dart', 'scala', 'lua'],
   ignorePaths: [], // tien to duong dan tuyet doi bo qua hoan toan; thu muc tam (os.tmpdir/TEMP/TMP) va file ngoai moi git repo luon bi bo qua
+  routeFields: 'warn', // 'warn'|'block'|'off': SubagentStop, bao cao co dong status: thi kiem serves/assumptions/counter/adopted
   maxBadRatio: 0.2, // dong audit hong le bi bo qua; ty le hong vuot nguong -> fail-open
   // Deploy theo LENH THUC THI: moi mau neo ^ va thu tren tung doan lenh (&&, ||, ;, |) da bo sudo/env/FOO=bar/timeout/&;
   // ssh: gate xet them lenh tu xa. Chu "deploy" trong duong dan/doi so (cat docs/deploy.log, ls deploy/) khong tinh.
@@ -48,7 +49,7 @@ export const DEFAULTS = {
   ],
 };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
-export const load = (files = configFiles()) => loadHookConfig('verify-gate', { defaults: DEFAULTS, files, env: { HOOK_VERIFY_GATE_ENABLED: 'enabled' } }).config;
+export const load = (files = configFiles()) => loadHookConfig('verify-gate', { defaults: DEFAULTS, files, env: { HOOK_VERIFY_GATE_ENABLED: 'enabled', HOOK_VERIFY_GATE_ROUTEFIELDS: 'routeFields' } }).config;
 
 /** sid giong hooks/audit: 'claude-' + session_id da loc ky tu. Rong -> null (khong doan). */
 export function sidOf(inp) {
@@ -206,9 +207,51 @@ export function handle(event, input, ctx = {}) {
     return { decision: 'allow', block: false, record: { code: 'fail_open_bad_stdin' }, records };
   }
   const inp = input.hook_event_name ? input : { ...input, hook_event_name: event };
-  const r = run(inp, { cfg: ctx.cfg ?? load(), root, now, deadline: ctx.deadline ?? Infinity, write, records, readRoots });
-  if (r.decision === 'block') return { decision: 'deny', block: true, reason: r.out.reason, record: { code: r.code }, records };
-  return { decision: 'allow', block: false, record: { code: r.code }, records };
+  const cfg = ctx.cfg ?? load();
+  const rc = routeCheck(inp, cfg, root, now, { write, records });
+  const bad = rc && !rc.ok;
+  const routeMsg = bad ? `route-check: bao cao thieu/sai truong: ${rc.missing.join(', ')}. Bo sung serves, assumptions, counter (>=1 rui ro co path:dong|URL|so do, khong "khong co"), adopted.` : '';
+  // Luon chay gate cu truoc (khong de route-check lam yeu gate test/deploy); route block chi khi gate cho qua.
+  const r = run(inp, { cfg, root, now, deadline: ctx.deadline ?? Infinity, write, records, readRoots });
+  if (r.decision === 'block') return { decision: 'deny', block: true, reason: bad && rc.mode === 'block' ? `${r.out.reason} ${routeMsg}` : r.out.reason, record: { code: r.code }, records, ...(bad && rc.mode === 'warn' ? { systemMessage: routeMsg } : {}) };
+  if (bad && rc.mode === 'block') return { decision: 'deny', block: true, reason: routeMsg, record: { code: 'route_check_block' }, records };
+  return { decision: 'allow', block: false, record: { code: r.code }, records, ...(bad ? { systemMessage: routeMsg } : {}) };
+}
+
+/** Bao cao cuoi cua subagent: last_assistant_message, thieu thi dong assistant cuoi trong agent_transcript_path (jsonl, doc toi da 1MB cuoi). */
+function lastReport(input) {
+  if (typeof input.last_assistant_message === 'string' && input.last_assistant_message) return input.last_assistant_message;
+  const p = input.agent_transcript_path;
+  if (typeof p !== 'string' || !p) return '';
+  try {
+    const size = fs.statSync(p).size, len = Math.min(size, 1048576), buf = Buffer.alloc(len), fd = fs.openSync(p, 'r');
+    try { fs.readSync(fd, buf, 0, len, size - len); } finally { fs.closeSync(fd); }
+    const lines = buf.toString('utf8').split('\n').filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let e; try { e = JSON.parse(lines[i]); } catch { continue; }
+      const m = e && e.message; if (!m || m.role !== 'assistant') continue;
+      const txt = typeof m.content === 'string' ? m.content : Array.isArray(m.content) ? m.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('\n') : '';
+      if (txt.trim()) return txt;
+    }
+  } catch {}
+  return '';
+}
+
+/** route-check (SubagentStop): { mode, ok, missing } hoac null (tat/khong ap dung). Ghi audit gate rule=route-check. Khong nem. */
+function routeCheck(inp, cfg, root, now, so) {
+  try {
+    let mode = cfg.routeFields ?? DEFAULTS.routeFields;
+    if (mode === 'block' && inp.stop_hook_active === true) mode = 'warn'; // chan toi da 1 lan/luot: lan 2 chi canh bao
+    if ((mode !== 'warn' && mode !== 'block') || inp.hook_event_name !== 'SubagentStop') return null;
+    const r = checkRouteReport(lastReport(inp));
+    if (!r.applies) return null;
+    const agent = String(inp.agent_type || inp.agent_id || '').slice(0, 40);
+    const ev = { kind: 'gate', decision: r.ok ? 'allow' : mode, hook: GATE_HOOK, rule: 'route-check', reason: r.ok ? 'ok agent=' + agent : `missing=${r.missing.join(',')} agent=${agent}` };
+    const ctx = { session_id: sidOf(inp) || '', cwd: inp.cwd, agent_id: inp.agent_id, agent_type: inp.agent_type };
+    if (so.records) so.records.push({ sink: 'gate', data: ev, ctx });
+    if (so.write !== false) recordGate(ev, ctx, { root, now });
+    return { mode, ok: r.ok, missing: r.missing };
+  } catch { return null; }
 }
 
 const META = { id: 'verify-gate', events: DEFAULTS.events, timeoutMs: DEFAULTS.timeoutMs, onError: 'open' };
@@ -229,8 +272,10 @@ export async function main() {
     const raw = await readStdin(Math.min(1500, budget));
     let inp; try { inp = JSON.parse(raw); } catch { inp = null; }
     const r = handle(String(inp && inp.hook_event_name || ''), inp, { cfg, deadline: Date.now() + budget, write: true });
+    if (r.systemMessage) process.stderr.write(r.systemMessage + '\n');
     if (r.block) process.stdout.write(JSON.stringify({ decision: 'block', reason: r.reason }));
   } catch {} finally { clearTimeout(killer); }
+  return 0;
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);

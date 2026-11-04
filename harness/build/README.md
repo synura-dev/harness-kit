@@ -22,6 +22,10 @@ Moi phien: dam bao lenh `harness` dung duoc tu PowerShell/cmd/bash cua user. MOT
 - Tat: `HOOK_USER_SHIM_ENABLED=0` hoac `hook.config.local.json {"enabled": false}`. Import: hooks duoc import `build` (contract IMPORT_RULES) chi de nap module nay.
 Exit 1 khi co buoc LOI.
 
+## ext-inject (hook SessionStart, SubagentStart)
+
+Chen ngu canh tong quat tu extension, khong hard-code ten ext. Manifest extension (cung `manifest.json` ma `harness ext` doc) khai `"inject": { "events": ["SessionStart","SubagentStart"], "args": ["show","--cwd","{cwd}","--inject"] }`. Chi SessionStart chay ext that: voi moi ext da dang ky VA hash khop dang ky (drift/chua duyet/thieu => bo qua) co event khop, spawn bat dong bo song song `harness <domain> <args>` (`bin/harness` cua plugin qua `process.execPath`, khong shell; domain = domain dau tien trong manifest ext KHONG trung domain core; `{cwd}` chi thay vao args = cwd su kien; workspace/cwd tien trinh = `CLAUDE_PROJECT_DIR`, du phong cwd su kien), timeout 3s/ext co kill, tong 6s, git 1s, fail-open (loi/timeout/exit khac 0 => bo qua), cat 12 dong / 1.5KB moi ext, noi vao `additionalContext` va ghi cache `data/system/ext-inject/` (khoa session_id + workspace, don sau 24h; het timeout kill ca cay tien trinh: win32 `taskkill /T /F`). Cache CHI lam moi o SessionStart: sua noi dung nguon inject (vd Route.md) giua phien thi subagent nhan ban cu den phien sau. SubagentStart CHI doc cache cua session (khong spawn/hash/git), budget giu 2500ms < timeout 3s; SessionStart budget 27000ms < timeout 30s (hooks/hooks.json, khong doi). Tat: `HOOK_EXT_INJECT_ENABLED=0` hoac `hook.config.local.json {"enabled": false}`.
+
 ## skills
 
 Domain `skills`: `build | check | prune` (`node harness/cli/harness.mjs skills <lenh>`).
