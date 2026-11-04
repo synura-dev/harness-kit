@@ -50,6 +50,14 @@
       "path": "system/proc-orphans",
       "legacy": "proc-orphans"
     },
+    "ext-inject": {
+      "zone": "system",
+      "class": "log",
+      "owner": "harness/build/ext-inject",
+      "retentionDays": 1,
+      "target": "system/ext-inject",
+      "path": "system/ext-inject"
+    },
     "evolve": {
       "zone": "knowledge",
       "class": "durable",
