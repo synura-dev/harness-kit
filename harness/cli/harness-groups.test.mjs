@@ -49,7 +49,7 @@ test('groups: index nhom theo vung, 4 nhom chinh luon co tieu de, domain cu o le
   const x = idx(r);
   expect(x.code).toBe(0);
   const t = x.text;
-  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Cu (plugins/tools/hooks) (legacy) ==']) expect(t).toContain(h);
+  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Chay (play, plugins/tools/hooks) (legacy) ==']) expect(t).toContain(h);
   expect(t.indexOf('ev - EV')).toBeGreaterThan(t.indexOf('(observe)'));
   expect(t.indexOf('ev - EV')).toBeLessThan(t.indexOf('(constrain)'));
   expect(t.indexOf('old - OLD')).toBeGreaterThan(t.indexOf('(legacy)'));

@@ -8,7 +8,7 @@ import crypto from 'node:crypto';
 
 export const MARKER = '.generated.json';
 const GENERATOR = 'harness/build/skills';
-const DEFAULT_SRC = 'harness/skills';
+export const DEFAULT_SRC = 'harness/skills';
 const DEFAULT_TARGETS = Object.freeze(['.claude/skills', '.agents/skills']);
 export const LIMITS = Object.freeze({ timeoutS: 60, maxFilesPerSkill: 200, maxFileBytes: 1024 * 1024, maxDepth: 8, maxDirsPerSkill: 100 });
 const SKIP_SRC = new Set(['shared']); // thu muc dung chung, khong phai skill
