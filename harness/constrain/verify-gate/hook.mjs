@@ -10,7 +10,7 @@ import { auditRoot } from '../../core/audit/audit-write.mjs';
 import { dataRoot } from '../../core/io/paths.mjs';
 import { resolveDataRel } from '../../core/registry/data-registry.mjs';
 import { recordGate } from '../../core/audit/gate-event.mjs';
-import { decide, scopeEvents, GATE_HOOK } from './gate.mjs';
+import { decide, scopeEvents, runnerSpec, GATE_HOOK } from './gate.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 
@@ -125,6 +125,28 @@ function makeRootOf(deadline = Infinity) {
   };
 }
 
+/** hasRunner(file, root): du an (tu thu muc file len toi git root) co file chung to runner cho stack cua file khong (runnerSpec).
+ *  Stack khong can manifest (JS/TS, sh...) -> true. Loi doc / het gio -> false (fail-open: khong chan khi khong chung minh duoc). */
+function makeHasRunner(deadline = Infinity) {
+  const names = new Map();
+  const ls = (d) => { if (!names.has(d)) { let n; try { n = fs.readdirSync(/^[a-z]:$/i.test(d) ? d + '/' : d); } catch { n = []; } names.set(d, n); } return names.get(d); };
+  return (file, root) => {
+    const spec = runnerSpec(file);
+    if (!spec) return true;
+    const top = String(root || '').replace(/\/+$/, '');
+    let d = file.slice(0, Math.max(file.lastIndexOf('/'), 0)) || '/';
+    for (let i = 0; i < 64 && Date.now() <= deadline; i++) {
+      if (ls(d).some((n) => spec.some((re) => re.test(n)))) return true;
+      if (d === top || !d.startsWith(top) || d === '/') return false;
+      const k = d.lastIndexOf('/');
+      const up = k <= 0 ? '/' : d.slice(0, k);
+      if (up === d) return false;
+      d = up;
+    }
+    return false;
+  };
+}
+
 // Ghi vet qua API chung core/audit/gate-event (type=gate, data.gate={kind,decision,hook,rule,reason,...}); khong nem.
 function traceRaw(root, inp, sid, decision, code, extra = {}, now = new Date(), sinkOpts = null) {
   const sub = inp.hook_event_name === 'SubagentStop';
@@ -165,7 +187,7 @@ export function run(inp, { cfg = load(), root = auditRoot(), now = new Date(), d
       return { out: null, decision: 'allow', code };
     }
     const scoped = scopeEvents(events, { event, agentId: inp.agent_id ? String(inp.agent_id) : null });
-    const r = decide(scoped, cfg, { stopHookActive: inp.stop_hook_active === true, cwd: typeof inp.cwd === 'string' && inp.cwd ? inp.cwd : null, rootOf: makeRootOf(deadline), tmpDirs: tmpDirsOf() });
+    const r = decide(scoped, cfg, { stopHookActive: inp.stop_hook_active === true, cwd: typeof inp.cwd === 'string' && inp.cwd ? inp.cwd : null, rootOf: makeRootOf(deadline), tmpDirs: tmpDirsOf(), hasRunner: makeHasRunner(deadline) });
     const extra = { edits: r.edits, missing: r.missing || [], bad_lines: bad, cwd_assumed: r.cwdAssumed };
     if (r.decision === 'block') {
       trace(root, inp, sid, 'block', r.code, extra, now);
