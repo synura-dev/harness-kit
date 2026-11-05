@@ -31,20 +31,29 @@ export async function loadInventory(hubDir) {
     return Object.entries(inv).flatMap(([kind, list]) => (list || []).map((c) => ({ kind, name: c.name })));
   } catch { return undefined; }
 }
-/** Co ext cung cap lenh `harness tasks` (nguon cua task_status) khong? Doc manifest ext da dang ky; loi -> false. */
-export function hasTasksExt(hubDir) {
-  try { return registeredExtRoots(hubDir).some((r) => { try { return /"tasks"/.test(fs.readFileSync(path.join(r, 'manifest.json'), 'utf8')); } catch { return false; } }); } catch { return false; }
+/** Ext <name> co dang ky trong hub khong? Chung: khop ten trong thu muc ext hoac khoa trong manifest.json cua ext. Loi -> false. */
+export function hasExt(hubDir, name) {
+  const esc = String(name).replace(/[^\w.-]/g, '');
+  if (!esc) return false;
+  try { return registeredExtRoots(hubDir).some((r) => { try { return path.basename(r) === esc || fs.readFileSync(path.join(r, 'manifest.json'), 'utf8').includes('"' + esc + '"'); } catch { return false; } }); } catch { return false; }
 }
-/** KPI co nguon khong ton tai (task_status khi thieu ext tasks) -> hien ro "khong co nguon", khong 0/im. Sua truc tiep results. */
-export function markNoSource(results, hasTasks) {
-  if (hasTasks) return results;
+/**
+ * Cot KPI khai bao nguon bang `requires` (vd "ext:<ten>"). Nguon khong co -> hien "khong co nguon", khong 0/im.
+ * core khong biet ten ext cu the; `has(kind, name)` tra nguon co khong. Sua truc tiep results.
+ */
+export function markNoSource(results, has) {
   for (const r of results) {
     const ms = Array.isArray(r.def.metric) ? r.def.metric : [r.def.metric];
-    const idx = ms.map((m, i) => (String(JSON.stringify(m)).includes('task_status') ? i : -1)).filter((i) => i >= 0);
-    if (!idx.length) continue;
-    if (!r.rows.length) { r.rows = [{ key: 'all', vals: ms.map((m, i) => (idx.includes(i) ? NO_SOURCE : null)) }]; if (!r.cols.length) r.cols = ms.map((m, i) => (m && m.as) || String(i)); }
-    else for (const row of r.rows) for (const i of idx) row.vals[i] = NO_SOURCE;
-    r.note = [r.note, 'task done: ' + NO_SOURCE + ' (khong co ext tasks)'].filter(Boolean).join('; ');
+    const miss = [];
+    ms.forEach((m, i) => {
+      const req = m && typeof m === 'object' && typeof m.requires === 'string' ? m.requires : null;
+      const [kind, ...n] = req ? req.split(':') : [];
+      if (req && !has(kind, n.join(':'))) miss.push({ i, req });
+    });
+    if (!miss.length) continue;
+    if (!r.rows.length) { r.rows = [{ key: 'all', vals: ms.map((m, i) => (miss.some((x) => x.i === i) ? NO_SOURCE : null)) }]; if (!r.cols.length) r.cols = ms.map((m, i) => (m && m.as) || String(i)); }
+    else for (const row of r.rows) for (const x of miss) row.vals[x.i] = NO_SOURCE;
+    r.note = [r.note, ...miss.map((x) => (r.cols[x.i] || x.req) + ': ' + NO_SOURCE + ' (thieu ' + x.req + ')')].filter(Boolean).join('; ');
   }
   return results;
 }
@@ -64,7 +73,7 @@ export async function buildReport(opts = {}) {
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir: opts.hubDir || safeRoot() };
-  const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx })), opts.hasTasks !== undefined ? opts.hasTasks : hasTasksExt(ctx.hubDir));
+  const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx })), opts.has || ((kind, name) => (kind === 'ext' ? hasExt(ctx.hubDir, name) : true)));
   const truncated = ev.truncated || loaded.truncated || null;
   const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors: loaded.errors });
   return { markdown, results, truncated, errors: loaded.errors, nowMs };

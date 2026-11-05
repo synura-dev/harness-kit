@@ -49,6 +49,14 @@ test('hub tam khong ext: ledger -> hook warn -> report file -> autopilot dry-run
   } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
 });
 
+test('requires: nguon co -> khong danh dau; thieu -> khong co nguon', async () => {
+  const base = { nowMs: NOW, events: [], ledger: [], baseline: null, projectDir: null, hubDir: os.tmpdir() };
+  const miss = await buildReport({ ...base, has: () => false });
+  const ok = await buildReport({ ...base, has: () => true });
+  expect(miss.markdown).toContain(NO_SOURCE);
+  expect(ok.markdown).not.toContain(NO_SOURCE);
+});
+
 test('writeReportFile: retention giu toi da keep file moi nhat', () => {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'noext-ret-'));
   try {
