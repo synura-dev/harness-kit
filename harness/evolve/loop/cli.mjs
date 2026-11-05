@@ -49,7 +49,7 @@ export async function render(o) {
   }
   if (o.cmd === 'autopilot') {
     const r = await runAutopilot({ dryRun: o.dryRun, force: o.force });
-    const L = (t, a) => a.map((x) => `  ${t}: ${x.entry || x.ver || x.id || x.fp || x} ${x.reason || x.oracle || ''}`.trimEnd());
+    const L = (t, a) => a.map((x) => `  ${t}: ${x.entry || x.ver || x.id || x.fp || x} ${x.reason || ''}`.trimEnd());
     const lines = [`evolve autopilot${r.dryRun ? ' (dry-run, khong ghi)' : ''}${r.skipped ? `: bo qua - ${r.skipped}` : ''}`,
       `ap dung ${r.applied.length} | xep hang ${r.queued.length} | ke hoach ${r.planned.length} | tu choi ${r.refused.length} | rollback ${r.rolledBack.length} | giu ${r.kept.length} | loi ${r.errors.length}`,
       ...L('ap', r.applied), ...L('hang', r.queued), ...L('ke hoach', r.planned), ...L('cam', r.refused), ...L('rollback', r.rolledBack), ...r.errors.map((e) => `  loi: ${e}`)];
@@ -57,7 +57,7 @@ export async function render(o) {
   }
   if (o.cmd === 'queue') {
     const r = await queueOp({ approve: o.approve ? o.arg : null, reject: o.reject ? o.arg : null });
-    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.flatMap((q) => [`${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`, ...(q.sha ? [`  sha256=${q.sha}`] : []), ...(q.after_preview ? q.after_preview.split('\n').map((l) => `  | ${l}`) : []), ...(q.after_truncated ? ['  | ... (cat 40 dong)'] : [])])], 200).join('\n'), data: r };
+    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.flatMap((q) => [`${q.id}  ${q.kind} -> ${q.target || '-'}  ${q.reason}`, ...(q.sha ? [`  sha256=${q.sha}`] : []), ...(q.after_preview ? q.after_preview.split('\n').map((l) => `  | ${l}`) : []), ...(q.after_truncated ? ['  | ... (cat 40 dong)'] : [])])], 200).join('\n'), data: r };
     return { code: r.code, summary: r.code === 0 ? `queue ${r.id}: ${r.status}${r.ver ? ` (ver ${r.ver})` : r.manual ? ' (sua tay: khong co duong ap tu dong)' : ''}` : `queue tu choi: ${r.reason}`, data: r };
   }
   if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);

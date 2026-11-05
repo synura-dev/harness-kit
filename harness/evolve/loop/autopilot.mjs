@@ -1,29 +1,25 @@
-// Autopilot tien hoa: ledger (open/warned, action=propose) -> de xuat -> oracle tren su kien cu -> phan muc tat dinh.
-//   Muc 1 (tu ap dung + tu rollback sau 7 ngay): chi them luat canh bao/goi y fix_command/text inject (kind rule|inject).
-//   Muc 2 (hang cho review-queue): skill, sua code harness, xoa thanh phan, doi gate. Khong tu ap dung; nguoi duyet qua TTY.
-//   Cam (muc 0): cham guard/approval/bash-guard/data-gate/model-policy (duong dan hoac config gate), push/deploy, ngoai repo harness.
-// KHONG goi model. Chay theo lo: toi da 1 lan/24h, timeout cung, khoa chong chay trung. Chi import core + evolve (hop dong import).
+// Autopilot tien hoa: ledger (open/warned, action=propose) -> de xuat -> phan muc tat dinh.
+//   Tu ap dung (muc 1): CHI luat canh bao (file JSON evolve/rules/evolve-*.json), rollback duoc; tu rollback sau 7 ngay neu count fp khong giam.
+//   Moi thu khac (inject, skill, code, delete, gate) -> hang cho TTY (muc 2). Cam (muc 0): guard/approval/bash-guard/data-gate/model-policy, push/deploy.
+// KHONG goi model. Toi da 1 lan/24h, timeout cung, khoa chong chay trung. Chi import core + evolve (hop dong import).
 import fs from 'node:fs';
 import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
-import { readAuditEvents, collectJsonlFiles } from '../../core/audit/scan.mjs';
-import { findCandidates, propose, check, apply, rollback, ctx, nestedDateDirs, classifyTarget } from './loop.mjs';
-import { ruleDef } from './rule-content.mjs';
+import { findCandidates, propose, check, apply, rollback, ctx, classifyTarget } from './loop.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { withLock } from '../../core/runtime/lockfile.mjs';
-import { isHookRun } from '../../core/audit/signals.mjs';
 
 export const CFG = Object.freeze({
-  intervalHours: 24, timeoutS: 100, maxProposals: 5, maxModelCallsWeek: 0, rollbackAfterDays: 7,
-  autonomy: 1, // 0 = chi xep hang (khong tu ap gi); 1 = tu ap muc 1, muc 2 xep hang
-  tolerance: 0.25, minSamples: 10, oracleDays: 30, lockStaleS: 300, maxQueue: 200, maxApplied: 100,
+  intervalHours: 24, timeoutS: 100, maxProposals: 5, rollbackAfterDays: 7,
+  autonomy: 1, // 0 = chi xep hang (khong tu ap gi); 1 = tu ap luat canh bao, con lai xep hang
+  oracleDays: 30, lockStaleS: 300, maxQueue: 200, maxApplied: 100,
 });
 const H = 3600e3, DAY = 86400000;
 
 // ---- phan muc tat dinh ----
-export const LEVEL_BY_KIND = Object.freeze({ rule: 1, inject: 1, skill: 2, code: 2, delete: 2, gate: 2 });
+export const LEVEL_BY_KIND = Object.freeze({ rule: 1, inject: 2, skill: 2, code: 2, delete: 2, gate: 2 });
 // Muc 0: cam tuyet doi (kem ke ca khi nguoi duyet qua hang: nguoi phai tu sua tay).
 const GATE_PATH = /(^|\/)(guard|approval|bash-guard|data-gate|model-policy|verify-gate)(\/|\.|-|$)|^harness\/(constrain|hooks)(\/|$)|^config\/(approval|verify-gate|guard|hub|model-policy|data-gate)/i;
 const FORBIDDEN_KIND = /^(push|deploy|publish|release)$/i;
@@ -49,58 +45,18 @@ export function classifyChange(change = {}) {
   if (kind === 'gate') return { level: 2, reason: 'doi gate -> cho duyet' };
   const lv = LEVEL_BY_KIND[kind];
   if (!lv) return { level: 2, reason: `loai thay doi la (${kind || '-'}) -> cho duyet` };
-  if (lv === 1 && !/^(?:[^/]+\/)*(rules\/[^/]+\.json|inject\/[^/]+\.md)$/.test(rel)) return { level: 2, reason: `muc 1 chi file luat/inject, dich ${rel} -> cho duyet` };
-  return { level: lv, reason: lv === 1 ? 'chi them canh bao/goi y/inject' : `${kind} -> cho duyet` };
+  if (lv === 1 && !/^(?:[^/]+\/)*rules\/evolve-[^/]+\.json$/.test(rel)) return { level: 2, reason: `muc 1 chi file luat evolve-*.json, dich ${rel} -> cho duyet` };
+  return { level: lv, reason: lv === 1 ? 'chi them luat canh bao' : `${kind} -> cho duyet` };
 }
 
-// ---- oracle tat dinh tren su kien cu cua fp ----
-/** def luat da sinh; cands = candidate tren su kien cu (nhieu fp). Phai: hop le, bat dung fp muc tieu, khong bat fp khac. */
-export function oracleRule(def, fp, cands) {
-  if (!def || typeof def !== 'object') return { ok: false, reason: 'luat khong parse duoc' };
-  if (def.source !== 'candidates' || def.action !== 'warn' || !(Number(def.threshold) >= 0)) return { ok: false, reason: 'luat sai schema/hanh dong (chi warn tren candidates)' };
-  if (typeof def.message !== 'string' || def.message.length > 200) return { ok: false, reason: 'message thieu/qua dai' };
-  if (!def.filter || def.filter.fp !== fp || Object.keys(def.filter).length !== 1) return { ok: false, reason: 'filter khong khoa dung 1 fp' };
-  const hits = cands.filter((c) => c.fp === def.filter.fp && (c.count || 0) >= Number(def.threshold));
-  if (!hits.length) return { ok: false, reason: 'luat khong bat duoc su kien cu cua fp' };
-  const others = cands.filter((c) => c.fp !== fp && def.filter.fp === c.fp);
-  if (others.length) return { ok: false, reason: 'luat bat fp khac (false positive)' };
-  return { ok: true, hits: hits.length, count: hits[0].count, reason: null };
-}
-
-// ---- chi so bao ve (audit) ----
-const auditField = (r, k) => (k === 'kind' ? (r.data && r.data.verify_kind) ?? r.kind ?? null : (r.signal ?? (r.data && r.data.signal) ?? null)); // khop engine ledger (khong import observe)
-const isVerify = (k) => k === 'test' || k === 'build';
-/** {verify_fail_rate, correction_rate, verify_n, n}. Thuan. */
-export function protectiveRates(events) {
-  let vn = 0, vf = 0, corr = 0, n = 0;
-  for (const e of events || []) {
-    if (!e || isHookRun(e)) continue; n++; // HookRun khong phai thao tac cua agent
-    if (isVerify(auditField(e, 'kind'))) { vn++; if (e.ok === false || e.event === 'PostToolUseFailure') vf++; }
-    if (auditField(e, 'signal') === 'correction') corr++;
-  }
-  return { verify_n: vn, n, verify_fail_rate: vn ? vf / vn : 0, correction_rate: n ? corr / n : 0 };
-}
-/** Xau di khi tang > tolerance (tuong doi) va du mau. */
-export function worsened(before, after, cfg = CFG) {
-  const w = (a, b, nA) => nA >= cfg.minSamples && b > a * (1 + cfg.tolerance) && b - a > 0.005;
-  return w(before.verify_fail_rate, after.verify_fail_rate, after.verify_n) || w(before.correction_rate, after.correction_rate, after.n);
-}
 /** Candidate khop moc (fp chinh tac hoac error_fp cu cua nhom, hai chieu). */
 export const matchCand = (items, rec) => {
   const mine = new Set([rec.fp, ...(rec.legacy_fps || [])].filter(Boolean));
   return (items || []).find((x) => mine.has(x.fp) || (x.legacy_fps || []).some((l) => mine.has(l)));
 };
-/** Moc do duoc neu co candidate khop, hoac co su kien mang dung fp/error_fp cua moc. Thuan. */
-export const isMeasurable = (rec, items, events) => {
-  if (matchCand(items, rec)) return true;
-  const mine = new Set([rec.fp, ...(rec.legacy_fps || [])].filter(Boolean));
-  return (events || []).some((e) => e && e.data && (mine.has(e.data.error_fp) || mine.has(e.data.fp)));
-};
-/** Quyet dinh rollback cho 1 moc: fp khong giam hoac chi so xau di. Thuan. */
-export function shouldRollback(rec, countNow, ratesNow, cfg = CFG, { measurable = true } = {}) {
-  if (!measurable) return { rollback: false, unmeasurable: true, reason: 'khong do duoc: fp cua moc khac dinh dang (khong su kien/candidate nao mang fp hoac error_fp do)' };
+/** Quyet dinh rollback cho 1 moc: count fp khong giam sau N ngay. Thuan. */
+export function shouldRollback(rec, countNow) {
   if (!(countNow < rec.count_before)) return { rollback: true, reason: `count fp khong giam (${rec.count_before} -> ${countNow})` };
-  if (worsened(rec.rates_before || {}, ratesNow, cfg)) return { rollback: true, reason: 'chi so bao ve xau di (verify_fail/correction tang)' };
   return { rollback: false, reason: null };
 }
 
@@ -109,7 +65,7 @@ export const apDir = (o = {}) => path.join(ctx(o).evo, 'autopilot');
 const f = (o, n) => path.join(apDir(o), n);
 const wr = (file, j) => { const g = guardWrite(file); if (!g.ok) return false; fs.mkdirSync(path.dirname(file), { recursive: true }); const t = `${file}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(j, null, 2) + '\n'); fs.renameSync(t, file); return true; };
 const weekKey = (ms) => Math.floor(ms / (7 * DAY));
-export const readState = (o) => { const s = readJson(f(o, 'state.json'), {}) || {}; return { applied: [], week: { key: 0, proposals: 0, modelCalls: 0 }, ...s }; };
+export const readState = (o) => { const s = readJson(f(o, 'state.json'), {}) || {}; return { applied: [], week: { key: 0, proposals: 0 }, ...s }; };
 export const readQueue = (o) => { const q = readJson(f(o, 'review-queue.json'), []); return Array.isArray(q) ? q : []; };
 
 /** Due: >= intervalHours tu lan chay cuoi. Dung cho hook kick (doc nhanh). */
@@ -149,18 +105,6 @@ function annotate(o, notes) { // notes: Map id -> {status, reason}; ghi lai ca f
   }, { retries: 40, waitMs: 25 });
 }
 
-async function readEventsWindow(o, days, nowMs, timeoutMs) {
-  const c = ctx(o); const deadline = Date.now() + timeoutMs; const from = new Date(nowMs - days * DAY).toISOString().slice(0, 10);
-  const events = [];
-  for (const { date, dir } of c.audits.flatMap(nestedDateDirs)) {
-    if (date < from) continue; if (Date.now() > deadline) break;
-    let size = 0; for (const x of collectJsonlFiles(dir)) { try { size += fs.statSync(x).size; } catch {} }
-    if (size > 64 * 1048576) continue;
-    const r = await readAuditEvents(dir, size + 1, deadline); events.push(...r.events);
-  }
-  return events.filter((e) => { const t = Date.parse(e.ts); return !Number.isFinite(t) || (t >= nowMs - days * DAY && t <= nowMs + DAY); });
-}
-
 const shaOf = (b) => crypto.createHash('sha256').update(b).digest('hex');
 /** Moc 'applying' mo coi (crash giua apply va luu state): neu dich da la after cua de xuat -> hoan tat co kiem (manifest+de xuat+moc 'applied'); khong thi bo moc (apply tu khoi phuc khi loi). */
 export function recoverApplying(o, st) {
@@ -189,7 +133,7 @@ export async function runAutopilot(o = {}) {
   const cfg = { ...CFG, ...(o.cfg || {}) };
   const nowMs = Number(o.nowMs) || Date.now();
   const dry = !!o.dryRun;
-  const res = { dryRun: dry, skipped: null, planned: [], applied: [], queued: [], refused: [], rolledBack: [], kept: [], unmeasured: [], errors: [] };
+  const res = { dryRun: dry, skipped: null, planned: [], applied: [], queued: [], refused: [], rolledBack: [], kept: [], errors: [] };
   if (!o.force && !autopilotDue(o, nowMs, cfg)) { res.skipped = 'chua toi han (<24h)'; return res; }
   let lock = null;
   if (!dry) { lock = lockAcquire(o, nowMs, cfg); if (!lock) { res.skipped = 'khoa: lo khac dang chay'; return res; } }
@@ -201,27 +145,16 @@ export async function runAutopilot(o = {}) {
     const save = () => { if (wr(f(o, 'state.json'), st)) return true; res.errors.push('khong ghi duoc state.json (guard/IO)'); return false; };
     if (!dry) { st.lastRun = nowMs; if (!save()) return res; } // chiem moc ngay: loi giua chung cung khong chay lai trong 24h
     if (!dry) { const rec = recoverApplying(o, st); if (rec.changed) { res.errors.push(...rec.notes); save(); } }
-    if (weekKey(nowMs) !== st.week.key) st.week = { key: weekKey(nowMs), proposals: 0, modelCalls: 0 };
+    if (weekKey(nowMs) !== st.week.key) st.week = { key: weekKey(nowMs), proposals: 0 };
 
     // 1) Tu rollback cac moc muc 1 da >= N ngay.
     const due = st.applied.filter((a) => a.status === 'applied' && nowMs - Date.parse(a.ts) >= cfg.rollbackAfterDays * DAY);
     if (due.length) {
       const cands = await findCandidates({ ...o, days: cfg.rollbackAfterDays, threshold: 1, nowMs, timeoutMs: 15000 });
-      const rates = protectiveRates(await readEventsWindow(o, cfg.rollbackAfterDays, nowMs, 15000));
       for (const a of due) {
         if (timeUp()) { res.errors.push('timeout'); break; }
         const now = matchCand(cands.items, a);
-        let meas = true;
-        if (!now) { // count 0 co the do khac dinh dang fp: kiem tra cua so rong (truoc/sau ap dung)
-          const wide = await findCandidates({ ...o, days: cfg.oracleDays, threshold: 1, nowMs, timeoutMs: 15000 });
-          meas = isMeasurable(a, wide.items, await readEventsWindow(o, cfg.oracleDays, nowMs, 15000));
-        }
-        const d = shouldRollback(a, now ? now.count : 0, rates, cfg, { measurable: meas });
-        if (d.unmeasurable) {
-          res.unmeasured.push({ ver: a.ver, fp: a.fp, reason: d.reason });
-          if (!dry) { a.status = 'unmeasurable'; a.reason = d.reason; if (a.entry_id) notes.set(a.entry_id, { status: 'unmeasurable', reason: d.reason, ver: a.ver }); }
-          continue;
-        }
+        const d = shouldRollback(a, now ? now.count : 0);
         if (!d.rollback) { res.kept.push({ ver: a.ver, fp: a.fp }); if (!dry) a.status = 'kept'; continue; }
         if (dry) { res.rolledBack.push({ ver: a.ver, fp: a.fp, reason: d.reason, dry: true }); continue; }
         const r = rollback(a.ver, { ...o, approve: true });
@@ -237,7 +170,6 @@ export async function runAutopilot(o = {}) {
     const todo = entries.filter((e) => ['open', 'warned'].includes(e.status) && e.action === 'propose' && e.fp && !taken.has(e.fp)
       && !(e.evolve && ['applied', 'queued', 'refused'].includes(e.evolve.status))).sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, cfg.maxProposals);
     const scan = todo.length ? await findCandidates({ ...o, days: cfg.oracleDays, threshold: 1, nowMs, timeoutMs: 20000 }) : { items: [] };
-    const baseRates = todo.length ? protectiveRates(await readEventsWindow(o, cfg.rollbackAfterDays, nowMs, 15000)) : {};
 
     for (const e of todo) {
       if (timeUp()) { res.errors.push('timeout'); break; }
@@ -247,13 +179,9 @@ export async function runAutopilot(o = {}) {
       const guess = { kind, target: target || (cand ? `evolve/rules/evolve-${cand.id}.json` : 'evolve/rules/x.json'), text: `${e.message || ''}` };
       const cl = classifyChange(guess);
       if (cl.level === 0) { res.refused.push({ entry: e.id, reason: cl.reason }); notes.set(e.id, { status: 'refused', reason: cl.reason }); continue; }
-      const needsModel = !!e.needs_model;
-      const toQueue = cl.level === 2 || cfg.autonomy < 1 || (needsModel && st.week.modelCalls >= cfg.maxModelCallsWeek);
+      const toQueue = cl.level === 2 || cfg.autonomy < 1;
       if (!cand && !target) { res.errors.push(`${e.id}: khong co candidate cho fp (het hieu luc?)`); continue; }
-      // Oracle tren su kien cu cua fp (muc 1 va hang cho deu can kem ket qua oracle).
-      const oc = cand ? oracleRule(ruleDef(cand), e.fp, scan.items) : { ok: false, reason: 'khong co candidate' };
-      if (cl.level === 1 && !oc.ok) { res.refused.push({ entry: e.id, reason: `oracle loai: ${oc.reason}` }); notes.set(e.id, { status: 'refused', reason: `oracle loai: ${oc.reason}` }); continue; }
-      const plan = { entry: e.id, fp: e.fp, kind, level: toQueue ? 2 : cl.level, oracle: oc.ok ? 'pass' : oc.reason };
+      const plan = { entry: e.id, fp: e.fp, kind, level: toQueue ? 2 : cl.level };
       if (dry) { res.planned.push(plan); continue; }
       if (st.week.proposals >= 10 * cfg.maxProposals) break;
       st.week.proposals++;
@@ -265,7 +193,7 @@ export async function runAutopilot(o = {}) {
       }
       if (!toQueue && p) {
         // Ghi moc 'applying' (fp, dich, count truoc) vao state TRUOC khi apply: crash giua chung van con moc de rollback/hoan tat.
-        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, rates_before: baseRates, legacy_fps: cand.legacy_fps || [], status: 'applying', target: p.change.target };
+        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, legacy_fps: cand.legacy_fps || [], status: 'applying', target: p.change.target };
         st.applied.push(rec);
         if (!save()) { st.applied.pop(); notes.set(e.id, { status: 'refused', reason: 'khong ghi duoc moc applying' }); continue; }
         const r = apply(p.id, { ...o, approve: true }); // autopilot LA cong duyet cua muc 1 (bang phan muc tat dinh); policy van chan cam
@@ -274,7 +202,7 @@ export async function runAutopilot(o = {}) {
         if (!save()) { res.errors.push(`${p.id}: da ap (ver ${r.ver}) nhung chua luu moc 'applied'; lan chay sau se hoan tat tu moc applying`); }
         res.applied.push({ ...plan, ver: r.ver, target: r.target }); notes.set(e.id, { status: 'applied', ver: r.ver });
       } else {
-        const item = { id: `q_${e.fp.replace(/[^A-Za-z0-9]+/g, '').slice(0, 12)}_${kind}`, pid: p && p.id, fp: e.fp, entry_id: e.id, kind, level: 2, target: p ? p.change.target : target, after_sha: p ? p.change.after_sha : null, reason: cl.reason, oracle: plan.oracle, ts: new Date(nowMs).toISOString(), status: 'pending' };
+        const item = { id: `q_${e.fp.replace(/[^A-Za-z0-9]+/g, '').slice(0, 12)}_${kind}`, pid: p && p.id, fp: e.fp, entry_id: e.id, kind, level: 2, target: p ? p.change.target : target, after_sha: p ? p.change.after_sha : null, reason: cl.reason, ts: new Date(nowMs).toISOString(), status: 'pending' };
         if (queue.length < cfg.maxQueue && !queue.some((q) => q.id === item.id && q.status === 'pending')) queue.push(item);
         res.queued.push({ ...plan, id: item.id }); notes.set(e.id, { status: 'queued', reason: item.reason, queue: item.id });
       }
@@ -326,7 +254,7 @@ export async function queueOp(o = {}) {
     if (now.sha !== q.after_sha) return { code: 4, reason: `noi dung de xuat doi sau khi xep hang (sha ${String(now.sha).slice(0, 12)} != ${String(q.after_sha).slice(0, 12)})` };
   }
   const shown = now.text == null ? '' : `\n--- noi dung (${PREVIEW_LINES} dong dau, sha256 ${now.sha}) ---\n${now.text.split('\n').slice(0, PREVIEW_LINES).join('\n')}\n---`;
-  const ok = await confirmTty(`Duyet ${q.id} (${q.kind} -> ${q.target}; oracle: ${q.oracle})?${shown}`, o);
+  const ok = await confirmTty(`Duyet ${q.id} (${q.kind} -> ${q.target})?${shown}`, o);
   if (ok === null) return { code: 2, reason: 'queue --approve: can TTY de xac nhan (agent khong tu duyet)' };
   if (!ok) return { code: 1, reason: 'khong dong y' };
   let out = { manual: true };

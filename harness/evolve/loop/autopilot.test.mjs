@@ -2,8 +2,7 @@ import { test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { classifyChange, oracleRule, shouldRollback, protectiveRates, worsened, runAutopilot, queueOp, readState, readQueue, autopilotDue, apDir, CFG } from './autopilot.mjs';
-import { ruleDef } from './rule-content.mjs';
+import { classifyChange, shouldRollback, runAutopilot, queueOp, readState, readQueue, autopilotDue, apDir, CFG } from './autopilot.mjs';
 import { extractErrorDetails } from '../../core/audit/signature.mjs';
 import { messageFingerprint } from '../../core/audit/normalize-message.mjs';
 
@@ -32,9 +31,10 @@ beforeEach(() => {
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 test('phan muc tat dinh theo loai thay doi', () => {
-  const c = (kind, target = 'evolve/rules/x.json') => classifyChange({ kind, target }).level;
+  const c = (kind, target = 'evolve/rules/evolve-x.json') => classifyChange({ kind, target }).level;
   expect(c('rule')).toBe(1);
-  expect(c('inject', 'evolve/inject/x.md')).toBe(1);
+  expect(c('inject', 'evolve/inject/x.md')).toBe(2); // inject -> hang cho TTY
+  expect(c('rule', 'evolve/rules/x.json')).toBe(2); // thieu tien to evolve-
   expect(c('skill', 'evolve/skills/x/SKILL.md')).toBe(2);
   expect(c('code', 'harness/core/io/paths.mjs')).toBe(2);
   expect(c('delete', 'harness/observe/ledger/x.mjs')).toBe(2);
@@ -53,30 +53,11 @@ test('cam: guard/approval/bash-guard/data-gate/model-policy, push/deploy, ngoai 
   expect(classifyChange({ kind: 'code', target: 'harness/core/x.mjs', text: 'deploy len server' }).level).toBe(0);
 });
 
-test('oracle: bat dung fp, loai luat sai/false positive', () => {
-  const cand = { id: 'c1', fp: FP, count: 3, tool: 'Bash', sample: 'x', hint: 'h' };
-  const def = ruleDef(cand);
-  expect(oracleRule(def, FP, [cand]).ok).toBe(true);
-  expect(oracleRule({ ...def, filter: { fp: 'zzz' } }, FP, [cand]).ok).toBe(false);
-  expect(oracleRule({ ...def, filter: {} }, FP, [cand]).ok).toBe(false);
-  expect(oracleRule({ ...def, action: 'propose' }, FP, [cand]).ok).toBe(false);
-  expect(oracleRule(def, FP, [{ ...cand, fp: 'other' }]).ok).toBe(false); // khong bat duoc su kien cu
-  expect(oracleRule({ ...def, message: 'x'.repeat(300) }, FP, [cand]).ok).toBe(false);
-});
-
-test('rollback theo chi so: count khong giam / verify_fail tang / giu khi tot', () => {
-  const rec = { count_before: 3, rates_before: { verify_fail_rate: 0.1, correction_rate: 0.01 } };
-  const ok = { verify_n: 50, n: 500, verify_fail_rate: 0.1, correction_rate: 0.01 };
-  expect(shouldRollback(rec, 3, ok).rollback).toBe(true);
-  expect(shouldRollback(rec, 4, ok).rollback).toBe(true);
-  expect(shouldRollback(rec, 1, ok).rollback).toBe(false);
-  expect(shouldRollback(rec, 1, { ...ok, verify_fail_rate: 0.3 }).rollback).toBe(true);
-  expect(shouldRollback(rec, 1, { ...ok, correction_rate: 0.05 }).rollback).toBe(true);
-  expect(shouldRollback(rec, 1, { ...ok, verify_n: 3, verify_fail_rate: 0.9 }).rollback).toBe(false); // it mau
-  const ev = [{ kind: 'test', event: 'PostToolUseFailure', ok: false }, { kind: 'test', event: 'PostToolUse', ok: true }, { signal: 'correction' }, {}];
-  const r = protectiveRates(ev);
-  expect(r.verify_fail_rate).toBe(0.5); expect(r.correction_rate).toBe(0.25);
-  expect(worsened({ verify_fail_rate: 0, correction_rate: 0 }, { verify_n: 20, n: 20, verify_fail_rate: 0.2, correction_rate: 0 })).toBe(true);
+test('rollback: count fp khong giam -> rollback; giam -> giu', () => {
+  const rec = { count_before: 3 };
+  expect(shouldRollback(rec, 3).rollback).toBe(true);
+  expect(shouldRollback(rec, 4).rollback).toBe(true);
+  expect(shouldRollback(rec, 1).rollback).toBe(false);
 });
 
 test('muc 1: tu ap dung + ghi moc; 24h khong chay lai; tran moi lan', async () => {
@@ -223,32 +204,3 @@ test('giu khi fp giam (khong con lap)', async () => {
   expect(fs.existsSync(target)).toBe(true);
 });
 
-test('protectiveRates bo HookRun khoi mau so', () => {
-  const ev = [{ kind: 'test', ok: true }, { type: 'hook', event: 'HookRun' }, { event: 'HookRun' }, { signal: 'correction' }];
-  const r = protectiveRates(ev);
-  expect(r.n).toBe(2); expect(r.correction_rate).toBe(0.5);
-});
-
-test('shouldRollback: khong do duoc -> khong giu, khong rollback', () => {
-  const d = shouldRollback({ count_before: 3, rates_before: {} }, 0, { verify_n: 0, n: 0, verify_fail_rate: 0, correction_rate: 0 }, undefined, { measurable: false });
-  expect(d.rollback).toBe(false); expect(d.unmeasurable).toBe(true);
-});
-
-test('moc fp cu khac dinh dang: unmeasurable + ghi ledger; fp = error_fp goc khop nguoc qua legacy_fps', async () => {
-  fs.writeFileSync(o.ledgerFile, JSON.stringify(entry(FP)) + '\n');
-  await runAutopilot(o);
-  const st = readState(o);
-  expect(st.applied[0].legacy_fps).toContain(FP);
-  const sp = path.join(apDir(o), 'state.json');
-  const bad = JSON.parse(JSON.stringify(st)); bad.applied[0].fp = 'oldformat0'; bad.applied[0].legacy_fps = []; bad.lastRun = 0;
-  fs.writeFileSync(sp, JSON.stringify(bad));
-  const t8 = await runAutopilot({ ...o, nowMs: NOW + 8 * DAY, ledgerEntries: [], force: true });
-  expect(t8.unmeasured.length).toBe(1); expect(t8.kept.length + t8.rolledBack.length).toBe(0);
-  expect(readState(o).applied[0].status).toBe('unmeasurable');
-  const led = JSON.parse(fs.readFileSync(o.ledgerFile, 'utf8').split('\n')[0]);
-  expect(led.evolve.status).toBe('unmeasurable');
-  const good = JSON.parse(JSON.stringify(st)); good.applied[0].fp = FP; good.applied[0].legacy_fps = []; good.lastRun = 0;
-  fs.writeFileSync(sp, JSON.stringify(good));
-  const g8 = await runAutopilot({ ...o, nowMs: NOW + 8 * DAY, ledgerEntries: [], force: true });
-  expect(g8.unmeasured.length).toBe(0); expect(g8.kept.length).toBe(1);
-});
