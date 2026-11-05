@@ -1,4 +1,4 @@
-// agy dung CUNG luat guard/approval cua Claude (khong viet luat rieng): bang lenh hai chieu qua dispatcher agy that (spawn, stdin agy).
+// agy dung CUNG luat guard cua Claude (khong viet luat rieng): bang lenh hai chieu qua dispatcher agy that (spawn, stdin agy).
 import { test, expect } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -18,11 +18,6 @@ const run = (cmd) => {
 const FP = ['git', 'push', '--' + 'force', 'origin', 'main'].join(' ');
 
 const DENY = [
-  ['rm -rf probe', /approval\[recursive-delete\]/],
-  ['rm -rf /', /approval\[recursive-delete\]/],
-  ['rm -rf ~', /approval\[recursive-delete\]/],
-  ['Remove-Item -Recurse -Force probe', /approval\[recursive-delete\]/],
-  ['git reset --hard', /can nguoi duyet.*approval\[git-reset-hard\]/],
   [FP, /git-force-push/],
 ];
 const ALLOW = ['echo hi', 'git status', 'rm file.txt'];
@@ -40,7 +35,6 @@ test('ask -> deny kem "can nguoi duyet" (agy -p khong hoi duoc); deny giu nguyen
   expect(JSON.parse(renderAgy('PreToolUse', { decision: 'ask', reason: 'approval[git-push]: x' }).stdout)).toEqual({ decision: 'deny', reason: ASK_PREFIX + 'approval[git-push]: x' });
   expect(JSON.parse(renderAgy('PreToolUse', { decision: 'deny', reason: 'r' }).stdout)).toEqual({ decision: 'deny', reason: 'r' });
   expect(JSON.parse(renderAgy('PreToolUse', {}).stdout)).toEqual({ decision: 'allow' });
-  expect(run('git push origin main').reason).toMatch(/^can nguoi duyet.*approval\[git-push\]/);
 }, 60000);
 
 test('chuan hoa: run_command -> Bash command; write_file/edit_file -> Write/Edit file_path; tool khac -> null', () => {

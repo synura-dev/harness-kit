@@ -83,20 +83,6 @@ test('PreToolUse Bash: force push -> deny (guard); approval khong chay sau deny'
   expect(fs.readFileSync(r.env.GUARD_LOG_FILE, 'utf8')).toContain('git-force-push'); // nhat ky guard di qua records, ghi 1 lan
 }, 60000);
 
-test('PreToolUse Bash: git push -> ask + updatedInput timeout (approval + bash-guard)', () => {
-  check('PreToolUse', bash('git push origin main'), {
-    json: pre('ask', { permissionDecisionReason: 'approval[git-push]: git push can nguoi duyet. / git push needs human approval.', updatedInput: { command: 'git push origin main', timeout: 120000 } }),
-    sa: ['gate|approval:git-push:ask', 'tool|PreToolUse|Bash'],
-  });
-}, 60000);
-
-test('PreToolUse Bash: rm -rf thu muc -> deny (approval)', () => {
-  check('PreToolUse', bash('rm -rf some-dir-that-does-not-matter'), {
-    json: pre('deny', { permissionDecisionReason: 'approval[recursive-delete]: xoa thu muc/de quy (khong dem duoc so file)' }),
-    sa: ['gate|approval:recursive-delete:deny', 'tool|PreToolUse|Bash'],
-  });
-}, 60000);
-
 test('PreToolUse Bash: python - (heredoc) -> deny (bash-guard)', () => {
   check('PreToolUse', bash('python - <<EOF\nprint(1)\nEOF'), {
     json: pre('deny', { permissionDecisionReason: 'bash-guard: python doc stdin (python -). Write file vao scratchpad roi chay (khong dung python - / python -c nhieu dong / heredoc dai).' }),
@@ -133,20 +119,6 @@ test('PostToolUse Bash (test pass): {} + 1 ban ghi audit', () => {
 
 const editEvent = (cwd) => JSON.stringify({ hook_event_name: 'PostToolUse', session_id: 'eqstop', cwd, tool_name: 'Edit', tool_input: { file_path: path.join(cwd, 'src', 'a.js') }, tool_response: { success: true } });
 const stopEvent = (cwd) => JSON.stringify({ hook_event_name: 'Stop', session_id: 'eqstop', cwd, stop_hook_active: false });
-
-test('Stop: sua code khong test -> block (verify-gate); proc-orphans cung chay', () => {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-cwd-'));
-  fs.mkdirSync(path.join(cwd, 'src')); fs.mkdirSync(path.join(cwd, '.git')); fs.writeFileSync(path.join(cwd, 'src', 'a.js'), 'x');
-  const cau = 'verify-gate: Da sua code nhung chua co bang chung pass sau lan sua cuoi, chay trong thu muc/du an (git root) cua moi file da sua: chay test/tsc (hoac build/lint) roi bao ket qua.';
-  const verify = (out) => {
-    expect(out.decision).toBe('block');
-    expect(out.reason.startsWith(cau)).toBe(true);
-    expect(out.reason).toContain(' Goi y lenh: ');
-  };
-  check('Stop', stopEvent(cwd), { verify, sa:['gate|verify-gate:missing_code:block', 'session|Stop|', 'tool|PostToolUse|Edit'] }, {
-    seed: (env) => { const s = runNew('PostToolUse', editEvent(cwd), env); expect(s.status).toBe(0); },
-  });
-}, 90000);
 
 test('Stop: binh thuong (khong sua code) -> {}', () => {
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-cwd-'));

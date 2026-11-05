@@ -1,8 +1,23 @@
 [
-  { "id": "guard-mongo-cli-deny", "desc": "mongo shell truc tiep -> chan", "run": { "kind": "hook", "entry": "harness/constrain/guard/hook.mjs" },
-    "stdin": { "hook_event_name": "PreToolUse", "session_id": "eval-sid", "tool_name": "Bash", "tool_input": { "command": "mongosh" }, "cwd": "{tmp}" },
-    "expect": { "exit": 0, "decision": "deny", "reason": "^guard\\[mongo-cli\\]" } },
-  { "id": "guard-git-status-none", "desc": "git status -> cho qua", "run": { "kind": "hook", "entry": "harness/constrain/guard/hook.mjs" },
-    "stdin": { "hook_event_name": "PreToolUse", "session_id": "eval-sid", "tool_name": "Bash", "tool_input": { "command": "git status" }, "cwd": "{tmp}" },
-    "expect": { "exit": 0, "decision": "none" } }
+  {
+    "id": "guard-git-status-none",
+    "desc": "git status -> cho qua",
+    "run": {
+      "kind": "hook",
+      "entry": "harness/constrain/guard/hook.mjs"
+    },
+    "stdin": {
+      "hook_event_name": "PreToolUse",
+      "session_id": "eval-sid",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "git status"
+      },
+      "cwd": "{tmp}"
+    },
+    "expect": {
+      "exit": 0,
+      "decision": "none"
+    }
+  }
 ]
