@@ -73,10 +73,19 @@ function appendLedger(f, rec) {
   }
   return false;
 }
-/** Don so: ghi lai chi cac muc con lai (tmp + rename), duoi khoa. */
-function compactLedger(f, entries) {
+export const COMPACT_MIN_BYTES = 65536;
+/** Don so khi file > COMPACT_MIN_BYTES: so-va-thay. Doc + stat size, dung noi dung moi, stat lai ngay truoc rename; size doi (co dong noi them) -> bo lan nay. Tra true neu da thay. */
+export function compactLedger(f, { minBytes = COMPACT_MIN_BYTES } = {}) {
   const t = `${f}.${process.pid}.tmp`;
-  try { fs.writeFileSync(t, entries.map((e) => JSON.stringify({ op: 'add', ...e }) + '\n').join('')); fs.renameSync(t, f); } catch { try { fs.unlinkSync(t); } catch { /* bo qua */ } }
+  try {
+    const size = fs.statSync(f).size;
+    if (size <= minBytes) return false;
+    const entries = fold(fs.readFileSync(f, 'utf8'));
+    fs.writeFileSync(t, entries.map((e) => JSON.stringify({ op: 'add', ...e }) + '\n').join(''));
+    if (fs.statSync(f).size !== size) { fs.unlinkSync(t); return false; }
+    fs.renameSync(t, f);
+    return true;
+  } catch { try { fs.unlinkSync(t); } catch { /* bo qua */ } return false; }
 }
 export const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
@@ -118,17 +127,18 @@ export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = kil
   // Trong khoa chi doc + quyet dinh + ghi so; kill (taskkill dong bo, co the toi 10s/PID) lam SAU khi nha khoa (khoa stale 15s).
   const r = withLock(f, () => {
     const es = readLedger(f);
-    const keep = []; removed = 0; killed = 0; toKill = [];
+    const keep = []; removed = 0; killed = 0; toKill = []; const gone = [];
     for (const e of es) {
-      if (!alive(e.pid)) { removed++; continue; }
+      if (!alive(e.pid)) { removed++; gone.push(e.pid); continue; }
       if (e.deadline > now) { keep.push(e); continue; }
       let m = null; try { m = matches(e.pid, e.cmd, e); } catch { m = null; }
-      if (m === true) { toKill.push(e.pid); killed++; removed++; continue; }
-      if (m === false) { removed++; continue; }
-      if (now - e.deadline >= staleAfterMs) { removed++; continue; } // khong xac minh duoc: chi bo muc, khong kill
+      if (m === true) { toKill.push(e.pid); killed++; removed++; gone.push(e.pid); continue; }
+      if (m === false) { removed++; gone.push(e.pid); continue; }
+      if (now - e.deadline >= staleAfterMs) { removed++; gone.push(e.pid); continue; } // khong xac minh duoc: chi bo muc, khong kill
       keep.push(e);
     }
-    if (removed) compactLedger(f, keep);
+    for (const pid of gone) appendLedger(f, { op: 'done', pid, key: null });
+    compactLedger(f);
     return true;
   }, { staleMs: 15000, retries: 120, waitMs: 25 });
   const ok = r.ok;

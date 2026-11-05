@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import cp from 'node:child_process';
-import { spawnSync, spawn, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP, readLedger } from './proc.mjs';
+import { spawnSync, spawn, compactLedger, COMPACT_MIN_BYTES, readLedger, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP, readLedger } from './proc.mjs';
 import { withLock, acquireLock } from './lockfile.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'proc-t-'));
@@ -140,3 +140,15 @@ test('so PID: ghi dong thoi tu nhieu tien trinh khong mat muc', async () => {
   const es = read(d);
   try { expect(es.length).toBe(15); } finally { for (const e of es) killTree(e.pid); }
 }, 30000);
+
+test('compactLedger: chi khi file > 64KB; sweep khong compact', () => {
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'ledger-compact-')), 'proc-ledger.jsonl');
+  const add = (pid) => JSON.stringify({ op: 'add', pid, key: 'k' + pid, deadline: 1, startedAt: 1 }) + '\n';
+  fs.writeFileSync(f, add(1) + JSON.stringify({ op: 'done', pid: 1, key: null }) + '\n' + add(2));
+  expect(compactLedger(f)).toBe(false);
+  expect(fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).length).toBe(3);
+  expect(compactLedger(f, { minBytes: 10 })).toBe(true);
+  expect(readLedger(f).map((e) => e.pid)).toEqual([2]);
+  expect(fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).length).toBe(1);
+  expect(COMPACT_MIN_BYTES).toBe(65536);
+});
