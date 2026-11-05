@@ -60,6 +60,28 @@ test('id/fp on dinh theo thu tu va cua so truot', () => {
   expect(id(evs.slice(1))).toBe(id(evs)); // cua so truot bo su kien dau
   expect(repeatedFailureCandidates(evs, 'n')[0]._fp).toBe(repeatedFailureCandidates(evs.slice().reverse(), 'n')[0]._fp);
 });
+test('duong dan Windows co dau cach/[]/-: mot <path> duy nhat', () => {
+  const g = 'E:\\11. Agents\\Work\\Company - Gemsocial - Era\\[New] Gemsocial';
+  expect(normalizeMessage(`Path does not exist: ${g}\\apps\\server\\src\\x.ts`, 200)).toBe('Path does not exist: <path>');
+  expect(fp(`Path does not exist: ${g}\\apps\\server`)).toBe(fp(`Path does not exist: ${g}\\.claude\\worktrees\\foo`));
+  expect(normalizeMessage(`File does not exist. Note: your current working directory is ${g}.`, 200)).toBe('File does not exist. Note: your current working directory is <path>');
+  expect(normalizeMessage(`Path does not exist: ${g}\\apps\\server\\src...`, 200)).toBe('Path does not exist: <path>');
+});
+test('khong gop nham: nghia khac -> fp khac', () => {
+  expect(fp('Path does not exist: E:\\a b\\c.ts')).not.toBe(fp('File does not exist: E:\\a b\\c.ts'));
+  expect(normalizeMessage('E:\\a\\b.ts not found, retry', 200)).toBe('<path> not found, retry');
+});
+test('guard worktree: moi ly do phia sau -> cung fp; loi khac van khac', () => {
+  const p = (id, r) => `This agent is isolated in the worktree E:\\11. Agents\\.worktrees\\agent-${id}, but this command ${r}. Refusing to run it`;
+  const a = fp(p('a8a872069519f6d8a', 'names git in a form too complex to verify'));
+  expect(fp(p('a83730c8c0078cb40', 'runs bun with run --cwd in a plain command'))).toBe(a);
+  expect(fp(p('a2299033b41637e2a', 'is too complex to verify'))).toBe(a);
+  expect(fp('Refusing to run it: something else')).not.toBe(a);
+});
+test('POSIX co dau cach giua chuoi', () => {
+  expect(normalizeMessage('Path does not exist: /e/11. Agents/Work/Company - Gemsocial - Era/[New] Gemsocial/apps/x.ts, retry', 200)).toBe('Path does not exist: <path>, retry');
+  expect(normalizeMessage('copy /a/b to /c/d failed', 200)).toBe('copy <path> to <path> failed');
+});
 test('HookRun khong tinh la loi tool', () => {
   const h = { type: 'hook', event: 'HookRun', ok: false, tool: 'Bash', ts: 't', data: { error: 'x' } };
   expect(repeatedFailureCandidates([h, h, h], 'n').length).toBe(0);
