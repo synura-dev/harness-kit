@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.2
+- loop-fix 0049-0055 (merged from lf/int).
+
 ## 0.3.1
 - proc-orphans: no warning while another subagent of the same session is still running (SubagentStart/SubagentStop track live agents); the pid-set dedupe is now actually applied, keyed per recipient (main or subagent), and changing pid sets are throttled to one warning per 15 minutes (throttleSec). Stops the repeated Stop-hook nudges during long background subagents.
 
