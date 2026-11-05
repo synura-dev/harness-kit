@@ -11,6 +11,7 @@ import { readAuditEvents, collectJsonlFiles } from '../../core/audit/scan.mjs';
 import { findCandidates, propose, check, apply, rollback, ctx, nestedDateDirs } from './loop.mjs';
 import { ruleDef } from './rule-content.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
+import { withLock } from '../../core/runtime/lockfile.mjs';
 
 export const CFG = Object.freeze({
   intervalHours: 24, timeoutS: 100, maxProposals: 5, maxModelCallsWeek: 0, rollbackAfterDays: 7,
@@ -123,11 +124,15 @@ function readLedgerRaw(file) {
 }
 function annotate(o, notes) { // notes: Map id -> {status, reason}; ghi lai ca file (tmp + rename), giu nguyen cac truong khac
   if (!notes.size) return;
-  const file = ledgerPath(o); const es = readLedgerRaw(file); if (!es.length) return;
-  const ts = new Date().toISOString();
-  const out = es.map((e) => (notes.has(e.id) ? { ...e, evolve: { ts, ...notes.get(e.id) } } : e));
+  const file = ledgerPath(o);
   const g = guardWrite(file); if (!g.ok) return;
-  const t = `${file}.${process.pid}.tmp`; fs.writeFileSync(t, out.map((e) => JSON.stringify(e)).join('\n') + '\n'); fs.renameSync(t, file);
+  // doc-sua-ghi duoi CUNG khoa file voi observe/ledger (updateLedger): <ledger>.lock; khong lay duoc khoa -> bo qua lan chu thich nay
+  withLock(file, () => {
+    const es = readLedgerRaw(file); if (!es.length) return;
+    const ts = new Date().toISOString();
+    const out = es.map((e) => (notes.has(e.id) ? { ...e, evolve: { ts, ...notes.get(e.id) } } : e));
+    const t = `${file}.${process.pid}.tmp`; fs.writeFileSync(t, out.map((e) => JSON.stringify(e)).join('\n') + '\n'); fs.renameSync(t, file);
+  }, { retries: 40, waitMs: 25 });
 }
 
 async function readEventsWindow(o, days, nowMs, timeoutMs) {
