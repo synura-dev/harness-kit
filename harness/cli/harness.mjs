@@ -13,7 +13,7 @@ import { parseCommon, emit } from '../core/io/out.mjs';
 import { loadExternals, runExternal, blockExternal } from '../core/ext/ext-host.mjs';
 import { listRegistered, isExtensionTrusted } from './commands/ext-registry.mjs';
 import { loadHarnessRegistry, translateAlias } from '../core/registry/plugin-registry.mjs';
-import { GROUP_ZONES } from '../core/config/contract.mjs';
+import { GROUP_ZONES } from '../core/config/constants.mjs';
 import { loadConfig } from '../core/config/config.mjs';
 import { guardWrite } from '../core/io/storage.mjs';
 import { loadDataRegistry, ZONES } from '../core/registry/data-registry.mjs';

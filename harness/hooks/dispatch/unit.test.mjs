@@ -3,7 +3,7 @@ import { test, expect } from 'bun:test';
 import { mergeResults, render, applyUpdate } from './merge.mjs';
 import { dispatch, CLAUDE } from './run.mjs';
 import { ORDER, applies } from './modules.mjs';
-import { validateHookModule } from '../../core/config/contract.mjs';
+import { validateHookModule } from '../../core/config/shape.mjs';
 import { renderAgy, AGY_ORDER } from './agy.mjs';
 
 const mod = (id, over = {}) => ({ id, events: ['PreToolUse'], timeoutMs: 100, onError: 'open', handle: async () => ({}), ...over });

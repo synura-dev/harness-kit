@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
-import { validateHookModule, validateHookResult } from '../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../core/config/shape.mjs';
 import approval, { loadApproval } from './approval/hook.mjs';
 import bashGuard from './bash-guard/hook.mjs';
 import guard, { load as loadGuard } from './guard/hook.mjs';

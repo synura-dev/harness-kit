@@ -1,6 +1,5 @@
 import { test, expect } from 'bun:test';
 import { normalizeError, fingerprint, isVerifyCommand, verifyKind, verifierOutcome, relFiles } from './fingerprint.mjs';
-import { validateEvent } from '../config/contract.mjs';
 
 test('fingerprint on dinh khi chi khac duong dan/so dong/timestamp/id/hash', () => {
   const a = 'Error at C:\\Users\\alice\\proj one\\src\\a.ts:12:5 2026-01-02T03:04:05.123Z id 550e8400-e29b-41d4-a716-446655440000 commit deadbeef1234 in /home/bob/x/y.js:99';
@@ -91,12 +90,6 @@ test('relFiles: tuong doi cwd, tran N, ngoai cwd chi ten file', () => {
   expect(relFiles(['E:\\hub\\harness\\a.mjs', 'E:/hub/harness/a.mjs', 'C:\\other\\secret\\b.txt', 'rel/c.js'], 'E:\\hub')).toEqual(['harness/a.mjs', 'b.txt', 'rel/c.js']);
   expect(relFiles(['a', 'b', 'c', 'd'], '/x', 2)).toEqual(['a', 'b']);
   expect(relFiles(null, '/x')).toEqual([]);
-});
-
-test('validateEvent: truong moi hop le, du lieu cu van doc duoc, gia tri sai bi bat', () => {
-  expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool' })).toEqual([]);
-  expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool', task_id: null, error_fingerprint: 'abc', retry_of: 2, attempt: 3, files_touched: ['a.js'], verifier_outcome: 'pass' })).toEqual([]);
-  expect(validateEvent({ ts: '2026-01-01T00:00:00Z', type: 'tool', verifier_outcome: 'maybe', files_touched: 'a', retry_of: 'x' }).length).toBe(3);
 });
 
 test('verifyKind: lenh test theo stack (npm/pnpm/yarn, Python, Go, Rust, JVM, .NET, make) la test', () => {

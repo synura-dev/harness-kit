@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, resolve, dirname, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { checkImport, zoneOf } from '../config/contract.mjs';
+import { checkImport, zoneOf } from '../config/constants.mjs';
 
 const SKIP_DIRS = new Set(['node_modules', 'fixtures', '.git']);
 

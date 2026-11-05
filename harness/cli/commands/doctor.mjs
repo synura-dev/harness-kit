@@ -296,7 +296,7 @@ try {
   rows.push({ name: 'guard-config', total: gh.length, errors: gh.length, truncated: false });
   const src = countSources(si.files);
   console.log('[sources] ' + src.map((s) => `${s.dir}=${s.count}`).join(' '));
-  const { LONG_FILE_SOFT, DUP_ALLOW } = await import(new URL('../../core/config/contract.mjs', import.meta.url).href);
+  const { LONG_FILE_SOFT, DUP_ALLOW } = await import(new URL('../../core/config/constants.mjs', import.meta.url).href);
   si.files.filter((f) => /^harness\/.+\.mjs$/.test(String(f.path).replace(/\\/g, '/')) && !/\.test\./.test(f.path) && f.lines > LONG_FILE_SOFT).forEach((f) => warn('long', `${f.path}: ${f.lines} dong > ${LONG_FILE_SOFT} (canh bao mem)`));
   const flatTop = countFlat(si.files)[0];
   if (flatTop) console.log(`[flat] max ${flatTop.count}/${flatTop.max} (${flatTop.dir})`);

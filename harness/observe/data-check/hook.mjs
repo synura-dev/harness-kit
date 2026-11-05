@@ -4,7 +4,7 @@ import path from 'node:path';
 import { spawnBackground } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
-import { TOP_FILES } from '../../core/config/contract.mjs';
+import { TOP_FILES } from '../../core/config/constants.mjs';
 import { dataRoot, workspaceRoot, toPosix, REPO_DIR } from '../../core/io/paths.mjs';
 import { SCAN_CACHE_REL, formatWarn } from '../../core/registry/data-registry.mjs';
 import { isStdRootFile } from '../storage/std-root.mjs';

@@ -1,6 +1,6 @@
 // Gop ket qua nhieu module + render dinh dang Claude Code. THUAN: khong I/O.
 import { isObj } from '../../core/io/paths.mjs';
-import { strongestDecision } from '../../core/config/contract.mjs';
+import { strongestDecision } from '../../core/config/constants.mjs';
 
 /** Su kien Claude chap nhan {decision:'block', reason} o cap tren cung. */
 const BLOCK_EVENTS = Object.freeze(['Stop', 'SubagentStop', 'PostToolUse', 'UserPromptSubmit']);

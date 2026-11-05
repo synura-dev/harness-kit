@@ -63,7 +63,7 @@ export function decideModel(inp, cfg) {
   return { out: {}, ev: { ...base, decision: 'allow', tier: 'none', rule: 'model-pass', reason: `${r.role}: ${normModel(given)}` } };
 }
 
-// Module hook (hop dong HOOK_MODULE, core/config/contract.mjs): dispatcher goi handle(); khong tu ghi stdout/exit/audit.
+// Module hook (hop dong HOOK_MODULE, core/config/constants.mjs): dispatcher goi handle(); khong tu ghi stdout/exit/audit.
 const META = { id: 'model-policy', events: ['PreToolUse'], tools: /^(Agent|Task)$/, timeoutMs: 2000, onError: 'open' };
 /** Alias cu (test): handle dong bo goc. */
 export const hookModule = Object.freeze({ ...META, handle });

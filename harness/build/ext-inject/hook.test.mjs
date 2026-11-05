@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DEFAULTS, clip, parseInject, defaultRun, handle, coreDomains } from './hook.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 import mod from './hook.mjs';
 import { hashTree } from '../../core/ext/ext-trust.mjs';
 

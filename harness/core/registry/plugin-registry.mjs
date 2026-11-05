@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadConfig } from '../config/config.mjs';
-import { validateExtManifest, validateExtRoots, TOP_DIRS, DEFAULT_CAPS, IMPORT_RULES, GROUP_ZONES } from '../config/contract.mjs';
+import { TOP_DIRS, DEFAULT_CAPS, IMPORT_RULES, GROUP_ZONES } from '../config/constants.mjs';
+import { validateExtManifest, validateExtRoots } from '../config/shape.mjs';
 
 const HARNESS_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 

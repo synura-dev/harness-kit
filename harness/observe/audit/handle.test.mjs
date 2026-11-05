@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { handle, hook, readAuditConfig } from './audit.mjs';
 import { handle as agyHandle } from './adapters/agy.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'audit-handle-'));
 function readAll(dir) {

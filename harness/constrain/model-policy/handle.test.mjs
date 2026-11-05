@@ -1,7 +1,7 @@
 // handle() truc tiep (hop dong HOOK_MODULE): ket qua {decision, reason, updatedInput, record}, khong stdout/exit/audit.
 import { test, expect } from 'bun:test';
 import { handle, hookModule, toClaudeOutput, decideModel, DEFAULTS } from './hook.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const CFG = { ...DEFAULTS, default: { model: 'sonnet' }, opusAllowed: [],
   roles: { builder: { model: 'sonnet', allowOpus: false }, verifier: { model: 'haiku' }, planner: { model: 'opus', allowOpus: true } } };

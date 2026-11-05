@@ -3,7 +3,7 @@
 // checkRegistry(root) -> string[]: domain CLI (cli/ + plugins/ + tools/) khai bao dung, script ton tai, default=run co timeout.
 import fs from 'node:fs';
 import path from 'node:path';
-import { KIND_RULES } from '../config/contract.mjs';
+import { KIND_RULES } from '../config/constants.mjs';
 import { toPosix } from '../io/paths.mjs';
 import { loadHarnessRegistry } from '../registry/plugin-registry.mjs';
 

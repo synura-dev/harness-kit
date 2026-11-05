@@ -59,7 +59,7 @@ export function decide(inp, cfg) {
   return {};
 }
 
-// Module hook (hop dong HOOK_MODULE, core/config/contract.mjs): dispatcher goi handle(); khong tu ghi stdout/exit.
+// Module hook (hop dong HOOK_MODULE, core/config/constants.mjs): dispatcher goi handle(); khong tu ghi stdout/exit.
 const META = { id: 'bash-guard', events: ['PreToolUse'], tools: /^Bash$/, timeoutMs: 2000, onError: 'open' };
 /** Alias cu (test): handle dong bo goc. */
 export const hookModule = Object.freeze({ ...META, handle });

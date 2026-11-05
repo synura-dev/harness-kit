@@ -214,7 +214,7 @@ function readStdin(ms) {
 }
 
 /**
- * Hop dong module (HOOK_MODULE, core/config/contract.mjs): handle(event, input, ctx) -> {decision, block, reason?, record}.
+ * Hop dong module (HOOK_MODULE, core/config/constants.mjs): handle(event, input, ctx) -> {decision, block, reason?, record}.
  * Khong ghi stdout/exit (vo main lam). Block = decision 'deny' + block true (Stop bi chan 1 lan). input rac/null -> fail-open 'allow'.
  * ctx (tuy chon): {cfg, root, now, deadline}; thieu thi nap mac dinh. Ghi vet audit type=gate nhu truoc.
  */

@@ -1,6 +1,6 @@
 // Check chong rac harness (T3): ham thuan, khong I/O. Chi import core/contract.
 // Vao: files [{path, lines, bytes, content?}] (duong dan tu goc hub), registry, opts.
-import { resolveCaps, DEFAULT_CAPS, SEVERITY, TOP_DIRS, TOP_FILES, KIND_RULES, DUP_ALLOW } from '../config/contract.mjs';
+import { resolveCaps, DEFAULT_CAPS, SEVERITY, TOP_DIRS, TOP_FILES, KIND_RULES, DUP_ALLOW } from '../config/constants.mjs';
 
 const SOURCE_FLAT_MAX = DEFAULT_CAPS.flatMax;
 
