@@ -53,12 +53,10 @@ test('metric sessions / sum:cost_ms', () => {
   assert.equal(evaluate({ id: 't', source: 'audit', filter: {}, metric: 'sum:cost_ms', threshold: 1200, action: 'log' }, { events: evs }, ctx).length, 0);
 });
 
-test('matchFilter: mang, not, any, gte, regex', () => {
+test('matchFilter: bang, thuoc danh sach', () => {
   const get = (k) => ({ a: 'x', n: 5 })[k];
   assert.ok(matchFilter(get, { a: ['x', 'y'] }));
-  assert.ok(!matchFilter(get, { a: { not: 'x' } }));
-  assert.ok(matchFilter(get, { any: [{ a: 'z' }, { n: { gte: 5 } }] }));
-  assert.ok(matchFilter(get, { a: { regex: '^X$' } }));
+  assert.ok(!matchFilter(get, { a: ['y'] }));
 });
 
 test('validateDef bat loi', () => {

@@ -147,20 +147,13 @@ export function auditField(rec, field, ctx = {}) {
 
 const norm = (v, ctx) => (v === '$hub' ? ctx.hubDir : v);
 function matchOne(val, cond, ctx) {
-  if (cond && typeof cond === 'object' && !Array.isArray(cond)) {
-    if ('not' in cond) return !matchOne(val, cond.not, ctx);
-    if ('gte' in cond) return Number(val) >= Number(cond.gte);
-    if ('regex' in cond) { try { return new RegExp(cond.regex, 'i').test(String(val ?? '')); } catch { return false; } }
-    return false;
-  }
-  if (Array.isArray(cond)) return cond.some((c) => matchOne(val, c, ctx));
-  return val === norm(cond, ctx) || (typeof val === 'boolean' ? String(val) === String(cond) : false);
+  if (Array.isArray(cond)) return cond.some((c) => matchOne(val, c, ctx)); // thuoc danh sach (in)
+  return val === norm(cond, ctx) || (typeof val === 'boolean' ? String(val) === String(cond) : false); // so bang
 }
 
-/** rec khop filter? get(field) -> gia tri. */
+/** rec khop filter? get(field) -> gia tri. Chi so bang / thuoc danh sach. */
 export function matchFilter(get, filter, ctx = {}) {
   if (!filter || typeof filter !== 'object') return true;
-  if (Array.isArray(filter.any)) return filter.any.some((f) => matchFilter(get, f, ctx));
   return Object.entries(filter).every(([k, c]) => matchOne(get(k), c, ctx));
 }
 
