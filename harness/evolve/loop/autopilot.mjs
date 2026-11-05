@@ -230,7 +230,7 @@ export async function runAutopilot(o = {}) {
 }
 
 // ---- hang cho (review-queue): nguoi duyet theo lo, approve chi qua TTY ----
-function confirmTty(msg, opts) {
+export function confirmTty(msg, opts) {
   if (opts.confirm) return Promise.resolve(!!opts.confirm(msg));
   const tty = opts.isTTY ?? (process.stdin.isTTY && process.stdout.isTTY);
   if (!tty) return Promise.resolve(null);
