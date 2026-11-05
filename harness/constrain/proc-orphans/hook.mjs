@@ -110,7 +110,7 @@ export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;
     if (!cfg.enabled || !input || typeof input !== 'object' || !cfg.events.includes(event)) return {};
-    if (ctx.sweep !== false) await sweepProcLedger();
+    if (ctx.sweep !== false && ctx.write !== false) await sweepProcLedger(); // write:false = khong ghi gi (sweep ghi so PID + stamp)
     const r = await scanChildren(cfg, ctx);
     if (!r.children.length) return {};
     const ts = new Date().toISOString();

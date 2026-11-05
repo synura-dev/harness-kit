@@ -58,6 +58,7 @@ export async function handle(event, input, ctx = {}) {
     if (!cfg.enabled || !input || typeof input !== 'object') return {};
     if (event !== 'SessionStart' && event !== 'UserPromptSubmit') return {};
     const nowMs = ctx.nowMs || Date.now();
+    const noWrite = ctx.write === false; // write:false = khong sweep/spawn nen (ghi so PID, khoa kick, stamp)
     const dataOpts = ctx.env ? { env: ctx.env } : undefined;
     const file = ledgerFile(dataOpts);
     const sid = String(input.session_id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || null;
@@ -69,9 +70,9 @@ export async function handle(event, input, ctx = {}) {
     if (pending === null ? fs.existsSync(file) && claimRebuild(file, nowMs) : pending.length) {
       updateLedger(file, (es) => { const c = claimDue(es, nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines }); r.lines = c.lines; return c.changed || pending === null ? c.entries : null; }, { lock: { retries: 20, waitMs: 25 } }); // khong khoa duoc -> bo qua lan nay (fail-open)
     }
-    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
-    if (event === 'SessionStart' && cfg.kickAutopilot !== false) kickAutopilot(dataOpts, { ...ctx, spawnAutopilot: ctx.spawnAutopilot || (ctx.spawnJob ? () => {} : undefined) }, nowMs); // evolve autopilot 1 lan/24h
-    if (event === 'SessionStart' && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
+    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env && !noWrite) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
+    if (event === 'SessionStart' && !noWrite && cfg.kickAutopilot !== false) kickAutopilot(dataOpts, { ...ctx, spawnAutopilot: ctx.spawnAutopilot || (ctx.spawnJob ? () => {} : undefined) }, nowMs); // evolve autopilot 1 lan/24h
+    if (event === 'SessionStart' && !noWrite && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
     const inj = event === 'SessionStart' && cfg.inject !== false ? readInject(dataOpts) : [];
     const all = [...r.lines.map(frameLine), ...inj];
     return all.length ? { additionalContext: all.join('\n') } : {};
