@@ -71,6 +71,17 @@ test('khong gop nham: nghia khac -> fp khac', () => {
   expect(fp('Path does not exist: E:\\a b\\c.ts')).not.toBe(fp('File does not exist: E:\\a b\\c.ts'));
   expect(normalizeMessage('E:\\a\\b.ts not found, retry', 200)).toBe('<path> not found, retry');
 });
+test('guard worktree: moi ly do phia sau -> cung fp; loi khac van khac', () => {
+  const p = (id, r) => `This agent is isolated in the worktree E:\\11. Agents\\.worktrees\\agent-${id}, but this command ${r}. Refusing to run it`;
+  const a = fp(p('a8a872069519f6d8a', 'names git in a form too complex to verify'));
+  expect(fp(p('a83730c8c0078cb40', 'runs bun with run --cwd in a plain command'))).toBe(a);
+  expect(fp(p('a2299033b41637e2a', 'is too complex to verify'))).toBe(a);
+  expect(fp('Refusing to run it: something else')).not.toBe(a);
+});
+test('POSIX co dau cach giua chuoi', () => {
+  expect(normalizeMessage('Path does not exist: /e/11. Agents/Work/Company - Gemsocial - Era/[New] Gemsocial/apps/x.ts, retry', 200)).toBe('Path does not exist: <path>, retry');
+  expect(normalizeMessage('copy /a/b to /c/d failed', 200)).toBe('copy <path> to <path> failed');
+});
 test('HookRun khong tinh la loi tool', () => {
   const h = { type: 'hook', event: 'HookRun', ok: false, tool: 'Bash', ts: 't', data: { error: 'x' } };
   expect(repeatedFailureCandidates([h, h, h], 'n').length).toBe(0);
