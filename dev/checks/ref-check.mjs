@@ -1,6 +1,6 @@
 // ref-check: every referenced harness path (harness/..., ./harness/..., cli/..., plugins/...) must exist.
 // Pure: caller supplies files [{path, content}] and exists(relPath). No fs, no imports from cli/plugins/hooks/tools.
-import { SEVERITY } from '../config/contract.mjs';
+import { SEVERITY } from '../../harness/core/config/contract.mjs';
 
 const REF_LIMITS = Object.freeze({ maxFiles: 500, maxBytes: 512 * 1024, timeoutMs: 5000 });
 

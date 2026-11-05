@@ -35,7 +35,7 @@ test('buildRegistry: manifest -> dir/entry tuong doi, registered tu manifest.dom
   const { r, w } = mk();
   w('harness/hooks/h/manifest.json', JSON.stringify({ id: 'h', kind: 'hook', layer: 'ext', entry: 'h.mjs', tests: ['h.test.mjs'] }));
   w('harness/cli/manifest.json', JSON.stringify({ id: 'cli', kind: 'cli', layer: 'core', entry: 'harness.mjs', domain: 'harness', domains: { d: { file: 'd.mjs', desc: 'D' } } }));
-  w('harness/cli/d.mjs', "import x from '../../config/used.json'");
+  w('harness/cli/d.mjs', "import x from '../../harness/config/used.json'");
   const { files } = collectFiles(r);
   const reg = buildRegistry(r, files);
   expect(reg.manifests.find((m) => m.dir === 'harness/hooks/h')).toMatchObject({ entry: 'h.mjs', tests: ['h.test.mjs'] });

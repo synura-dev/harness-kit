@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { strayReason, checkStray } from './clutter-check.mjs';
 import { collectStray } from './scan-input.mjs';
-import { DUP_ALLOW } from '../config/contract.mjs';
+import { DUP_ALLOW } from '../../harness/core/config/contract.mjs';
 
 test('strayReason: thu muc rac, *.local.json that, .log/.bak/.tmp; extension data va example hop le', () => {
   for (const d of ['harness/.claude', 'harness/data', 'harness/node_modules', 'harness/.worktrees', 'harness/hooks/x/node_modules']) expect(strayReason(d, true)).not.toBe('');

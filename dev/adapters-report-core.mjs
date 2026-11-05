@@ -1,8 +1,8 @@
 // Bao cao hook x CLI + sinh bang README (loi thuan cua cli/adapters.mjs; dat o core de tools/sync dung ma khong import cli).
 import fs from 'node:fs';
 import path from 'node:path';
-import { loadConfig } from '../config/config.mjs';
-import { toPosix } from '../io/paths.mjs';
+import { loadConfig } from '../harness/core/config/config.mjs';
+import { toPosix } from '../harness/core/io/paths.mjs';
 
 // Danh sach CLI ho tro, doc tu config workspace (config/workspace config: moi CLI: enabled, hookRegistration, adapterFiles). Co fallback khi thieu.
 // hookRegistration: file dang ky hook cua CLI (tuong doi goc workspace). adapterFiles: ten file adapter hop le trong <hook>/ (de canh bao 'none' ma van co file).

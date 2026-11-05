@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { checkManifest, checkRegistry } from './manifest-check.mjs';
-import { REPO_DIR } from '../io/paths.mjs';
+import { REPO_DIR } from '../../harness/core/io/paths.mjs';
 
 function mkHook(files) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'man-'));

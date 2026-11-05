@@ -2,7 +2,7 @@
 // Chi I/O doc co gioi han (maxFiles/maxBytes/timeoutMs). Chi import node builtin.
 import { readdirSync, readFileSync, statSync, existsSync } from 'node:fs';
 import { join, resolve, relative, posix } from 'node:path';
-import { readManifests } from '../registry/plugin-registry.mjs';
+import { readManifests } from '../../harness/core/registry/plugin-registry.mjs';
 import { strayReason } from './clutter-check.mjs';
 
 const SCAN_LIMITS = Object.freeze({ maxFiles: 3000, maxBytes: 512 * 1024, timeoutMs: 8000 });

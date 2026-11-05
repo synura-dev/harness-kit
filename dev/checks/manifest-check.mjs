@@ -3,9 +3,9 @@
 // checkRegistry(root) -> string[]: domain CLI (cli/ + plugins/ + tools/) khai bao dung, script ton tai, default=run co timeout.
 import fs from 'node:fs';
 import path from 'node:path';
-import { KIND_RULES } from '../config/contract.mjs';
-import { toPosix } from '../io/paths.mjs';
-import { loadHarnessRegistry } from '../registry/plugin-registry.mjs';
+import { KIND_RULES } from '../../harness/core/config/contract.mjs';
+import { toPosix } from '../../harness/core/io/paths.mjs';
+import { loadHarnessRegistry } from '../../harness/core/registry/plugin-registry.mjs';
 
 const LIMIT = 500; // gioi han so muc quet moi thu muc
 const ls = (d) => { try { return fs.readdirSync(d, { withFileTypes: true }).slice(0, LIMIT); } catch { return []; } };
