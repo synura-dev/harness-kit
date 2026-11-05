@@ -3,8 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { sumUsage, readUsageDelta, USAGE_TAIL } from './usage-tail.mjs';
-import { buildEnvelope } from './audit.mjs';
-import { readAuditConfig } from '../../core/config/audit-config.mjs';
+import { buildEnvelope, readAuditConfig } from './audit.mjs';
 
 const line = (id, o, extra = {}) => JSON.stringify({ type: 'assistant', uuid: 'u' + id, message: { id, model: 'claude-x', usage: { input_tokens: 10, output_tokens: o, cache_read_input_tokens: 100, cache_creation_input_tokens: 5, ...extra } } }) + '\n';
 const mk = () => fs.mkdtempSync(path.join(os.tmpdir(), 'utail-'));
