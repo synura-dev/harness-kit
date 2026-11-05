@@ -11,6 +11,7 @@ const mk = () => fs.mkdtempSync(path.join(os.tmpdir(), 'utail-'));
 test('sumUsage: dedupe theo message.id (lay output lon nhat), cong 4 loai token', () => {
   const r = sumUsage(line('a', 3) + line('a', 7) + line('b', 4) + JSON.stringify({ type: 'user' }) + '\n');
   expect(r).toMatchObject({ input: 20, output: 11, cache_read: 200, cache_creation: 10, msgs: 2 });
+  expect(r.total_tokens).toBe(41);
 });
 
 test('readUsageDelta: chi cong message moi ke tu lan truoc; offset theo transcript', () => {
