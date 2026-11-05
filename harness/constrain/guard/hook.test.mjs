@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { decide, load, evaluate, configFiles } from './hook.mjs';
 
 const HOOK = path.join(path.dirname(fileURLToPath(import.meta.url)), 'hook.mjs');
-const CORE = [path.join(path.dirname(HOOK), 'hook.config.json')]; // bo qua hook.config.local.json cua may
+const CORE = [path.join(path.dirname(HOOK), 'core.fixture.json')]; // bo qua hook.config.local.json cua may
 const emptyHub = fs.mkdtempSync(path.join(os.tmpdir(), 'guardempty-'));
 const cfg = load(CORE, { env: {}, hubRoot: emptyHub }).config; // chi lop chung (khong lop may/du an cua hub that)
 const ev = (c) => evaluate(c, cfg)?.id ?? null;
@@ -127,11 +127,11 @@ test('local tat duoc loi, local cao hon goi', () => {
 test('goi thieu/hong -> luat chung van ap + canh bao, khong throw', () => {
   const r = load(undefined, { env: { GUARD_PROJECT: 'nope' }, hubRoot: hub });
   assert.ok(r.warnings.some((w) => /thieu/.test(w)));
-  assert.equal(evaluate('mongosh', r.config)?.id, 'mongo-cli');
+  assert.equal(evaluate('a'.repeat(100001), r.config)?.id, 'command-too-long');
   fs.writeFileSync(path.join(hub, 'config', 'guard', 'bad.json'), '{oops');
   const b = load(undefined, { env: { GUARD_PROJECT: 'bad' }, hubRoot: hub });
   assert.ok(b.warnings.length > 0);
-  assert.equal(evaluate('mongosh', b.config)?.id, 'mongo-cli');
+  assert.equal(evaluate('a'.repeat(100001), b.config)?.id, 'command-too-long');
   assert.ok(load(undefined, { env: { GUARD_PROJECT: '../x' }, hubRoot: hub }).warnings.some((w) => /khong hop le/.test(w)));
 });
 
@@ -140,7 +140,7 @@ test('local o vi tri moi duoc nap; fallback cu canh bao; thieu ca hai van chay l
   const nf = configFiles(h2);
   assert.equal(nf[1], path.join(h2, 'config', 'guard', 'guard.local.json'));
   assert.ok(!load(nf, { env: {}, hubRoot: h2 }).warnings.some((w) => /legacy-local-config/.test(w)));
-  assert.equal(evaluate('mongo' + 'sh', load(nf, { env: {}, hubRoot: h2 }).config)?.id, 'mongo-cli');
+  assert.equal(evaluate('a'.repeat(100001), load(nf, { env: {}, hubRoot: h2 }).config)?.id, 'command-too-long');
   fs.mkdirSync(path.join(h2, 'config', 'guard'), { recursive: true });
   fs.writeFileSync(nf[1], JSON.stringify({ denyPatterns: [{ id: 'local-x', pattern: 'localxword', reason: 'x' }] }));
   const c = load(configFiles(h2), { env: {}, hubRoot: h2 }).config;
@@ -194,10 +194,10 @@ function run(input, env = {}, timeout = 5000) {
 }
 
 test('process: deny exits 0 with JSON, logs hash not secrets', () => {
-  const { r, log } = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'echo mongodb://u:SECRETPW@h/db' } }));
+  const { r, log } = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'echo SECRETPW ' + 'a'.repeat(100001) } }));
   assert.equal(r.status, 0);
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');
-  assert.match(log, /mongo-uri/);
+  assert.match(log, /command-too-long/);
   const dl = log.split('\n').filter((l) => l && !l.includes('config-warning')).join('\n'); // loai canh bao legacy-config cua may
   assert.ok(!dl.includes('SECRETPW')); // chat: khong co noi dung lenh trong log (thay cho heuristic do dai cu)
   assert.match(log, /"hash":"[0-9a-f]{16}"/);
@@ -206,10 +206,10 @@ test('process: deny exits 0 with JSON, logs hash not secrets', () => {
 test('process: deny log never contains command content (secrets) in any field', () => {
   const tok = 'ghp_' + 'A1b2C3d4E5f6G7h8I9j0';
   const pw = 'Zx9' + 'PwSecretQ';
-  const cmd = `echo ${tok} mongodb://admin:${pw}@db.example/x`;
+  const cmd = `echo ${tok} admin:${pw} ` + 'a'.repeat(100001);
   const { r, log } = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: cmd } }));
   assert.equal(JSON.parse(r.stdout).hookSpecificOutput.permissionDecision, 'deny');
-  assert.match(log, /mongo-uri/);
+  assert.match(log, /command-too-long/);
   assert.ok(!log.includes(tok) && !log.includes(pw) && !log.includes('admin:') && !log.includes('echo'));
   assert.match(log, /"hash":"[0-9a-f]{16}"/);
   assert.match(log, new RegExp('"len":' + cmd.length + '\\b'));
@@ -236,7 +236,7 @@ test('process: oversize stdin -> {} exit 0', () => {
 });
 
 test('process: audit mode via env never blocks', () => {
-  const { r, log } = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'mongosh' } }), { GUARD_MODE: 'audit' });
+  const { r, log } = run(JSON.stringify({ tool_name: 'Bash', tool_input: { command: 'a'.repeat(100001) } }), { GUARD_MODE: 'audit' });
   assert.equal(r.stdout, '{}');
   assert.match(log, /would-block/);
 });

@@ -18,16 +18,6 @@ export const configFiles = (hubRoot = HUB_ROOT) => {
   const nl = path.join(hubRoot, 'config', 'guard', 'guard.local.json');
   return [path.join(HERE, 'hook.config.json'), !fs.existsSync(nl) && fs.existsSync(LEGACY_LOCAL) ? LEGACY_LOCAL : nl];
 };
-/** git push pha huy: --force/-f/--force-with-lease/--mirror/--delete/-d/+refspec/:branch (chi nhom nay; push thuong khong chan). Phai khop regex trong hook.config.json. */
-const GIT_FORCE_PUSH_REGEX = String.raw`\bgit(?:\.exe)?["']?\s+(?:(?!["']?push\b)[^;&|\n\s]+\s+){0,12}["']?push\b(?:\s+[^;&|\n\s]+){0,40}?\s+(?:[\\"']*(?:-[a-z]*[fd][a-z]*(?=[\s"'\x60);&|>]|$)|--(?:force(?!-if-includes)|mirr\w*|del\w*|prune))|(?:["'\\]*[+:]\S|[^;&|\n\s]*:\+))|\bgit(?:\.exe)?["']?\s+(?:[^;&|\n\s]+\s+){0,12}?-c\s+["']?alias\.[^\s=]*=["']?push\b(?:\s+[^;&|\n\s]+){0,40}?\s+(?:[\\"']*(?:-[a-z]*[fd][a-z]*(?=[\s"'\x60);&|>]|$)|--(?:force(?!-if-includes)|mirr\w*|del\w*|prune))|(?:["'\\]*[+:]\S|[^;&|\n\s]*:\+))|\bgit(?:\.exe)?["']?\s+(?:[^;&|\n\s]+\s+){0,12}?-c\s+["']?remote\.[^\s=]*\.push=["']?\+|\bgit(?:\.exe)?\s+send-pack\b(?:\s+[^;&|\n\s]+){0,40}?\s+--force`;
-/** Luat loi du phong cung (khi hook.config.json hong/thieu): cac luat DB + git-force-push. */
-export const FALLBACK_CORE_RULES = [
-  { id: 'mongo-cli', regex: '\\b(mongosh|mongodump|mongoexport|mongoimport|mongorestore|mongostat)\\b|\\bmongo\\s', reason: 'Cam mongo shell/tools. / Mongo CLI blocked.' },
-  { id: 'mongo-uri', regex: 'mongodb(\\+srv)?://', reason: 'Cam chuoi ket noi MongoDB. / MongoDB connection string blocked.' },
-  { id: 'mongo-driver', regex: 'mongoose\\s*\\.\\s*(connect|createConnection)|\\bMongoClient\\b', reason: 'Cam ket noi DB bang driver. / DB driver connect blocked.' },
-  { id: 'db-cli-remote', remote: true, regex: '\\b(psql|mysql|redis-cli)\\b', reason: 'Cam db client tren host tu xa. / DB client over ssh blocked.' },
-  { id: 'git-force-push', regex: GIT_FORCE_PUSH_REGEX, reason: 'Cam git push --force/-f/--force-with-lease/--mirror/--delete/+refspec/:nhanh (ghi de/xoa lich su tu xa). Hoi human, khong tu push. / Destructive git push blocked; ask the human.' },
-];
 // Luat cung (khong nam trong config, khong tat duoc): launcher bin/harness.mjs va config/launcher.local.json chi nguoi dung sua (chong tro sang plugin gia).
 // Ghi chu: o worktree thu; cho 5c phai chuyen vao repo plugin (harness/constrain/guard/hook.mjs).
 const LAUNCHER_FILE_RE = /(?:^|\/)(?:bin\/harness\.mjs|config\/launcher\.local\.json)$/i;
@@ -132,11 +122,7 @@ export function load(files = configFiles(), opts = {}) {
   const lscal = machine.reduce((a, c) => ({ ...a, ...c }), {});
   const tomb = new Set();
   for (const m of machine) for (const k of ['denyPatterns', 'allowlist']) for (const r of Array.isArray(m[k]) ? m[k] : []) if (isObj(r) && r.id && r.disable) tomb.add(r.id);
-  let coreLayer = layers[0] || {};
-  if (!Array.isArray(coreLayer.denyPatterns) || !coreLayer.denyPatterns.some((x) => isObj(x) && x.id)) {
-    warnings.push('core-config-fallback: hook.config.json hong/thieu, dung luat loi du phong trong code');
-    coreLayer = { ...coreLayer, denyPatterns: FALLBACK_CORE_RULES };
-  }
+  const coreLayer = layers[0] || {};
   pile(coreLayer);
   const coreDeny = deny.map((r) => r.id).filter(Boolean), coreAllow = allow.map((r) => r.id).filter(Boolean);
   for (const m of viaDefaults) pile(m);
@@ -189,7 +175,7 @@ export function load(files = configFiles(), opts = {}) {
 }
 
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-const rx = (s) => { try { return new RegExp(s, 'i'); } catch { return null; } };
+const rx = (s) => { try { return new RegExp(s, 'i'); } catch (e) { try { fs.writeSync(2, 'guard: regex loi bi bo qua: ' + String(s).slice(0, 80) + ' (' + e.message + ')\n'); } catch { /* stderr dong */ } return null; } };
 
 
 // ---- protectedPaths (mac dinh RONG trong code; them tu config guard cua may/du an). Lenh/ file nhac toi duong dan duoc bao ve -> deny, tru cong harness obsidian. ----

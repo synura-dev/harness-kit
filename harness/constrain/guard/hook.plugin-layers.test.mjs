@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { load, evaluate } from './hook.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const CORE = [path.join(HERE, 'hook.config.json')];
+const CORE = [path.join(HERE, 'core.fixture.json')];
 const tmp = (p) => fs.mkdtempSync(path.join(os.tmpdir(), p));
 const wj = (f, o) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(o)); };
 

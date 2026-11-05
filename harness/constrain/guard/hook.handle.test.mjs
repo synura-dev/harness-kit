@@ -16,10 +16,10 @@ test('hookModule hop le theo contract', () => {
   assert.equal(hookModule.handle, handle);
 });
 
-test('handle: force push -> deny kem ly do', async () => {
-  const r = await handle('PreToolUse', bash('git push --force origin main'), { config: cfg() });
+test('handle: lenh qua dai -> deny kem ly do', async () => {
+  const r = await handle('PreToolUse', bash('a'.repeat(100001)), { config: cfg() });
   assert.equal(r.decision, 'deny');
-  assert.match(r.reason, /^guard\[git-force-push\]/);
+  assert.match(r.reason, /^guard\[command-too-long\]/);
   assert.deepEqual(validateHookResult(r), []);
   assert.equal(toOutput(r, bash('x')).hookSpecificOutput.permissionDecision, 'deny');
 });
@@ -35,7 +35,7 @@ test('handle: ls -> none; tool khac -> none', async () => {
 
 test('handle: agy run_command khong khop -> allow, khop -> deny; toOutput giu dang cu', async () => {
   const ok = { toolCall: { name: 'run_command', args: { CommandLine: 'ls' } } };
-  const bad = { toolCall: { name: 'run_command', args: { CommandLine: 'mongosh x' } } };
+  const bad = { toolCall: { name: 'run_command', args: { CommandLine: 'a'.repeat(100001) } } };
   assert.deepEqual(await handle('PreToolUse', ok, { config: cfg() }), { decision: 'allow' });
   assert.deepEqual(toOutput({ decision: 'allow' }, ok), { decision: 'allow' });
   const r = await handle('PreToolUse', bad, { config: cfg() });
