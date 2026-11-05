@@ -77,6 +77,7 @@ export function opSignature(ev) {
   const tool = ev && (ev.tool || d.tool);
   if (!tool) return null;
   if (tool === 'Bash') return bashSignature(ev.target || d.cmd_line || '');
+  if (tool === 'PowerShell') { const b = bashSignature(ev.target || d.cmd_line || ''); return b && b.replace(/^Bash:/, 'PowerShell:'); }
   if (tool === 'Agent' || tool === 'Task') {
     const st = d.subagent_type || normalizeMessage(ev.target || '', 30);
     return `Agent:${st || '-'}`;
@@ -90,7 +91,7 @@ export function opSignature(ev) {
 
 // Chuoi chi gom thao tac sua file (Edit/Write/Read...) hoac < 2 lenh Bash khac loai: khong co y nghia tu dong hoa.
 const FILE_OP = /^(Read|Edit|Write|MultiEdit|NotebookEdit)(:|$)/;
-export const meaningfulSequence = (sigs) => !sigs.every((x) => FILE_OP.test(x)) && new Set(sigs.filter((x) => x.startsWith('Bash:'))).size >= 2;
+export const meaningfulSequence = (sigs) => new Set(sigs.filter((x) => !FILE_OP.test(x))).size >= 2;
 
 export const isIgnored = (sig, ignore = DEFAULT_IGNORE) => ignore.some((r) => r.test(sig));
 

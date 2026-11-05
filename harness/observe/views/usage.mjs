@@ -10,7 +10,8 @@ const USAGE = 'usage [--days N=7] [--by cmd|ext|hook] [--limit N] [--json]';
 
 /** `harness <domain> [sub]` trong dong lenh Bash (bo qua tien to cd/timeout). -> {domain, sub} | null. */
 export function harnessCall(cmdLine) {
-  const m = String(cmdLine || '').match(/(?:^|[\s;&|(])harness(?:\.mjs|\.cmd)?\s+([a-z][\w-]*)(?:\s+([a-z][\w-]*))?/);
+  const bare = String(cmdLine || '').replace(/"[^"]*"|'[^']*'/g, '""'); // bo chu nam trong chuoi nhay
+  const m = bare.match(/(?:^|[\s;&|(])(?:[^\s;&|()]*[\\/])?harness(?:\.mjs|\.cmd|\.exe)?\s+([a-z][\w-]*)(?:\s+([a-z][\w-]*))?/);
   if (!m) return null;
   return { domain: m[1], sub: m[2] && !m[2].startsWith('-') ? m[2] : null };
 }
@@ -24,7 +25,7 @@ export function tally(events, by) {
       if (ev.hook) add(ev.hook, ev.action === 'error' || ev.ok === false);
       continue;
     }
-    if (ev.event !== 'PostToolUse' || ev.tool !== 'Bash') continue;
+    if (ev.event !== 'PostToolUse' || ev.tool !== 'Bash' && ev.tool !== 'PowerShell') continue;
     const d = ev.data || {};
     const c = harnessCall(d.cmd_line || ev.target);
     if (!c) continue;

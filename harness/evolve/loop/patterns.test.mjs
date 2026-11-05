@@ -101,3 +101,10 @@ test('detectPatterns: khong tao muc cho lenh don (command)', () => {
   for (const s of ['a', 'b', 'c']) for (let i = 0; i < 12; i++) evs.push(ev(s, 'Bash', 'bun test x'));
   expect(detectPatterns(evs).items).toEqual([]);
 });
+
+test('sequence: giu chuoi co >=2 chu ky khac nhau khong phai file-op (PowerShell/Agent/mcp)', () => {
+  const evs = [];
+  for (const s of ['a', 'b', 'c']) evs.push(ev(s, 'Edit', 'a.mjs'), ev(s, 'PowerShell', 'Get-ChildItem x'), ev(s, 'Agent', ''), ev(s, 'Edit', 'b.mjs'));
+  expect(detectSequences(streamsOf(evs), o).length).toBeGreaterThan(0);
+  expect(opSignature({ tool: 'PowerShell', target: 'Get-ChildItem x' })).toBe('PowerShell:Get-ChildItem');
+});

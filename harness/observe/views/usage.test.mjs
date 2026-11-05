@@ -32,3 +32,12 @@ test('collect: loc ngay + timeout -> truncated', () => {
   expect(r.summary).toContain('doctor');
   fs.rmSync(root, { recursive: true, force: true });
 });
+
+test('harnessCall: duong dan, bo chuoi nhay; tally dem PowerShell', () => {
+  expect(harnessCall('node /x/bin/harness.mjs tasks new')).toEqual({ domain: 'tasks', sub: 'new' });
+  expect(harnessCall('C:\\a\\harness.cmd doctor')).toEqual({ domain: 'doctor', sub: null });
+  expect(harnessCall('git commit -m "fix harness tasks"')).toBeNull();
+  expect(harnessCall('harness projects brief gemsocial')).toEqual({ domain: 'projects', sub: 'brief' });
+  const ps = { event: 'PostToolUse', tool: 'PowerShell', ok: true, data: { cmd_line: 'harness tasks new' } };
+  expect(tally([ps], 'cmd').get('tasks new')).toEqual({ n: 1, err: 0 });
+});
