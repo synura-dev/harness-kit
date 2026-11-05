@@ -1,7 +1,6 @@
 // harness/constrain/cli/cli.mjs - cong lenh nhom Han che.
 // Usage: constrain hooks [--json]            -> module hook cua dispatcher (id, gate, su kien, trang thai nap)
 //        constrain worktree list|prune ...   -> chuyen sang cli/commands/worktree.mjs
-//        constrain proc [--kill ...]         -> chuyen sang cli/commands/proc-watch.mjs
 //        constrain config show|sources ...   -> chuyen sang cli/commands/config.mjs (domain `config` cu la alias)
 // Doc-only (hooks): nap thu tung module (import dong, khong chay handler); loi nap -> trang thai error, khong nem.
 import path from 'node:path';
@@ -12,7 +11,7 @@ import { parseCommon, emit } from '../../core/io/out.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIMITS = { loadTimeoutMs: 5000, spawnTimeoutMs: 110000 }; // < tran cong (120s + 5s): con tu dung truoc khi cong kill
-const SUB = { worktree: 'worktree.mjs', proc: 'proc-watch.mjs', config: 'config.mjs' };
+const SUB = { worktree: 'worktree.mjs', config: 'config.mjs' };
 
 /** Tham so chuyen xuong CLI con: rest + co chung (--json/--raw/--max-bytes/--timeout-s) de `config show --raw` khong bi nuot. */
 export function forwardArgs(c, rest) {

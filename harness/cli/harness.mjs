@@ -53,21 +53,20 @@ export function loadRegistryInfo(root) {
 export function loadDomains(root) { return loadRegistryInfo(root).doms; }
 
 // Nhom = vung (thu muc cap 1 duoi harness/) chua file domain, suy tu duong dan registry; khong hardcode ten domain.
-const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', run: 'Chay (play, tools, hooks)' };
+const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI' };
 const MAIN_GROUPS = ['observe', 'constrain', 'evolve']; // luon in tieu de, ke ca rong
-const RUN_ZONES = new Set(['plugins', 'tools', 'hooks']);
 export const INDEX_MAX_LINES = 40;
 
 export function groupOf(d) {
   if (d.ext) return String(d.ext).split('/')[0]; // domain tu extRoot (vd <root>/): nhom rieng theo goc
   const seg = String(d.script || '').split('/');
   const z = seg[0] === 'harness' ? seg[1] : null;
-  if (!z) return 'run';
-  return RUN_ZONES.has(z) ? 'run' : z;
+  if (!z) return 'cli';
+  return z;
 }
 
 function groupOrder(doms) {
-  const seen = [...MAIN_GROUPS, ...GROUP_ZONES.filter((z) => !MAIN_GROUPS.includes(z)), 'cli', 'run'];
+  const seen = [...MAIN_GROUPS, ...GROUP_ZONES.filter((z) => !MAIN_GROUPS.includes(z)), 'cli'];
   for (const d of Object.values(doms)) { const g = groupOf(d); if (!seen.includes(g)) seen.push(g); }
   return seen;
 }

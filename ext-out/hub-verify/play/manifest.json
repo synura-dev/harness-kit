@@ -1,0 +1,1 @@
+{"id":"play","kind":"cli","layer":"ext","entry":"play.mjs","domain":"play","desc":"chay playbook khong can model","cmds":"list <name|path> --param k=v --dry-run --prune","default":"index","files":{"helpers":["bin.mjs"]},"tests":["play.test.mjs"],"config":{"defaults":null,"schema":null},"data":null,"tier":"T0"}
