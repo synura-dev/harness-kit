@@ -4,11 +4,12 @@
 //   Cam (muc 0): cham guard/approval/bash-guard/data-gate/model-policy (duong dan hoac config gate), push/deploy, ngoai repo harness.
 // KHONG goi model. Chay theo lo: toi da 1 lan/24h, timeout cung, khoa chong chay trung. Chi import core + evolve (hop dong import).
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
 import { readAuditEvents, collectJsonlFiles } from '../../core/audit/scan.mjs';
-import { findCandidates, propose, check, apply, rollback, ctx, nestedDateDirs } from './loop.mjs';
+import { findCandidates, propose, check, apply, rollback, ctx, nestedDateDirs, classifyTarget } from './loop.mjs';
 import { ruleDef } from './rule-content.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 
@@ -142,6 +143,29 @@ async function readEventsWindow(o, days, nowMs, timeoutMs) {
   return events.filter((e) => { const t = Date.parse(e.ts); return !Number.isFinite(t) || (t >= nowMs - days * DAY && t <= nowMs + DAY); });
 }
 
+const shaOf = (b) => crypto.createHash('sha256').update(b).digest('hex');
+/** Moc 'applying' mo coi (crash giua apply va luu state): neu dich da la after cua de xuat -> hoan tat co kiem (manifest+de xuat+moc 'applied'); khong thi bo moc (apply tu khoi phuc khi loi). */
+export function recoverApplying(o, st) {
+  const notes = []; let changed = false; const c = ctx(o);
+  for (const a of st.applied) {
+    if (a.status !== 'applying') continue;
+    changed = true; a.status = 'abandoned';
+    try {
+      const pj = path.join(c.evo, 'proposals', `${a.pid}.json`); const p = readJson(pj, null);
+      const vroot = path.join(c.evo, 'versions'); let man = null, mf = null;
+      for (const d of fs.readdirSync(vroot).sort().reverse()) { const m = readJson(path.join(vroot, d, 'manifest.json'), null); if (m && m.id === a.pid) { man = m; mf = path.join(vroot, d, 'manifest.json'); break; } }
+      if (!p || !man || !p.change) { notes.push(`moc applying mo coi ${a.pid}: bo (khong thay version/de xuat)`); continue; }
+      const cur = pol(p, o); const now = cur ? fs.readFileSync(cur) : null;
+      if (!now || shaOf(now) !== p.change.after_sha) { notes.push(`moc applying mo coi ${a.pid}: dich khong la ban after, bo moc`); continue; }
+      man.after_sha = p.change.after_sha; man.status = 'applied'; fs.writeFileSync(mf, JSON.stringify(man, null, 2) + '\n');
+      p.status = 'applied'; p.ver = man.ver; fs.writeFileSync(pj, JSON.stringify(p, null, 2) + '\n');
+      a.ver = man.ver; a.status = 'applied'; notes.push(`moc applying mo coi ${a.pid}: hoan tat co kiem (ver ${man.ver})`);
+    } catch (e) { notes.push(`recover ${a.pid}: ${e.message}`); }
+  }
+  return { changed, notes };
+}
+const pol = (p, o) => { const r = classifyTarget(p.change.target, p.kind, o); return r.ok ? r.abs : null; };
+
 /** Chay mot lo. o: {dryRun, force, nowMs, cfg, hubRoot, dataRoot, auditDir, dataBase, ledgerFile, ledgerEntries, confirm...}. */
 export async function runAutopilot(o = {}) {
   const cfg = { ...CFG, ...(o.cfg || {}) };
@@ -156,7 +180,9 @@ export async function runAutopilot(o = {}) {
   const notes = new Map();
   let st = readState(o); const queue = readQueue(o);
   try {
-    if (!dry) { st.lastRun = nowMs; wr(f(o, 'state.json'), st); } // chiem moc ngay: loi giua chung cung khong chay lai trong 24h
+    const save = () => { if (wr(f(o, 'state.json'), st)) return true; res.errors.push('khong ghi duoc state.json (guard/IO)'); return false; };
+    if (!dry) { st.lastRun = nowMs; if (!save()) return res; } // chiem moc ngay: loi giua chung cung khong chay lai trong 24h
+    if (!dry) { const rec = recoverApplying(o, st); if (rec.changed) { res.errors.push(...rec.notes); save(); } }
     if (weekKey(nowMs) !== st.week.key) st.week = { key: weekKey(nowMs), proposals: 0, modelCalls: 0 };
 
     // 1) Tu rollback cac moc muc 1 da >= N ngay.
@@ -210,19 +236,24 @@ export async function runAutopilot(o = {}) {
         const ck = check(p.id, o); if (!ck.check.ok) { res.refused.push({ entry: e.id, reason: ck.check.reason }); notes.set(e.id, { status: 'refused', reason: ck.check.reason }); continue; }
       }
       if (!toQueue && p) {
+        // Ghi moc 'applying' (fp, dich, count truoc) vao state TRUOC khi apply: crash giua chung van con moc de rollback/hoan tat.
+        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, rates_before: baseRates, status: 'applying', target: p.change.target };
+        st.applied.push(rec);
+        if (!save()) { st.applied.pop(); notes.set(e.id, { status: 'refused', reason: 'khong ghi duoc moc applying' }); continue; }
         const r = apply(p.id, { ...o, approve: true }); // autopilot LA cong duyet cua muc 1 (bang phan muc tat dinh); policy van chan cam
-        if (!r.ok) { res.errors.push(`apply ${p.id}: ${r.reason}`); notes.set(e.id, { status: 'refused', reason: r.reason }); continue; }
-        st.applied.push({ pid: p.id, ver: r.ver, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, rates_before: baseRates, status: 'applied', target: r.target });
+        if (!r.ok) { st.applied.pop(); save(); res.errors.push(`apply ${p.id}: ${r.reason}`); notes.set(e.id, { status: 'refused', reason: r.reason }); continue; }
+        rec.ver = r.ver; rec.status = 'applied'; rec.target = r.target;
+        if (!save()) { res.errors.push(`${p.id}: da ap (ver ${r.ver}) nhung chua luu moc 'applied'; lan chay sau se hoan tat tu moc applying`); }
         res.applied.push({ ...plan, ver: r.ver, target: r.target }); notes.set(e.id, { status: 'applied', ver: r.ver });
       } else {
-        const item = { id: `q_${e.fp.replace(/[^A-Za-z0-9]+/g, '').slice(0, 12)}_${kind}`, pid: p && p.id, fp: e.fp, entry_id: e.id, kind, level: 2, target: p ? p.change.target : target, reason: cl.reason, oracle: plan.oracle, ts: new Date(nowMs).toISOString(), status: 'pending' };
+        const item = { id: `q_${e.fp.replace(/[^A-Za-z0-9]+/g, '').slice(0, 12)}_${kind}`, pid: p && p.id, fp: e.fp, entry_id: e.id, kind, level: 2, target: p ? p.change.target : target, after_sha: p ? p.change.after_sha : null, reason: cl.reason, oracle: plan.oracle, ts: new Date(nowMs).toISOString(), status: 'pending' };
         if (queue.length < cfg.maxQueue && !queue.some((q) => q.id === item.id && q.status === 'pending')) queue.push(item);
         res.queued.push({ ...plan, id: item.id }); notes.set(e.id, { status: 'queued', reason: item.reason, queue: item.id });
       }
     }
     if (!dry) {
       st.applied = st.applied.slice(-cfg.maxApplied);
-      wr(f(o, 'state.json'), st); wr(f(o, 'review-queue.json'), queue);
+      save(); if (!wr(f(o, 'review-queue.json'), queue)) res.errors.push('khong ghi duoc review-queue.json (guard/IO)');
       try { annotate(o, notes); } catch {}
     }
   } finally { if (lock) try { fs.rmSync(lock, { force: true }); } catch {} }
@@ -240,10 +271,19 @@ export function confirmTty(msg, opts) {
   }));
 }
 
+const PREVIEW_LINES = 40;
+/** Doc change.after cua de xuat gan muc hang: {text, sha} (sha tinh lai tu noi dung that). */
+function afterOf(o, q) {
+  if (!q.pid || !/^[A-Za-z0-9_.-]{1,80}$/.test(q.pid)) return { text: null, sha: null };
+  const p = readJson(path.join(ctx(o).evo, 'proposals', `${q.pid}.json`), null);
+  const text = p && p.change && typeof p.change.after === 'string' ? p.change.after : null;
+  return { text, sha: text == null ? null : crypto.createHash('sha256').update(text, 'utf8').digest('hex') };
+}
+
 /** queue: {list} | {approve:id} | {reject:id}. Approve can TTY (agent khong tu duyet); muc 0 van bi policy tu choi. */
 export async function queueOp(o = {}) {
   const queue = readQueue(o);
-  if (!o.approve && !o.reject) return { code: 0, items: queue.filter((q) => q.status === 'pending'), total: queue.length };
+  if (!o.approve && !o.reject) return { code: 0, items: queue.filter((q) => q.status === 'pending').map((q) => { const a = afterOf(o, q); return { ...q, sha: a.sha, after_preview: a.text == null ? null : a.text.split('\n').slice(0, PREVIEW_LINES).join('\n'), after_truncated: a.text != null && a.text.split('\n').length > PREVIEW_LINES }; }), total: queue.length };
   const id = o.approve || o.reject; const q = queue.find((x) => x.id === id);
   if (!q) return { code: 1, reason: `khong co muc ${id}` };
   if (q.status !== 'pending') return { code: 1, reason: `muc ${id} da ${q.status}` };
@@ -251,7 +291,14 @@ export async function queueOp(o = {}) {
   if (o.reject) { q.status = 'rejected'; q.decided = new Date().toISOString(); save(); return { code: 0, id, status: 'rejected' }; }
   const cl = classifyChange({ kind: q.kind, target: q.target });
   if (cl.level === 0) return { code: 3, reason: `tu choi: ${cl.reason}` };
-  const ok = await confirmTty(`Duyet ${q.id} (${q.kind} -> ${q.target}; oracle: ${q.oracle})?`, o);
+  // Gan sha: noi dung nguoi duyet thay phai la noi dung luc xep hang.
+  const now = afterOf(o, q);
+  if (q.pid) {
+    if (!q.after_sha) return { code: 4, reason: 'muc hang khong co sha luc xep hang; xep lai' };
+    if (now.sha !== q.after_sha) return { code: 4, reason: `noi dung de xuat doi sau khi xep hang (sha ${String(now.sha).slice(0, 12)} != ${String(q.after_sha).slice(0, 12)})` };
+  }
+  const shown = now.text == null ? '' : `\n--- noi dung (${PREVIEW_LINES} dong dau, sha256 ${now.sha}) ---\n${now.text.split('\n').slice(0, PREVIEW_LINES).join('\n')}\n---`;
+  const ok = await confirmTty(`Duyet ${q.id} (${q.kind} -> ${q.target}; oracle: ${q.oracle})?${shown}`, o);
   if (ok === null) return { code: 2, reason: 'queue --approve: can TTY de xac nhan (agent khong tu duyet)' };
   if (!ok) return { code: 1, reason: 'khong dong y' };
   let out = { manual: true };

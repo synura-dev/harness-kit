@@ -57,7 +57,7 @@ export async function render(o) {
   }
   if (o.cmd === 'queue') {
     const r = await queueOp({ approve: o.approve ? o.arg : null, reject: o.reject ? o.arg : null });
-    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.map((q) => `${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`)], 40).join('\n'), data: r };
+    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.flatMap((q) => [`${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`, ...(q.sha ? [`  sha256=${q.sha}`] : []), ...(q.after_preview ? q.after_preview.split('\n').map((l) => `  | ${l}`) : []), ...(q.after_truncated ? ['  | ... (cat 40 dong)'] : [])])], 200).join('\n'), data: r };
     return { code: r.code, summary: r.code === 0 ? `queue ${r.id}: ${r.status}${r.ver ? ` (ver ${r.ver})` : r.manual ? ' (sua tay: khong co duong ap tu dong)' : ''}` : `queue tu choi: ${r.reason}`, data: r };
   }
   if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);
