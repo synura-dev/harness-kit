@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { byAgentModel, renderDigest } from './digest.mjs';
+import { byAgentModel, renderDigest, aggregate } from './digest.mjs';
 
 const ag = (agent, id, model) => ({ session: 's', agent, agent_id: id, tools: 1, errors: 0, tin: 10, tout: 5, model, t0: null, t1: null });
 
@@ -23,4 +23,15 @@ test('agyBash: ratio, replaceable, repeat', async () => {
   const r = agyBash([e('Bash', 'git status'), e('Bash', 'git status'), e('Bash', 'Get-Content a.txt'), e('Read', 'x'), { ...e('Bash', 'git status'), cli: 'claude' }], 2);
   expect(r).toEqual({ tools: 4, bash: 3, replaceable: 1, repeat: 1, denied: 2, ratio: 75 });
   expect(renderDigest('2026-01-01', [], { agy: r })).toContain('agy bash ratio: 75% (3/4), replaceable: 1, repeat: 1, denied: 2');
+});
+
+test('aggregate: HookRun bo qua; usage_mode delta cong, cumulative lay max', () => {
+  const r = (o) => ({ session_id: 's', agent_id: null, agent_type: null, event: 'Stop', ts: '2026-11-05T00:00:00Z', ok: null, ...o });
+  const hook = r({ type: 'hook', event: 'HookRun', ok: false, tool: 'Bash' });
+  const a = aggregate([hook, hook, r({ in_tok: 100, out_tok: 10, usage_mode: 'cumulative' }), r({ in_tok: 300, out_tok: 30, usage_mode: 'cumulative' })]);
+  expect(a.length).toBe(1); expect(a[0].errors).toBe(0); expect(a[0].tin).toBe(300); expect(a[0].tout).toBe(30);
+  const d = aggregate([r({ in_tok: 100, out_tok: 10, usage_mode: 'delta' }), r({ in_tok: 50, out_tok: 5, usage_mode: 'delta' })]);
+  expect(d[0].tin).toBe(150); expect(d[0].tout).toBe(15);
+  const legacy = aggregate([r({ in_tok: 100, out_tok: 10 }), r({ in_tok: 300, out_tok: 30 })]);
+  expect(legacy[0].tin).toBe(300);
 });

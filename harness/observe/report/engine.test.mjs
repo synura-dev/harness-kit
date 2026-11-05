@@ -50,12 +50,15 @@ test('per_session theo actor + so voi tuan truoc', () => {
   assert.match(renderSection(r), /\| main \| 1 \| 1 \| \+0% \|/);
 });
 
-test('per_task: can thiep / task (task = task_id hoac phien)', () => {
+test('per_task: chi tinh nhom co task_id; phien khong co task_id bao rieng (per_session_notask)', () => {
   const def = { id: 'i', source: 'audit', filter: { any: [{ signal: 'correction' }, { event: 'PermissionRequest' }] }, metric: ['per_task', { as: 'tong', metric: 'count' }], window_days: 7, format: 'kpi' };
-  const events = [ev({ sid: 'a', data: { signal: 'correction' } }), ev({ sid: 'b', event: 'PermissionRequest' }), ev({ sid: 'c' }), ev({ sid: 'd', data: { task_id: 't9' } })];
-  const r = evaluateSection(def, { events }, { nowMs: NOW });
-  assert.equal(r.rows[0].vals[1], 2); assert.equal(r.rows[0].vals[0], 0.5); // 2 / 4 task
-  assert.match(renderSection(r), /\*\*per_task\*\*: 0.50| +0% |/);
+  const events = [ev({ sid: 'a', data: { signal: 'correction' } }), ev({ sid: 'b', event: 'PermissionRequest' }), ev({ sid: 'c' }),
+    ev({ sid: 'd', data: { task_id: 't9', signal: 'correction' } }), ev({ sid: 'd', data: { task_id: 't9' } }), ev({ sid: 'e', data: { task_id: 't8' } })];
+  const r = evaluateSection({ ...def, metric: ['per_task', { as: 'ns', metric: 'per_session_notask' }, { as: 'tong', metric: 'count' }] }, { events }, { nowMs: NOW });
+  assert.equal(r.rows[0].vals[0], 0.5); // 1 can thiep co task_id / 2 task (t9,t8)
+  assert.equal(r.rows[0].vals[1], 2 / 3); // 2 can thiep / 3 phien khong co task_id (a,b,c)
+  assert.equal(r.rows[0].vals[2], 3);
+  assert.match(renderSection(r), /\*\*per_task\*\*: 0.50/);
 });
 
 test('candidates: per_1000 + sum; chiu thieu field', () => {
@@ -95,4 +98,23 @@ test('baseline: so sanh + snapshot; renderReport co truncated', () => {
   assert.match(renderSection(r), /baseline 2, \+50%| +0% |/);
   const md = renderReport([r], { nowMs: NOW, truncated: 'timeout', baseline: { date: '2026-10-29' } });
   assert.match(md, /truncated: timeout| +0% |/); assert.match(md, /baseline: 2026-10-29/);
+});
+
+test('HookRun bi bo khoi report: khong tinh loi/actor/mau so per_1000', () => {
+  const hook = { ts: ago(1), sid: 's1', type: 'hook', event: 'HookRun', ok: null, tool: null, actor: null };
+  const def = { id: 'h', source: 'audit', metric: [{ as: 'su kien', metric: 'count' }, { as: 'pm', metric: 'per_1000' }], window_days: 7, format: 'kpi' };
+  const r = evaluateSection(def, { events: [ev({}), ev({}), hook, hook, hook, hook, hook, hook, hook, hook] }, { nowMs: NOW });
+  assert.equal(r.rows[0].vals[0], 2); assert.equal(r.rows[0].vals[1], 1000);
+});
+
+test('subagent-vs-main: ms = dur_ms, token = data.usage input+output (khong cong cumulative)', () => {
+  const def = loadSections({ projectDir: null }).sections.find((s) => s.id === 'subagent-vs-main');
+  const events = [
+    ev({ event: 'Stop', actor: 'main', dur_ms: 100, tokens_in: 9999, data: { usage: { input: 10, output: 5, msgs: 1 }, usage_mode: 'cumulative' } }),
+    ev({ event: 'Stop', actor: 'main', dur_ms: 50, tokens_in: 99999, data: { usage: { input: 7, output: 3, msgs: 1 }, usage_mode: 'cumulative' } }),
+    ev({ event: 'Stop', actor: 'main', data: { usage: 'unavailable' } }),
+  ];
+  const r = evaluateSection(def, { events }, { nowMs: NOW });
+  const main = r.rows.find((x) => x.key === 'main'); const col = (n) => main.vals[r.cols.indexOf(n)];
+  assert.equal(col('ms'), 150); assert.equal(col('token'), 25);
 });

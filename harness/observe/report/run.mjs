@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { REPO_DIR, workspaceRoot } from '../../core/io/paths.mjs';
 import { guardWrite } from '../../core/io/storage.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
+import { detectPatterns } from '../../evolve/loop/patterns.mjs';
 import { readEvents } from '../ledger/job.mjs';
 import { registeredExtRoots } from '../ledger/sources.mjs';
 import { readLedger, ledgerFile, ledgerDir } from '../ledger/ledger.mjs';
@@ -42,7 +43,8 @@ export async function buildReport(opts = {}) {
   const baseline = opts.baseline !== undefined ? opts.baseline : readJ(baselineFile(opts.dataOpts));
   const inventory = opts.inventory !== undefined ? opts.inventory : await loadInventory(opts.hubDir || safeRoot());
   const all = { events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
-    candidatesFn: (events, nowIso) => failureCandidates(events, nowIso) };
+    // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
+    candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir: opts.hubDir || safeRoot() };
   const results = sections.map((d) => evaluateSection(d, all, { nowMs, ctx }));
   const truncated = ev.truncated || loaded.truncated || null;
