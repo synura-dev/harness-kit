@@ -6,15 +6,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { validateHookModule, validateHookResult } from '../core/config/shape.mjs';
-import approval, { loadApproval } from './approval/hook.mjs';
 import bashGuard from './bash-guard/hook.mjs';
 import guard, { load as loadGuard } from './guard/hook.mjs';
 import modelPolicy, { DEFAULTS as MP_DEFAULTS } from './model-policy/hook.mjs';
-import verifyGate from './verify-gate/hook.mjs';
 import procOrphans, { DEFAULTS as PO_DEFAULTS } from './proc-orphans/hook.mjs';
 import worktree, { DEFAULTS as WT_DEFAULTS } from './worktree/hook.mjs';
 
-const MODULES = { approval, 'bash-guard': bashGuard, guard, 'model-policy': modelPolicy, 'verify-gate': verifyGate, 'proc-orphans': procOrphans, worktree };
+const MODULES = { 'bash-guard': bashGuard, guard, 'model-policy': modelPolicy, 'proc-orphans': procOrphans, worktree };
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'hook-std-'));
 const files = (d) => (fs.existsSync(d) ? fs.readdirSync(d, { recursive: true }).filter((f) => fs.statSync(path.join(d, f)).isFile()) : []);
@@ -38,12 +36,8 @@ test('handle(write:false) khong ghi file, tra records hop le', async () => {
     const mpCfg = { ...MP_DEFAULTS, roles: { verifier: { model: 'haiku' } } };
     const ctx = { write: false, env };
 
-    const a = await approval.handle('PreToolUse', bash('git push --force origin main'), { ...ctx, config: loadApproval().config, auditRoot: path.join(dir, 'audit') });
-    expect(a.decision).toBe('deny');
-    expect(a.records[0].sink).toBe('gate');
-    expect(validateHookResult(a)).toEqual([]);
 
-    const g = await guard.handle('PreToolUse', bash('git push --force origin main'), { ...ctx, config: { ...loadGuard().config, logFile: guardLog } });
+    const g = await guard.handle('PreToolUse', bash('echo ' + 'a'.repeat(100001)), { ...ctx, config: { ...loadGuard().config, logFile: guardLog } });
     expect(g.decision).toBe('deny');
     expect(g.records[0].sink).toBe('guard');
     expect(validateHookResult(g)).toEqual([]);
@@ -55,9 +49,6 @@ test('handle(write:false) khong ghi file, tra records hop le', async () => {
     expect(m.records[0].sink).toBe('gate');
     expect(validateHookResult(m)).toEqual([]);
 
-    const v = await verifyGate.handle('Stop', null, { ...ctx, root: path.join(dir, 'audit') });
-    expect(v.records[0].sink).toBe('gate');
-    expect(validateHookResult(v)).toEqual([]);
 
     const w = await worktree.handle('WorktreeCreate', {}, { ...ctx, cfg: WT_DEFAULTS });
     expect(w).toMatchObject({ decision: 'deny', block: true });
@@ -85,7 +76,7 @@ test('handle mac dinh (write khong phai false) van tu ghi nhu cu: guard ghi nhat
   const dir = tmp();
   try {
     const logFile = path.join(dir, 'g.jsonl');
-    const r = await guard.handle('PreToolUse', bash('git push --force origin main'), { config: { ...loadGuard().config, logFile } });
+    const r = await guard.handle('PreToolUse', bash('echo ' + 'a'.repeat(100001)), { config: { ...loadGuard().config, logFile } });
     expect(r.records.length).toBeGreaterThan(0);
     expect(fs.existsSync(logFile)).toBe(true);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }

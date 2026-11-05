@@ -53,7 +53,8 @@ const bash = (command, extra = {}) => JSON.stringify({ hook_event_name: 'PreTool
 const agent = (ti) => JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 'eq1', cwd: ROOT, tool_name: 'Agent', tool_input: ti });
 const pre = (permissionDecision, extra = {}) => ({ hookSpecificOutput: { hookEventName: 'PreToolUse', ...(permissionDecision ? { permissionDecision } : {}), ...extra } });
 
-const GUARD_PUSH = 'guard[git-force-push]: Cam git push --force/-f/--force-with-lease/--mirror/--delete/+refspec/:nhanh (ghi de/xoa lich su tu xa). Hoi human, khong tu push. / Destructive git push blocked; ask the human.';
+const GUARD_LONG = 'guard[command-too-long]: Lenh qua dai (> maxCommandChars), khong the kiem; chia nho. / Command too long to inspect; split it.';
+const LONG_CMD = 'echo ' + 'a'.repeat(100001);
 
 /** Chay dispatcher cho 1 stdin; so voi golden {json, sa}. */
 function check(event, input, golden, { only, seed } = {}) {
@@ -78,9 +79,9 @@ test('PreToolUse Bash: da co timeout -> {} (khong y kien)', () => {
   check('PreToolUse', bash('ls', { timeout: 5000 }), { json: {}, sa: ['tool|PreToolUse|Bash'] });
 }, 60000);
 
-test('PreToolUse Bash: force push -> deny (guard); approval khong chay sau deny', () => {
-  const r = check('PreToolUse', bash('git push --force origin main'), { json: pre('deny', { permissionDecisionReason: GUARD_PUSH }), sa: ['gate|approval:git-force-push:deny', 'tool|PreToolUse|Bash'] });
-  expect(fs.readFileSync(r.env.GUARD_LOG_FILE, 'utf8')).toContain('git-force-push'); // nhat ky guard di qua records, ghi 1 lan
+test('PreToolUse Bash: lenh qua dai -> deny (guard)', () => {
+  const r = check('PreToolUse', bash(LONG_CMD), { json: pre('deny', { permissionDecisionReason: GUARD_LONG }), sa: ['tool|PreToolUse|Bash'] });
+  expect(fs.readFileSync(r.env.GUARD_LOG_FILE, 'utf8')).toContain('command-too-long'); // nhat ky guard di qua records, ghi 1 lan
 }, 60000);
 
 test('PreToolUse Bash: python - (heredoc) -> deny (bash-guard)', () => {
@@ -198,7 +199,7 @@ test('su kien la / stdin rong -> {} exit 0', () => {
 
 test('tham so thu hai = loc module (guard rieng)', () => {
   const b = sandbox();
-  const r = runNew('PreToolUse', bash('git push --force origin main'), b.env, 'guard');
+  const r = runNew('PreToolUse', bash(LONG_CMD), b.env, 'guard');
   expect(parse(r.stdout).hookSpecificOutput.permissionDecision).toBe('deny');
   const r2 = runNew('PreToolUse', bash('ls'), b.env, 'guard');
   expect(parse(r2.stdout)).toEqual({});

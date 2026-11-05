@@ -15,15 +15,15 @@ const run = (cmd) => {
   const r = spawnSync(process.execPath, [NEW, 'PreToolUse'], { input: p, env: ENV, encoding: 'utf8', timeout: 30000 });
   return JSON.parse(r.stdout);
 };
-const FP = ['git', 'push', '--' + 'force', 'origin', 'main'].join(' ');
+const FP = 'echo ' + 'a'.repeat(100001); // guard con chan lenh qua dai; chan cung do quyen native
 
 const DENY = [
-  [FP, /git-force-push/],
+  [FP, /command-too-long/],
 ];
 const ALLOW = ['echo hi', 'git status', 'rm file.txt'];
 
 for (const [cmd, why] of DENY) {
-  test(`agy deny: ${cmd}`, () => {
+  test(`agy deny: ${cmd.slice(0, 20)}... (${cmd.length} ky tu)`, () => {
     const o = run(cmd);
     expect(o.decision).toBe('deny');
     expect(o.reason).toMatch(why);
