@@ -1,10 +1,10 @@
 // Playbook run: executor chinh, persist log, format ket qua, prune data/play.
 import fs from 'node:fs';
 import path from 'node:path';
-import { workspaceRoot, isInside, dataRoot } from '../../../core/io/paths.mjs';
-import { guardWrite, dataPathFor } from '../../../core/io/storage.mjs';
-import { dataReadRoots } from '../../../core/registry/data-registry.mjs';
-import { loadConfig } from '../../../core/config/config.mjs';
+import { workspaceRoot, isInside, dataRoot } from '../../../../harness/core/io/paths.mjs';
+import { guardWrite, dataPathFor } from '../../../../harness/core/io/storage.mjs';
+import { dataReadRoots } from '../../../../harness/core/registry/data-registry.mjs';
+import { loadConfig } from '../../../../harness/core/config/config.mjs';
 import { scriptOutsideHub } from './policy.mjs';
 import { DEFAULT_LIMITS, EXIT, RETENTION_DAYS, CAPTURE_SAFE, resolveParams, subst, buildArgv } from './schema.mjs';
 import { resolveSpawn, execStep, summarizeOutput, runCapture, clip } from './exec.mjs';

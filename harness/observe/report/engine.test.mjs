@@ -41,7 +41,7 @@ test('muc sai source -> loi, khong nap', () => {
 });
 
 test('per_session theo actor + so voi tuan truoc', () => {
-  const def = { id: 'k', source: 'audit', filter: { tool: 'Bash', target: { regex: 'harness tasks' } }, group_by: ['actor'], metric: 'per_session', window_days: 7, compare: 'prev_window', format: 'table' };
+  const def = { id: 'k', source: 'audit', filter: { tool: 'Bash', target: ['harness tasks'] }, group_by: ['actor'], metric: 'per_session', window_days: 7, compare: 'prev_window', format: 'table' };
   const events = [ev({ target: 'harness tasks', sid: 'a' }), ev({ target: 'harness tasks', sid: 'a' }), ev({ target: 'ls', sid: 'b' }),
     ev({ ts: ago(10), target: 'harness tasks', sid: 'c' })];
   const r = evaluateSection(def, { events }, { nowMs: NOW });
@@ -51,8 +51,8 @@ test('per_session theo actor + so voi tuan truoc', () => {
 });
 
 test('per_task: chi tinh nhom co task_id; phien khong co task_id bao rieng (per_session_notask)', () => {
-  const def = { id: 'i', source: 'audit', filter: { any: [{ signal: 'correction' }, { event: 'PermissionRequest' }] }, metric: ['per_task', { as: 'tong', metric: 'count' }], window_days: 7, format: 'kpi' };
-  const events = [ev({ sid: 'a', data: { signal: 'correction' } }), ev({ sid: 'b', event: 'PermissionRequest' }), ev({ sid: 'c' }),
+  const def = { id: 'i', source: 'audit', filter: { signal: 'correction' }, metric: ['per_task', { as: 'tong', metric: 'count' }], window_days: 7, format: 'kpi' };
+  const events = [ev({ sid: 'a', data: { signal: 'correction' } }), ev({ sid: 'b', data: { signal: 'correction' } }), ev({ sid: 'c' }),
     ev({ sid: 'd', data: { task_id: 't9', signal: 'correction' } }), ev({ sid: 'd', data: { task_id: 't9' } }), ev({ sid: 'e', data: { task_id: 't8' } })];
   const r = evaluateSection({ ...def, metric: ['per_task', { as: 'ns', metric: 'per_session_notask' }, { as: 'tong', metric: 'count' }] }, { events }, { nowMs: NOW });
   assert.equal(r.rows[0].vals[0], 0.5); // 1 can thiep co task_id / 2 task (t9,t8)

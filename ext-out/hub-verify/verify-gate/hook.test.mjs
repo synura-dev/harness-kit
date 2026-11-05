@@ -5,7 +5,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { DEFAULTS, run, sidOf, handle, MODULE } from './hook.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../../harness/core/config/shape.mjs';
 import { decide, scopeEvents, kindOf, outcomeOf } from './gate.mjs';
 
 const HOOK = path.join(path.dirname(fileURLToPath(import.meta.url)), 'hook.mjs');

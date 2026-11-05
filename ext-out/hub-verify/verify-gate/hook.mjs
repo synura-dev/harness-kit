@@ -5,11 +5,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadHookConfig } from '../../core/config/config.mjs';
-import { auditRoot } from '../../core/audit/audit-write.mjs';
-import { dataRoot } from '../../core/io/paths.mjs';
-import { resolveDataRel } from '../../core/registry/data-registry.mjs';
-import { recordGate } from '../../core/audit/gate-event.mjs';
+import { loadHookConfig } from '../../../harness/core/config/config.mjs';
+import { auditRoot } from '../../../harness/core/audit/audit-write.mjs';
+import { dataRoot } from '../../../harness/core/io/paths.mjs';
+import { resolveDataRel } from '../../../harness/core/registry/data-registry.mjs';
+import { recordGate } from '../../../harness/core/audit/gate-event.mjs';
 import { decide, scopeEvents, runnerSpec, GATE_HOOK, checkRouteReport } from './gate.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
