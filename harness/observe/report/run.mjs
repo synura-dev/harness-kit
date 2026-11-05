@@ -8,6 +8,7 @@ import { guardWrite } from '../../core/io/storage.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { detectPatterns } from '../../evolve/loop/patterns.mjs';
 import { readEvents } from '../ledger/job.mjs';
+import { listRegistered } from '../../core/ext/ext-trust.mjs';
 import { registeredExtRoots } from '../ledger/sources.mjs';
 import { readLedger, ledgerFile, ledgerDir } from '../ledger/ledger.mjs';
 import { loadSections, evaluateSection, renderReport, kpiSnapshot } from './engine.mjs';
@@ -32,10 +33,10 @@ export async function loadInventory(hubDir) {
   } catch { return undefined; }
 }
 /** Ext <name> co dang ky trong hub khong? Chung: khop ten trong thu muc ext hoac khoa trong manifest.json cua ext. Loi -> false. */
-export function hasExt(hubDir, name) {
-  const esc = String(name).replace(/[^\w.-]/g, '');
-  if (!esc) return false;
-  try { return registeredExtRoots(hubDir).some((r) => { try { return path.basename(r) === esc || fs.readFileSync(path.join(r, 'manifest.json'), 'utf8').includes('"' + esc + '"'); } catch { return false; } }); } catch { return false; }
+export function hasExt(hubDir, name, list = listRegistered) {
+  const id = String(name);
+  if (!id) return false;
+  try { return list({ workspace: hubDir }).some((e) => e && e.id === id); } catch { return false; }
 }
 /**
  * Cot KPI khai bao nguon bang `requires` (vd "ext:<ten>"). Nguon khong co -> hien "khong co nguon", khong 0/im.
@@ -94,7 +95,7 @@ export function putObsidian(markdown, { run = spawnSync, cli = path.join(REPO_DI
   } catch (e) { return { ok: false, reason: e.message }; }
 }
 
-const isoWeek = (ms) => { const d = new Date(ms); const t = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); const dn = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - dn); const y = t.getUTCFullYear(); return y + '-W' + String(Math.ceil(((t - Date.UTC(y, 0, 1)) / 86400e3 + 1) / 7)).padStart(2, '0'); };
+export const isoWeek = (ms) => { const d = new Date(ms); const t = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate())); const dn = t.getUTCDay() || 7; t.setUTCDate(t.getUTCDate() + 4 - dn); const y = t.getUTCFullYear(); return y + '-W' + String(Math.ceil(((t - Date.UTC(y, 0, 1)) / 86400e3 + 1) / 7)).padStart(2, '0'); };
 export const reportsDir = (o) => path.join(ledgerDir(o), 'reports');
 /** Luon ghi bao cao .md theo tuan vao thu muc du lieu harness (ghi de cung tuan); giu toi da keepFiles file moi nhat. Tra duong dan hoac null. */
 export function writeReportFile(markdown, { dataOpts, nowMs = Date.now(), keep = REPORT.keepFiles } = {}) {
@@ -108,7 +109,7 @@ export function writeReportFile(markdown, { dataOpts, nowMs = Date.now(), keep =
   } catch { return null; }
 }
 
-export const markRun = (dataOpts, nowMs = Date.now()) => writeJ(stateFile(dataOpts), { lastRun: nowMs });
+export const markRun = (dataOpts, nowMs = Date.now(), error = null) => writeJ(stateFile(dataOpts), error ? { lastRun: nowMs, error: String(error).slice(0, 200) } : { lastRun: nowMs });
 
 /** Kick hang tuan (<= 1 lan / 7 ngay, khoa nhe nhu kickJob cua ledger). Tra true neu da spawn. */
 export function kickReport(dataOpts, ctx = {}, nowMs = Date.now()) {
