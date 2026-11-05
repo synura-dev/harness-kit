@@ -22,7 +22,9 @@ export function readInject(dataOpts, lim = INJECT_LIMITS) {
     for (const n of fs.readdirSync(dir).filter((x) => x.endsWith('.md')).sort()) {
       if (out.length >= lim.maxLines) break;
       const body = readHead(path.join(dir, n), lim.maxFileBytes).split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('#')).join(' | ');
-      const line = body.replace(/[\u0000-\u001f\u007f-\u009f`<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, lim.perLine);
+      const pre = `inject (${OBSERVED_FRAME}): `;
+      const txt = cleanLine(safeText(body, lim.perLine), lim.perLine - pre.length);
+      const line = txt && pre + txt;
       if (!line || used + line.length > lim.maxChars) continue;
       out.push(line); used += line.length;
     }
