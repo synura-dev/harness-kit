@@ -263,7 +263,7 @@ export function unregisteredDirs(opts = {}) {
     const day = new Date().toISOString().slice(0, 10);
     const fresh = odd.filter((n) => w[n] !== day);
     if (fresh.length) {
-      process.stderr.write(`data-warn rule=unregistered path=${fresh.slice(0, 5).join(',')} key=${fresh[0]} detail="thu muc cap 1 la trong data/ (${fresh.length})" fix="harness data register <key> --class log"\n`);
+      process.stderr.write(`data-warn rule=unregistered path=${fresh.slice(0, 5).join(',')} key=${fresh[0]} detail="thu muc cap 1 la trong data/ (${fresh.length})" fix="them muc <key> vao observe/storage/registry.json"\n`);
       for (const n of fresh) w[n] = day;
       try { fs.mkdirSync(path.dirname(wf), { recursive: true }); const t = `${wf}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(w)); fs.renameSync(t, wf); } catch {}
     }

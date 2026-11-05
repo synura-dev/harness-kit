@@ -278,7 +278,7 @@ export function checkWrite(abs, opts = {}) {
     if (!entry) warn = { rule: 'unregistered', path: pth, key, detail: 'key chua dang ky trong registry', fix: `them data[] vao manifest ext (zone/class/retention)` };
     else {
       const miss = ['class', 'zone', 'owner'].filter((f) => !entry[f]);
-      if (miss.length) warn = { rule: 'missing-field', path: pth, key, detail: 'thieu ' + miss.join(','), fix: `harness data register ${key} --class log --owner <owner>` };
+      if (miss.length) warn = { rule: 'missing-field', path: pth, key, detail: 'thieu ' + miss.join(','), fix: `them muc ${key} vao observe/storage/registry.json` };
     }
     if (!warn) return { ok: true };
     return { ok: mode !== 'enforce', warn };

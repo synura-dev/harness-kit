@@ -1,5 +1,5 @@
 // harness/observe/views/data.mjs - retention du lieu: `observe data-prune [--yes] [--dir D] [--timeout-s N]` | `observe sizes [dir]` (xem sizes.mjs).
-// Mac dinh dry-run (chi bao); --yes moi xoa. Retention: events 30 ngay, digests 90, runs 14, baselines giu 10 ban moi nhat (contract.mjs).
+// Mac dinh dry-run (chi bao); --yes moi xoa. Retention: events 30 ngay, digests 90, runs 14, baselines giu 10 ban moi nhat (constants.mjs).
 // root bat buoc = workspaceRoot() (hoac cha cua data dir neu HUB_DATA_DIR ngoai hub); qua han -> dung em, in `truncated: timeout`.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

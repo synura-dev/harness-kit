@@ -1,4 +1,4 @@
-// Su kien chan/duyet co cau truc (gate|approval) dung chung moi hook (verify-gate, approval, guard...).
+// Su kien chan/duyet co cau truc (gate|approval) dung chung moi hook (guard, data-gate...).
 // Ghi envelope audit v2 vao <audit>/date=D/type=gate/<sid>.jsonl qua writeEnvelope. Fail-open: recordGate khong bao gio nem.
 // Khong ghi lenh tho: reason/target bi che secret + cat ngan; rule/hook la id an toan.
 import { writeEnvelope, auditRoot } from './audit-write.mjs';

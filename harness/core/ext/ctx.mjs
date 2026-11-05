@@ -157,7 +157,7 @@ export function buildCtx({ extId, extRoot = null, workspace = null, caps = ['wor
     const out = path.join(d.abs, ...segs);
     if (o.mode === 'read' && d.legacy && !fs.existsSync(out)) {
       const lo = path.join(dr, ...d.legacy.split('/'), ...segs);
-      if (fs.existsSync(lo)) { warnLegacy(key, d.legacy, `harness data mv ${d.legacy} ${d.rel} --yes`); return lo; }
+      if (fs.existsSync(lo)) { warnLegacy(key, d.legacy, `chuyen thu cong ${d.legacy} -> ${d.rel}`); return lo; }
     }
     return out;
   };

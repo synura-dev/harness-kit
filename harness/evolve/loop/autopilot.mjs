@@ -21,7 +21,7 @@ const H = 3600e3, DAY = 86400000;
 // ---- phan muc tat dinh ----
 export const LEVEL_BY_KIND = Object.freeze({ rule: 1, inject: 2, skill: 2, code: 2, delete: 2, gate: 2 });
 // Muc 0: cam tuyet doi (kem ke ca khi nguoi duyet qua hang: nguoi phai tu sua tay).
-const GATE_PATH = /(^|\/)(guard|approval|bash-guard|data-gate|model-policy|verify-gate)(\/|\.|-|$)|^harness\/(constrain|hooks)(\/|$)|^config\/(approval|verify-gate|guard|hub|model-policy|data-gate)/i;
+const GATE_PATH = /(^|\/)(guard|approval|bash-guard|data-gate|model-policy)(\/|\.|-|$)|^harness\/(constrain|hooks)(\/|$)|^config\/(approval|guard|hub|model-policy|data-gate)/i;
 const FORBIDDEN_KIND = /^(push|deploy|publish|release)$/i;
 const FORBIDDEN_TEXT = /\bgit\s+push\b|\bdeploy\b|\bnpm\s+publish\b|\bgh\s+release\b/i;
 

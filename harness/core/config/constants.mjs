@@ -1,6 +1,6 @@
 // Hop dong harness (T0): schema manifest/su kien/config, bang loai, luat import, tran chong rac.
 // Thuan: khong I/O, khong import ngoai core (khong cli/plugins/hooks/tools). Nguon: docs/HARNESS-DESIGN.md muc 2.
-// Ban rieng, KHONG export: contract.test cam contract.mjs co import; ban dung chung o core/io/paths.mjs.
+// Ban rieng, KHONG export: constants.test cam constants.mjs co import; ban dung chung o core/io/paths.mjs.
 const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
 /** Vai tro tang code: kernel lib / lenh kernel / cam bien / extension / cong cu. */
@@ -215,7 +215,7 @@ export const DUP_ALLOW = Object.freeze([
   { name: 'configFiles', files: ['harness/core/config/audit-config.mjs', 'harness/constrain/bash-guard/hook.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/worktree/hook.mjs'], reason: 'moi hook doc lap, tro dung hook.config cua chinh no (HERE khac nhau); fail-open, khong import module khac' },
   { name: 'decide', files: ['harness/constrain/bash-guard/hook.mjs', 'harness/constrain/guard/hook.mjs'], reason: 'khac luat: moi hook quyet dinh theo luat rieng; hook doc lap, fail-open, khong import hook khac' },
   { name: 'readStdin', files: ['harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs'], reason: 'moi hook tu doc stdin voi gioi han/timeout rieng (maxInputBytes, hardTimeoutMs); hook doc lap, fail-open' },
-  { name: 'isObj', files: ['harness/core/config/constants.mjs', 'harness/core/io/paths.mjs', 'harness/constrain/guard/hook.mjs'], reason: 'contract.mjs cam import (contract.test) nen giu ban rieng; hook guard doc lap, fail-open; ban dung chung o core/io/paths.mjs' },
+  { name: 'isObj', files: ['harness/core/config/constants.mjs', 'harness/core/io/paths.mjs', 'harness/constrain/guard/hook.mjs'], reason: 'constants.mjs cam import nen giu ban rieng; hook guard doc lap, fail-open; ban dung chung o core/io/paths.mjs' },
   { name: 'log', files: ['harness/constrain/guard/hook.mjs', 'harness/constrain/worktree/hook.mjs'], reason: 'ghi nhat ky rieng cua tung hook; hook doc lap, fail-open, khong import hook khac' },
   { name: 'rel', files: ['harness/core/checks/scan-input.mjs', 'harness/tools/adapters/_util.mjs'], reason: 'tools/adapters khong import core vi sync.test copy rieng tools/ (than ham giong het)' },
   { name: 'handle', files: ['harness/constrain/bash-guard/hook.mjs', 'harness/constrain/bash-guard/adapters/agy.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/worktree/hook.mjs', 'harness/observe/audit/audit.mjs', 'harness/observe/audit/adapters/agy.mjs'], reason: 'giao dien chung HOOK_MODULE handle(event, input, ctx) (+ adapter agy cung ten): moi module hook doc lap (cam import hook khac), dispatcher goi cung ten; vinh vien' },
