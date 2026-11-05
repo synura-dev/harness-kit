@@ -8,6 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 
 import { readJsonStdin } from '../../core/io/stdio.mjs';
+
+/** Don *.tmp mo coi cu hon 1h trong thu muc state (toi da 50 file/lan). Tra so file da xoa. */
+export function pruneTmp(dir, now = Date.now(), maxAgeMs = 3600e3, max = 50) {
+  let n = 0;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (n >= max) break;
+      if (!/\.tmp$/.test(f)) continue;
+      try { const fp = path.join(dir, f); const st = fs.statSync(fp); if (st.isFile() && now - st.mtimeMs > maxAgeMs) { fs.unlinkSync(fp); n++; } } catch {}
+    }
+  } catch {}
+  return n;
+}
 const isEntry = (u) => !!process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(u);
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -74,14 +87,16 @@ export async function scanChildren(cfg, ctx = {}) {
   const { listProcesses } = await import('../../core/runtime/proc-list.mjs');
   const { procs } = listProcesses({ timeoutMs: cfg.timeoutMs });
   if (ttl > 0 && ctx.cache !== false) {
+    let tmp = null;
     try {
       let okW = true; try { okW = (await import('../../core/io/storage.mjs')).guardWrite(file).ok; } catch {}
       if (!okW) throw new Error('data-enforce');
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      const tmp = file + '.' + process.pid + '.tmp';
+      pruneTmp(path.dirname(file));
+      tmp = file + '.' + process.pid + '.tmp';
       fs.writeFileSync(tmp, JSON.stringify({ ts: Date.now(), procs: procs.map((p) => ({ ...p, cmd: String(p.cmd || '').slice(0, 300) })) }));
       fs.renameSync(tmp, file);
-    } catch {}
+    } catch { if (tmp) try { fs.unlinkSync(tmp); } catch {} }
   }
   return findChildren(procs, process.pid, cfg);
 }

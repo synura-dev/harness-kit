@@ -11,7 +11,7 @@ const mk = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-')); fs.m
 const cfg = { enabled: true, timeoutMs: 300, scanTimeoutMs: 300, cacheMaxAgeHours: 24, allowlist: [] };
 const W = { rule: 'stray', path: 'a/b', key: 'k1', detail: 'd', fix: 'f' };
 const put = (d, o) => fs.writeFileSync(path.join(d, '.state', 'data-scan.json'), JSON.stringify(o));
-const ss = (d, sid, extra = {}) => handle('SessionStart', { session_id: sid }, { cfg, env: { HUB_DATA_DIR: d }, ...extra });
+const ss = (d, sid, extra = {}) => handle('SessionStart', { session_id: sid }, { cfg, env: { HUB_DATA_DIR: d, HOOK_DATA_CHECK_DOCTOR: '0' }, ...extra });
 
 test('khong vi pham im lang', async () => {
   const d = mk(); put(d, { ts: new Date().toISOString(), warnings: [] });
