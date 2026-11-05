@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { auditField, matchFilter } from '../ledger/engine.mjs';
+import { isHookRun } from '../../core/audit/signals.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS_DIR = path.join(HERE, 'defaults');
@@ -55,9 +56,18 @@ export function loadSections({ defaultsDir = DEFAULTS_DIR, projectDir = null, ti
 const dig = (o, p) => String(p).split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
 const num = (v) => { const n = Array.isArray(v) ? Number(v[v.length - 1]) : Number(v); return Number.isFinite(n) ? n : null; };
 /** gia tri so tu danh sach truong 'a|b.c' (lay truong dau co gia tri). */
-function numField(get, spec) { for (const f of String(spec).split('|')) { const v = num(get(f)); if (v != null) return v; } return null; }
+// 'a|b' = truong dau co gia tri; 'a+b' = tong cac truong co gia tri (null neu khong co truong nao).
+function numField(get, spec) {
+  for (const alt of String(spec).split('|')) {
+    let sum = null;
+    for (const f of alt.split('+')) { const v = num(get(f)); if (v != null) sum = (sum ?? 0) + v; }
+    if (sum != null) return sum;
+  }
+  return null;
+}
 
-const taskOf = (rec) => { const d = rec.data || {}; return rec.task_id ?? d.task_id ?? d.task ?? rec.sid ?? rec.session_id ?? null; };
+// task = task_id that; khong con rơi ve sid (phien khong co task_id duoc bao rieng bang per_session_notask).
+const taskOf = (rec) => { const d = rec.data || {}; return rec.task_id ?? d.task_id ?? d.task ?? null; };
 
 function toRecs(source, inputs, ctx) {
   if (source === 'audit') return (inputs.events || []).map((r) => ({ get: (k) => (k.includes('.') ? dig(r, k) : auditField(r, k, ctx)), sid: r.sid || r.session_id || null, task: taskOf(r), ts: r.ts, n: 1 }));
@@ -81,7 +91,12 @@ function colValue(col, A, M, win) {
     case 'count': return cnt;
     case 'sessions': return sids(M) || M.reduce((s, r) => s + (r.sess || 0), 0);
     case 'per_session': { const den = (win.audit ? sids(A) : win.sessions) || 0; if (!den) return null; return (arg ? M.reduce((s, r) => s + (numField(r.get, arg) || 0), 0) : cnt) / den; }
-    case 'per_task': { const den = (win.audit ? tasks(A) : win.tasks) || 0; return den ? cnt / den : null; }
+    case 'per_task': { const den = (win.audit ? tasks(A) : win.tasks) || 0; return den ? M.filter((r) => r.task != null).length / den : null; }
+    case 'per_session_notask': { // can thiep / phien KHONG co task_id
+      const withTask = new Set(A.filter((r) => r.task != null).map((r) => r.sid));
+      const lacking = new Set(A.map((r) => r.sid).filter((s) => s != null && !withTask.has(s)));
+      return lacking.size ? M.filter((r) => lacking.has(r.sid)).length / lacking.size : null;
+    }
     case 'per_1000': return win.events ? (cnt / win.events) * 1000 : null;
     case 'sum': return M.reduce((s, r) => s + (numField(r.get, arg) || 0), 0);
     case 'last': { let best = null; for (const r of M) { const v = r.get(arg); const x = Array.isArray(v) ? v[v.length - 1] : v; if (x != null && (best == null || String(x) > String(best))) best = x; } return best; }
@@ -123,7 +138,8 @@ const inWin = (ts, from, to) => { const t = Date.parse(ts); return Number.isFini
 /** Dau vao cho cua so [from,to): events loc theo ts, candidates tinh lai tu events, ledger loc theo last_seen. */
 export function windowInputs(def, all, from, to, nowIso) {
   const days0 = !(def.window_days > 0);
-  const events = days0 ? (all.events || []) : (all.events || []).filter((e) => e && inWin(e.ts, from, to));
+  // HookRun khong phai tool call: bo khoi moi so lieu (ke ca mau so per_1000).
+  const events = (days0 ? (all.events || []) : (all.events || []).filter((e) => e && inWin(e.ts, from, to))).filter((e) => !isHookRun(e));
   const inputs = { events, inventory: all.inventory };
   if (def.source === 'candidates') inputs.candidates = all.candidatesFn ? all.candidatesFn(events, nowIso) : (all.candidates || []).filter((c) => days0 || inWin(c.last_ts, from, to));
   if (def.source === 'ledger') inputs.ledger = days0 ? all.ledger || [] : (all.ledger || []).filter((e) => inWin(e.last_seen, from, to));

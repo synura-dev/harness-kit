@@ -9,27 +9,37 @@ import { loadAuditConfig, auditRoot } from '../../core/config/audit-config.mjs';
 import { fmtDur as fmtDurCore } from '../../core/io/fmt.mjs';
 import { ensureDataIgnore } from '../../core/io/paths.mjs';
 import { listFiles, nodeRows } from './query/query.mjs';
+import { isHookRun } from '../../core/audit/signals.mjs';
 import { replaceReason, isReadOnly, normalize, countDenied } from '../../core/agy/hints.mjs';
 
 const durCell = (ms) => (ms >= 0 ? fmtDurCore(ms) : '');
 const cell = (v) => String(v ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ');
 
-// rows (toRow format) -> one aggregate per (session, agent). tokens = max cumulative (Stop/SubagentStop), not a sum.
+// rows (toRow format) -> one aggregate per (session, agent). HookRun bi bo. tokens: usage_mode 'delta' -> cong, con lai (cumulative/khong ro) -> max; tong = max(cumulative) + sum(delta).
 export function aggregate(rows, { includePhantom = false } = {}) {
   const g = new Map();
   for (const r of rows) {
+    if (isHookRun(r)) continue; // HookRun khong phai tool call / phien lam viec
     const aid = r.agent_id || 'main';
     const k = `${r.session_id}\u0000${aid}`;
     let a = g.get(k);
-    if (!a) g.set(k, (a = { session: r.session_id, agent: r.agent_type || (r.agent_id ? r.agent_id : 'main'), agent_id: aid, project: r.project, tools: 0, errors: 0, tin: null, tout: null, model: null, t0: null, t1: null, stopOnly: true, typed: false }));
+    if (!a) g.set(k, (a = { session: r.session_id, agent: r.agent_type || (r.agent_id ? r.agent_id : 'main'), agent_id: aid, project: r.project, tools: 0, errors: 0, tin: null, tout: null, model: null, t0: null, t1: null, stopOnly: true, typed: false, cin: null, cout: null, din: 0, dout: 0, hasD: false }));
     if (r.event !== 'SubagentStop') a.stopOnly = false;
     if (r.agent_type) a.typed = true;
     if (r.project && !a.project) a.project = r.project;
     if (r.model) a.model = r.model;
     if (r.event === 'PostToolUse' || r.event === 'PostToolUseFailure') a.tools++;
     if (r.ok === false) a.errors++;
-    if (r.in_tok != null) a.tin = Math.max(a.tin ?? 0, r.in_tok);
-    if (r.out_tok != null) a.tout = Math.max(a.tout ?? 0, r.out_tok);
+    if (r.usage_mode === 'delta') {
+      a.hasD = true;
+      if (r.in_tok != null) a.din += r.in_tok;
+      if (r.out_tok != null) a.dout += r.out_tok;
+      if (r.in_tok != null) a.tin = (a.cin ?? 0) + a.din;
+      if (r.out_tok != null) a.tout = (a.cout ?? 0) + a.dout;
+    } else {
+      if (r.in_tok != null) { a.cin = Math.max(a.cin ?? 0, r.in_tok); a.tin = a.cin + a.din; }
+      if (r.out_tok != null) { a.cout = Math.max(a.cout ?? 0, r.out_tok); a.tout = a.cout + a.dout; }
+    }
     const t = Date.parse(r.ts);
     if (t === t) { a.t0 = a.t0 === null ? t : Math.min(a.t0, t); a.t1 = a.t1 === null ? t : Math.max(a.t1, t); }
   }

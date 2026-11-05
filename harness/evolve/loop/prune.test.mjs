@@ -82,3 +82,26 @@ test('pruneCandidates doc audit that (gateway + tool) va timeout', async () => {
   assert.equal(r.sources.command_gateway, 1);
   assert.equal(r.truncated, null);
 });
+
+test('countUsage: subagent khong dem doi (PreToolUse + su kien agent_id); gateway (default) khong tao khoa gia', () => {
+  const inv = { commands: [], hooks: [], skills: [], agents: [], rules: [] };
+  const ev = [
+    { ts: '2026-11-05T01:00:00Z', event: 'PreToolUse', tool: 'Agent', data: { subagent_type: 'scout' }, sid: 's' },
+    { ts: '2026-11-05T01:00:05Z', event: 'PostToolUse', tool: 'Read', agent_type: 'scout', agent_id: 'a1', sid: 's' },
+    { ts: '2026-11-05T01:00:06Z', event: 'PostToolUse', tool: 'Read', agent_type: 'scout', agent_id: 'a1', sid: 's' },
+    { gw: true, ts: '2026-11-05T01:00:07Z', domain: 'tasks', cmd: '(default)' },
+  ];
+  const { usage } = countUsage(ev, inv);
+  expect(usage.agent.get('scout').count).toBe(1);
+  expect(usage.command.get('tasks.(default)')).toBeUndefined();
+});
+
+test('writeState: atomic, khong de lai file tmp', async () => {
+  const { writeState, readState } = await import('./prune.mjs');
+  const fs = await import('node:fs'); const os = await import('node:os'); const pth = await import('node:path');
+  const d = fs.mkdtempSync(pth.join(os.tmpdir(), 'pst-')); const f = pth.join(d, 'sub', 'prune-state.json');
+  writeState(f, { a: 1 }); writeState(f, { a: 2 });
+  expect(readState(f)).toEqual({ a: 2 });
+  expect(fs.readdirSync(pth.dirname(f)).filter((n) => n.endsWith('.tmp')).length).toBe(0);
+  fs.rmSync(d, { recursive: true, force: true });
+});

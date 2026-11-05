@@ -1,36 +1,62 @@
 import crypto from 'node:crypto';
-import { messageFingerprint } from './normalize-message.mjs';
+import { messageFingerprint, normalizeFull, TRUNC_PREFIX_MIN } from './normalize-message.mjs';
+import { isHookRun } from './signals.mjs';
 import { sanitizeHintPath, normalizeErrorSignature, extractErrorDetails, buildRegexPattern } from './signature.mjs';
 
 function hashString(str) {
   return crypto.createHash('sha256').update(String(str)).digest('hex').slice(0, 12);
 }
 
-// Nhom su kien ok=false theo error_fp (hoac chu ky chuan hoa); >=2 lan -> repeated_failure.
+// Nhom su kien ok=false theo thong diep chuan hoa DAY DU (+ error_fp luu san); >=2 lan -> repeated_failure.
+// Khoa chinh tac cua nhom = fp thong diep nho nhat theo thu tu tu dien -> id/fp khong phu thuoc thu tu su kien / cua so truot.
 export function repeatedFailureCandidates(events, nowIso) {
   const failedSigCounts = new Map();
   const parent = new Map();
   const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
+  const union = (a, b) => { const ra = find(a), rb = find(b); if (ra !== rb) parent.set(rb, ra); };
+  const info = new Map(); // node mfp -> {tool, full, trunc}
   const pending = [];
   for (const ev of events) {
+    if (isHookRun(ev)) continue; // HookRun khong phai tool call
     if (ev.ok === false) {
       const d = ev.data && typeof ev.data === 'object' ? ev.data : {};
       const tool = ev.tool || d.tool || 'unknown';
-      const norm = normalizeErrorSignature(tool, extractErrorDetails(ev));
+      const details = extractErrorDetails(ev);
+      const norm = normalizeErrorSignature(tool, details);
       const stored = typeof d.error_fp === 'string' && d.error_fp ? d.error_fp : null;
-      // Khoa gom: fp tinh lai tu thong diep da chuan hoa (gop id/duong dan); khong co thong diep -> fp luu san / chu ky.
-      const recomputed = messageFingerprint(extractErrorDetails(ev), tool);
-      const fp = stored || recomputed; // fp hien thi: fp luu cua su kien dau (tuong thich nguoc)
-      // Gop theo union-find: su kien chung fp luu HOAC chung fp thong diep chuan hoa thi cung nhom.
+      const nm = normalizeFull(details);
+      const recomputed = nm.text ? messageFingerprint(details, tool) : null;
       const nodes = [stored && `fp:${stored}`, recomputed && `mfp:${recomputed}`].filter(Boolean);
       for (const n of nodes) { if (!parent.has(n)) parent.set(n, n); }
-      for (const n of nodes.slice(1)) parent.set(find(n), find(nodes[0]));
-      pending.push({ ev, nodes, fp, norm });
+      for (const n of nodes.slice(1)) union(nodes[0], n);
+      if (recomputed && !info.has(`mfp:${recomputed}`)) info.set(`mfp:${recomputed}`, { tool, full: nm.text, trunc: nm.truncated });
+      pending.push({ ev, nodes, norm, stored, recomputed });
     }
   }
-  for (const { ev, nodes, fp, norm } of pending) {
-    const key = nodes.length ? find(nodes[0]) : norm.signature;
-    if (!failedSigCounts.has(key)) failedSigCounts.set(key, { count: 0, norm, fp, evs: [] });
+  // Ban bi cat "..." (tien to >= 80) gop voi ban day du cung tool co cung tien to.
+  const infos = [...info.entries()];
+  for (const [tn, t] of infos) {
+    if (!t.trunc || t.full.length < TRUNC_PREFIX_MIN) continue;
+    for (const [nn, n] of infos) if (nn !== tn && n.tool === t.tool && n.full.startsWith(t.full)) union(tn, nn);
+  }
+  const canon = new Map(); // root -> fp nho nhat
+  for (const { nodes, stored, recomputed } of pending) {
+    if (!nodes.length) continue;
+    const root = find(nodes[0]);
+    const c = recomputed || stored;
+    if (c && (!canon.has(root) || c < canon.get(root))) canon.set(root, c);
+  }
+  // uu tien fp thong diep (mfp) hon fp luu khi nhom co ca hai
+  const mfpMin = new Map();
+  for (const { nodes, recomputed } of pending) {
+    if (!nodes.length || !recomputed) continue;
+    const root = find(nodes[0]);
+    if (!mfpMin.has(root) || recomputed < mfpMin.get(root)) mfpMin.set(root, recomputed);
+  }
+  for (const { ev, nodes, norm } of pending) {
+    const root = nodes.length ? find(nodes[0]) : null;
+    const key = root ? (mfpMin.get(root) || canon.get(root) || root) : norm.signature;
+    if (!failedSigCounts.has(key)) failedSigCounts.set(key, { count: 0, norm, fp: key, evs: [] });
     const entry = failedSigCounts.get(key);
     entry.count++;
     entry.evs.push(ev);

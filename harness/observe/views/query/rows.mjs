@@ -26,6 +26,7 @@ export function toRow(e, type, date) {
     status: e.status ?? null, model: e.model ?? null, summary: e.summary ?? null,
     origin: e.origin === 'noise' || e.origin === 'work' || e.origin === 'dispatch' ? e.origin : originOf(e.cwd, noiseCfg()), // older lines: computed from cwd
     phantom: d.phantom === true,
+    usage_mode: d.usage_mode === 'delta' || d.usage_mode === 'cumulative' ? d.usage_mode : null, // tokens_in/out la delta hay cumulative
   };
 }
 

@@ -53,3 +53,54 @@ test('buildEnvelope Stop: data.usage la object cua phan moi; Stop sau chi cong p
   expect(e2.data.usage).toMatchObject({ output: 8, msgs: 1 });
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+test('readUsageDelta: offset tinh theo byte, tieng Viet cat giua ky tu khong lech', () => {
+  const d = mk(); const f = path.join(d, 'vi.jsonl'); const root = path.join(d, 'audit');
+  const vi = (id, o) => JSON.stringify({ type: 'assistant', uuid: id, message: { id, usage: { input_tokens: 1, output_tokens: o }, content: [{ text: 'Xin chào các bạn, đây là tiếng Việt ưu tiên' }] } });
+  fs.writeFileSync(f, Buffer.concat([Buffer.from(vi('a', 2) + '\n'), Buffer.from(vi('b', 3), 'utf8').subarray(0, 60)])); // dong b cat giua ky tu da byte
+  const r1 = readUsageDelta(f, { root });
+  expect(r1.msgs).toBe(1); expect(r1.output).toBe(2);
+  const full = Buffer.from(vi('b', 3) + '\n' + vi('c', 4) + '\n');
+  fs.writeFileSync(f, Buffer.concat([Buffer.from(vi('a', 2) + '\n'), full]));
+  const r2 = readUsageDelta(f, { root });
+  expect(r2.msgs).toBe(2); expect(r2.output).toBe(7);
+  expect(readUsageDelta(f, { root }).msgs).toBe(0);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('readUsageDelta: nhay vao giua ky tu UTF-8 (qua tran) khong nem, bo dong dau', () => {
+  const d = mk(); const f = path.join(d, 'big.jsonl'); const root = path.join(d, 'audit');
+  fs.writeFileSync(f, Buffer.concat([Buffer.from('ế'.repeat(Math.ceil(USAGE_TAIL.maxBytes / 3) + 5) + '\n'), Buffer.from(line('z', 6))]));
+  const r = readUsageDelta(f, { root });
+  expect(r.truncated).toBe(true); expect(r.msgs).toBe(1); expect(r.output).toBe(6);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('offset moi transcript mot file: Stop va SubagentStop khong de nhau, ghi atomic', () => {
+  const d = mk(); const root = path.join(d, 'audit');
+  const f1 = path.join(d, 'main.jsonl'); const f2 = path.join(d, 'agent.jsonl');
+  fs.writeFileSync(f1, line('a', 3)); fs.writeFileSync(f2, line('b', 4));
+  expect(readUsageDelta(f1, { root }).msgs).toBe(1);
+  expect(readUsageDelta(f2, { root }).msgs).toBe(1);
+  fs.appendFileSync(f1, line('c', 5));
+  expect(readUsageDelta(f2, { root }).msgs).toBe(0); // agent khong lam mat offset cua main
+  const r = readUsageDelta(f1, { root });
+  expect(r.msgs).toBe(1); expect(r.output).toBe(5); // khong tinh doi
+  const files = fs.readdirSync(path.join(root, '.state', 'usage-offsets'));
+  expect(files.filter((n) => n.endsWith('.json')).length).toBe(2);
+  expect(files.some((n) => n.endsWith('.tmp'))).toBe(false);
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('buildEnvelope Stop: usage_mode = cumulative khi doc duoc ca transcript, delta khi qua tran', () => {
+  const d = mk(); const f = path.join(d, 'm.jsonl'); const root = path.join(d, 'audit');
+  fs.writeFileSync(f, line('a', 3));
+  const cfg = readAuditConfig();
+  const inp = { hook_event_name: 'Stop', session_id: 'sess2', transcript_path: f, cwd: d };
+  expect(buildEnvelope(inp, cfg, new Date(), { root }).data.usage_mode).toBe('cumulative');
+  const small = { ...cfg, transcript_max_bytes: 10 };
+  fs.appendFileSync(f, line('b', 4));
+  const e = buildEnvelope(inp, small, new Date(), { root });
+  expect(e.data.usage_mode).toBe('delta'); expect(e.tokens_out).toBe(4);
+  fs.rmSync(d, { recursive: true, force: true });
+});

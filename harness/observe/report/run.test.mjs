@@ -45,3 +45,11 @@ test('kickReport: toi da 1 lan/7 ngay + khoa', () => {
   assert.equal(kickReport(o, ctx, NOW + 8 * 86400000), true); assert.equal(n, 2);
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+test('KPI2: co dong pattern (findPatterns) ben canh loi lap', async () => {
+  const evs = [];
+  for (let i = 0; i < 12; i++) evs.push({ ts: new Date(NOW - 3600000 * (i + 1)).toISOString(), sid: 's' + (i % 4), event: 'PostToolUse', tool: 'Bash', ok: true, dur_ms: 5, target: 'bun run build:all' });
+  const r = await buildReport({ nowMs: NOW, events: evs, ledger: [], baseline: null, inventory: undefined });
+  const k2 = r.results.find((x) => x.def.id === 'kpi-repeats');
+  assert.ok(k2.rows.some((x) => x.key === 'pattern'), JSON.stringify(k2.rows));
+});

@@ -290,14 +290,14 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
     if (!u && event === 'SubagentStop' && !agent_type && (reason === 'no_path' || reason === 'not_found')) {
       // phantom: no agent_type, no matching SubagentStart, no readable transcript -> label.
       data.phantom = true; data.usage = 'unavailable'; data.usage_reason = 'no_transcript';
-    } else if (u) { turns = u.turns; tokens_in = u.tokens_in; tokens_out = u.tokens_out; data.tokens_cache = u.tokens_cache; model = model || u.model; }
+    } else if (u) { turns = u.turns; tokens_in = u.tokens_in; tokens_out = u.tokens_out; data.tokens_cache = u.tokens_cache; data.usage_mode = 'cumulative'; model = model || u.model; }
     else if (tokens_in == null && tokens_out == null) { data.usage = 'unavailable'; data.usage_reason = reason; }
     try { // usage moi ke tu Stop truoc (doc duoi transcript, tran 512KB/200ms, offset theo transcript trong state audit)
       const d = readUsageDelta(file, { root: typeof opts.root === 'string' ? opts.root : null });
       if (d) {
         const { model: dm, ...usage } = d;
         data.usage = usage; delete data.usage_reason; delete data.phantom;
-        if (tokens_in == null && tokens_out == null) { tokens_in = d.input + d.cache_creation; tokens_out = d.output; if (turns == null) turns = d.msgs; }
+        if (tokens_in == null && tokens_out == null) { tokens_in = d.input + d.cache_creation; tokens_out = d.output; if (turns == null) turns = d.msgs; data.usage_mode = 'delta'; }
         model = model || dm;
       }
     } catch { /* fail-open */ }

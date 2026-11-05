@@ -1,18 +1,28 @@
 // Token tu transcript tai hook Stop/SubagentStop: chi doc DUOI file (tran 512KB, timeout 200ms), cong message.usage cua cac message assistant MOI
-// ke tu lan Stop truoc (offset theo transcript luu trong <audit root>/.state/usage-offsets.json). Fail-open: loi -> null, khong nem.
+// ke tu lan Stop truoc (offset byte theo transcript, moi transcript mot file trong <audit root>/.state/usage-offsets/). Fail-open: loi -> null, khong nem.
 import fs from 'node:fs';
 import path from 'node:path';
+import { createHash } from 'node:crypto';
 
 export const USAGE_TAIL = Object.freeze({ maxBytes: 524288, timeoutMs: 200, maxEntries: 200 });
 
-const stateFile = (root) => (root ? path.join(String(root), '.state', 'usage-offsets.json') : null);
+// Moi transcript mot file offset (ten = sha1 cua duong dan tuyet doi): Stop/SubagentStop cua transcript khac nhau khong de nhau; ghi atomic tmp+rename.
+const stateDir = (root) => (root ? path.join(String(root), '.state', 'usage-offsets') : null);
+const stateFile = (root, file) => { const d = stateDir(root); return d ? path.join(d, createHash('sha1').update(path.resolve(file)).digest('hex').slice(0, 20) + '.json') : null; };
 const readState = (f) => { try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); return j && typeof j === 'object' ? j : {}; } catch { return {}; } };
 function writeState(f, st) {
   try {
-    const keys = Object.keys(st);
-    if (keys.length > USAGE_TAIL.maxEntries) for (const k of keys.sort((a, b) => (st[a].ts || 0) - (st[b].ts || 0)).slice(0, keys.length - USAGE_TAIL.maxEntries)) delete st[k];
-    fs.mkdirSync(path.dirname(f), { recursive: true });
+    const dir = path.dirname(f);
+    const isNew = !fs.existsSync(f);
+    fs.mkdirSync(dir, { recursive: true });
     const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(st)); fs.renameSync(t, f);
+    if (isNew) { // chi khi them file moi: giu <= maxEntries file (xoa cu nhat)
+      const ents = fs.readdirSync(dir).filter((n) => n.endsWith('.json'));
+      if (ents.length > USAGE_TAIL.maxEntries) {
+        const aged = ents.map((n) => { try { return [n, fs.statSync(path.join(dir, n)).mtimeMs]; } catch { return [n, 0]; } }).sort((x, y) => x[1] - y[1]);
+        for (const [n] of aged.slice(0, ents.length - USAGE_TAIL.maxEntries)) { try { fs.unlinkSync(path.join(dir, n)); } catch { /* bo qua */ } }
+      }
+    }
   } catch { /* fail-open */ }
 }
 
@@ -35,15 +45,14 @@ export function sumUsage(text, deadline = Infinity) {
   return r;
 }
 
-/** Doc phan moi cua transcript `file` ke tu offset da luu (key = ten file). root: thu muc audit (cho state); thieu -> khong luu offset. */
+/** Doc phan moi cua transcript `file` ke tu offset da luu (moi transcript mot file offset). root: thu muc audit (cho state); thieu -> khong luu offset. */
 export function readUsageDelta(file, { root = null, limits = USAGE_TAIL, now = Date.now } = {}) {
   try {
     if (typeof file !== 'string' || !/\.jsonl$/i.test(file)) return null;
     const deadline = now() + limits.timeoutMs;
     const st = fs.statSync(file); if (!st.isFile()) return null;
-    const sf = stateFile(root); const state = sf ? readState(sf) : {};
-    const key = path.basename(file);
-    let prev = Number(state[key] && state[key].off) || 0;
+    const sf = stateFile(root, file); const state = sf ? readState(sf) : {};
+    let prev = Number(state.off) || 0;
     if (prev > st.size) prev = 0; // transcript bi cat/xoay
     const start = Math.max(prev, st.size - limits.maxBytes);
     const len = st.size - start;
@@ -51,14 +60,16 @@ export function readUsageDelta(file, { root = null, limits = USAGE_TAIL, now = D
     const buf = Buffer.alloc(len);
     const fd = fs.openSync(file, 'r');
     try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }
-    let text = buf.toString('utf8');
-    const lastNl = text.lastIndexOf('\n');
-    const complete = lastNl >= 0 ? text.slice(0, lastNl + 1) : ''; // bo dong cuoi dang ghi do
-    const jumped = start > prev; // nhay vao giua file (qua tran) -> dong dau co the bi cat: bo
-    if (jumped) { const nl = complete.indexOf('\n'); text = nl >= 0 ? complete.slice(nl + 1) : ''; } else text = complete;
+    // Offset tinh tren BYTE tho (khong qua chuoi giai ma): dong cuoi chua xong (khong co \n) bi bo, lan sau doc lai.
+    const lastNl = buf.lastIndexOf(0x0a);
+    const complete = lastNl >= 0 ? buf.subarray(0, lastNl + 1) : buf.subarray(0, 0);
+    const jumped = start > prev; // nhay vao giua file (qua tran) -> dong dau co the bi cat (ke ca giua ky tu UTF-8): bo
+    let body = complete;
+    if (jumped) { const nl = complete.indexOf(0x0a); body = nl >= 0 ? complete.subarray(nl + 1) : complete.subarray(0, 0); }
+    const text = body.toString('utf8');
     const r = sumUsage(text, deadline);
     if (!r) return null; // het gio: khong tien offset (lan sau doc lai)
-    if (sf) { state[key] = { off: start + Buffer.byteLength(complete, 'utf8'), ts: Date.now() }; writeState(sf, state); }
+    if (sf) writeState(sf, { off: start + complete.length, ts: Date.now() });
     return { ...r, truncated: jumped };
   } catch { return null; }
 }

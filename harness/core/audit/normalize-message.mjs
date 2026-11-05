@@ -8,8 +8,10 @@ const WIN_SEG = /(?<![\w<])[\w.@~+-]+(?:\\[\w.@~+-]+)+/g;
 const UNIX_ABS = /(?<![\w.:<])\/(?:[\w.@~+-]+\/)*[\w.@~+-]+/g;
 const UNIX_REL = /(?<![\w.:<\\])[\w.@~+-]+(?:\/[\w.@~+-]+)+/g;
 
-/** Chuan hoa thong diep: thay duong dan/id/so/timestamp bang token co dinh, gon khoang trang, cat con ngan. */
-export function normalizeMessage(text, max = 50) {
+export const TRUNC_PREFIX_MIN = 80; // chi gop ban bi cat "..." voi ban day du khi tien to >= 80 ky tu
+
+/** Chuan hoa DAY DU (khong cat do dai). Tra {text, truncated}: truncated = thong diep goc ket thuc bang "..." (bi cat boi nguon). */
+export function normalizeFull(text) {
   let s = String(text ?? '').replace(/\s+/g, ' ').trim();
   s = s.replace(QUOTED_PATH, '<path>').replace(WIN_ABS, '<path>').replace(REL_DOT, '<path>')
     .replace(WIN_SEG, '<path>').replace(UNIX_ABS, '<path>').replace(UNIX_REL, '<path>');
@@ -20,13 +22,19 @@ export function normalizeMessage(text, max = 50) {
   s = s.replace(/\b(?=[A-Za-z0-9_-]*\d)[A-Za-z0-9_-]{20,}\b/g, '<id>');
   s = s.replace(/\d+/g, 'N');
   s = s.replace(/(?:<path>[\s,.;:]*){2,}/g, '<path> ').replace(/\s+/g, ' ').trim();
-  s = s.replace(/(?:\.{2,}|\u2026)\s*$/, '').trim();
-  return s.slice(0, max).trim();
+  const truncated = /(?:\.{2,}|\u2026)\s*$/.test(s);
+  if (truncated) s = s.replace(/(?:\.{2,}|\u2026)\s*$/, '').trim();
+  return { text: s, truncated };
 }
 
-/** Dau van tay 10 hex tu (tool, thong diep chuan hoa). Rong -> null. */
+/** Chuan hoa de HIEN THI: thay duong dan/id/so/timestamp bang token co dinh, cat con `max` ky tu (mac dinh 50). Khong dung de bam. */
+export function normalizeMessage(text, max = 50) {
+  return normalizeFull(text).text.slice(0, max).trim();
+}
+
+/** Dau van tay 10 hex tu (tool, thong diep chuan hoa DAY DU). Rong -> null. */
 export function messageFingerprint(text, tool = '') {
-  const n = normalizeMessage(text);
+  const n = normalizeFull(text).text;
   if (!n) return null;
   return createHash('sha1').update(String(tool || '') + '|' + n).digest('hex').slice(0, 10);
 }

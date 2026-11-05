@@ -1,5 +1,7 @@
+import { isHookRun } from '../../../core/audit/signals.mjs';
 // Engine khai bao cho backend node: checkpoint + runSpec (where/groupBy/aggs/orderBy).
 export function runCheckpoint(rows, files, filters, lim, backend) {
+  rows = rows.filter((r) => !isHookRun(r)); // HookRun khong phai tool call
   let targetSid = filters.session;
   if (!targetSid) {
     let maxTs = '';

@@ -11,6 +11,7 @@ import { auditCtx, nestedDateDirs, LIMITS, redact } from './loop.mjs';
 export const PATTERN_DEFAULTS = Object.freeze({
   days: 7, limit: 20, minCount: 10, minSessions: 3, seqMin: 3, seqMax: 5,
   maxOps: 200000, infoHead: 6, infoBeforeAgent: 3,
+  promptMinCount: 3, promptMinSessions: 2, promptMinKw: 4, // prompt lap: ngat rieng (khong dung chung minCount/minSessions cua lenh)
 });
 // Danh sach bo qua/info la DU LIEU: luat repeated-pattern.json (ignore, info: chuoi regex). Ghi de bang <project>/.harness/rules/repeated-pattern.json.
 export const compileRegexList = (a) => (Array.isArray(a) ? a : []).flatMap((s) => { try { return [new RegExp(String(s))]; } catch { return []; } });
@@ -18,6 +19,9 @@ const RULE_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 
 let RULE = {}; try { RULE = JSON.parse(fs.readFileSync(RULE_FILE, 'utf8')); } catch { /* fail-open: khong ignore gi */ }
 export const DEFAULT_IGNORE = Object.freeze(compileRegexList(RULE.ignore));
 export const DEFAULT_INFO = Object.freeze(compileRegexList(RULE.info));
+// Nguong prompt lap lay tu dinh nghia luat (prompt_min_count / prompt_min_sessions) neu co, khong thi PATTERN_DEFAULTS.
+const posInt = (v, d) => (Number.isInteger(v) && v > 0 ? v : d);
+export const PROMPT_THRESHOLDS = Object.freeze({ count: posInt(RULE.prompt_min_count, 3), sessions: posInt(RULE.prompt_min_sessions, 2) });
 
 const MULTI = { harness: 3, git: 2, bun: 2, npm: 2, node: 2, gh: 2, docker: 2, pnpm: 2, yarn: 2, npx: 2, bunx: 2 };
 const SCRIPT_RUNNERS = new Set(['node', 'python', 'python3', 'bash', 'sh', 'powershell', 'pwsh']);
@@ -179,7 +183,10 @@ export function detectInfoFetch(streams, o) {
 export function detectPrompts(events, o) {
   const hashOf = (ev) => { const d = ev.data || {}; return d.prompt_hash || d.prompt_fp || ev.prompt_hash || null; };
   const ups = events.filter((e) => e.event === 'UserPromptSubmit');
-  const withHash = ups.filter(hashOf);
+  const kwLen = (ev) => { const k = (ev.data || {}).prompt_kw; return Array.isArray(k) ? k.length : null; };
+  // prompt qua ngan (<= 3 tu khoa, vd. "ok tiep di") khong phai yeu cau lap co nghia; thieu prompt_kw -> khong biet, giu.
+  const minKw = o.promptMinKw ?? PATTERN_DEFAULTS.promptMinKw;
+  const withHash = ups.filter((e) => hashOf(e) && (kwLen(e) == null || kwLen(e) >= minKw));
   if (!withHash.length) return { items: [], skipped: ups.length ? 'chua co field prompt_hash trong UserPromptSubmit' : 'khong co su kien UserPromptSubmit' };
   const m = new Map();
   for (const ev of withHash) {
@@ -187,7 +194,8 @@ export function detectPrompts(events, o) {
     if (!m.has(h)) m.set(h, newAcc());
     bump(m.get(h), ev.sid || '-', { ts: String(ev.ts || ''), ms: 0 });
   }
-  return { items: [...m].filter(([, a]) => a.count >= 2 && a.sids.size >= o.minSessions).map(([h, a]) => mk('prompt', h, `prompt_hash=${h}`, a)), skipped: null };
+  const minCount = o.promptMinCount ?? PROMPT_THRESHOLDS.count, minSess = o.promptMinSessions ?? PROMPT_THRESHOLDS.sessions;
+  return { items: [...m].filter(([, a]) => a.count >= minCount && a.sids.size >= minSess).map(([h, a]) => mk('prompt', h, `prompt_hash=${h}`, a)), skipped: null };
 }
 
 export const rank = (items) => items.slice().sort((a, b) => (b.count * Math.max(b.cost_ms, 1)) - (a.count * Math.max(a.cost_ms, 1)) || b.count - a.count);
@@ -195,7 +203,7 @@ export const rank = (items) => items.slice().sort((a, b) => (b.count * Math.max(
 /** Thuan: mang su kien -> {items, skipped:{prompt}}. */
 export function detectPatterns(events, opts = {}) {
   const clean = Object.fromEntries(Object.entries(opts).filter(([, v]) => v != null));
-  const o = { ...PATTERN_DEFAULTS, ignore: DEFAULT_IGNORE, info: DEFAULT_INFO, ...clean };
+  const o = { ...PATTERN_DEFAULTS, promptMinCount: PROMPT_THRESHOLDS.count, promptMinSessions: PROMPT_THRESHOLDS.sessions, ignore: DEFAULT_IGNORE, info: DEFAULT_INFO, ...clean };
   const streams = buildStreams(events, o);
   const p = detectPrompts(events, o);
   const items = [...detectCommands(streams, o), ...detectSequences(streams, o), ...detectInfoFetch(streams, o), ...p.items];

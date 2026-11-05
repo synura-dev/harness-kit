@@ -76,3 +76,13 @@ test('prompt: bo qua khi chua co prompt_hash; xep hang count*cost', () => {
   const withHash = ['a', 'b', 'c'].map((s) => ({ event: 'UserPromptSubmit', sid: s, ts: '2026-11-01T00:00:00Z', data: { prompt_hash: 'abc' } }));
   expect(detectPatterns(withHash).items[0]).toMatchObject({ subkind: 'prompt', count: 3 });
 });
+
+test('prompt: nguong rieng count>=3, sessions>=2; bo prompt <= 3 tu khoa', () => {
+  const mkp = (n, sids, kw) => sids.map((s) => ({ event: 'UserPromptSubmit', sid: s, ts: '2026-11-01T00:00:00Z', data: { prompt_hash: 'h' + n, prompt_kw: kw } }));
+  const kw5 = ['a1', 'b2', 'c3', 'd4', 'e5'];
+  expect(detectPatterns(mkp(1, ['s1', 's2', 's3'], kw5)).items.length).toBe(1);
+  expect(detectPatterns(mkp(1, ['s1', 's2'], kw5)).items.length).toBe(0); // count 2 < 3
+  expect(detectPatterns(mkp(1, ['s1', 's1', 's1'], kw5)).items.length).toBe(0); // 1 phien < 2
+  expect(detectPatterns(mkp(1, ['s1', 's2', 's3'], ['ok', 'tiep'])).items.length).toBe(0); // prompt ngan
+  expect(detectPatterns(mkp(1, ['s1', 's2', 's3'], kw5), { minSessions: 3, minCount: 10 }).items.length).toBe(1); // khong dung chung nguong lenh
+});
