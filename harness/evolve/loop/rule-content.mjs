@@ -15,7 +15,7 @@ function buildMessage(sample, fix) {
 
 /** Dinh nghia luat canh bao cho 1 candidate: khop dung fp, canh bao + goi y fix. */
 export function ruleDef(cand) {
-  const fix = safeText(cand.hint) || 'harness evolve candidates';
+  const fix = safeText(cand.hint) || 'harness evolve scan';
   return {
     desc: `evolve: canh bao loi lap ${safeText(cand.tool, 30)} (${safeText(cand.fp || cand.id, 40)})`,
     source: 'candidates', days: 7, filter: { fp: cand.fp }, metric: 'count', threshold: 1,

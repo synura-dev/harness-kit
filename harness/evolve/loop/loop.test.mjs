@@ -276,7 +276,7 @@ test('CLI: apply khong --approve -> exit 2; khong co lenh -> usage (khong con --
   expect(r.stdout).toContain('--approve');
   const u = spawnSync(process.execPath, [path.join(HERE, 'cli.mjs')], { env, encoding: 'utf8', timeout: 30000 });
   expect(u.status).toBe(0);
-  expect(u.stdout).toContain('candidates');
+  expect(u.stdout).toContain('scan');
   expect(u.stdout).toContain('--kind skill]');
   expect(u.stdout).not.toContain('fact');
   expect(u.stdout).not.toMatch(/hook-config|--set/);
@@ -316,7 +316,7 @@ test('goc du lieu tro vao workspace/plugin root: .claude/.agents/config/ma plugi
   expect(pr.reason).toMatch(/plugin root/);
 });
 
-test('E2E du an sach (khong harness/): CLI candidates -> propose -> check (SKIPPED) -> apply --approve -> rollback, dich trong .harness/data', () => {
+test('E2E du an sach (khong harness/): CLI scan -> propose -> check (SKIPPED) -> apply --approve -> rollback, dich trong .harness/data', () => {
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'evolve-proj-'));
   try {
     const data = path.join(proj, '.harness', 'data');
@@ -330,7 +330,7 @@ test('E2E du an sach (khong harness/): CLI candidates -> propose -> check (SKIPP
     const env = { ...process.env, HUB_DIR: proj, HUB_DATA_DIR: data, CLAUDE_PROJECT_DIR: proj };
     const run = (...a) => spawnSync(process.execPath, [path.join(HERE, 'cli.mjs'), ...a, '--json'], { env, cwd: proj, encoding: 'utf8', timeout: 30000 });
     const js = (r) => JSON.parse(r.stdout);
-    const c = run('candidates');
+    const c = run('scan', '--kind', 'error');
     expect(c.status).toBe(0);
     const cid = js(c).items.find((x) => x.fp === FP.get('pppppppppp')).id;
     const p = js(run('propose', cid));

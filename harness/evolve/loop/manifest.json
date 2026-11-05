@@ -5,7 +5,7 @@
   "entry": "cli.mjs",
   "domain": "evolve",
   "desc": "vong tien hoa: loi lap (>=3 lan/7 ngay) -> de xuat -> oracle eval -> apply --approve co version -> rollback",
-  "cmds": ["prune-candidates", "patterns", "candidates", "propose", "check", "apply", "rollback", "log", "list", "autopilot [--dry-run]", "queue [--approve <id>|--reject <id>]", "eval run|list|baseline|compare|bench"],
+  "cmds": ["scan [--kind error|pattern|deprecate]", "propose", "check", "apply", "rollback", "log", "list", "autopilot [--dry-run]", "queue [--approve <id>|--reject <id>]", "eval run|list|baseline|compare|bench"],
   "default": "index",
   "aliases": ["eval"],
   "aliasMap": { "eval": { "fallback": ["eval"], "onEmpty": ["eval", "help"] } },

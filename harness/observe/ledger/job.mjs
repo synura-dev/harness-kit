@@ -1,5 +1,5 @@
 // Job lo (nen, toi da 1 lan/gio nho hook kick, timeout cung): doc audit -> candidate + finding -> cap nhat so. Hook CHI doc ket qua.
-// CLI: node job.mjs [--timeout-s N] [--dry-run].
+// Mot job lo duy nhat: candidates (error) + patterns + prune (sources.mjs) -> so; roi autopilot evolve (tu kiem han 24h) chay noi tiep. CLI: node job.mjs [--timeout-s N] [--dry-run].
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -80,5 +80,13 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const ti = a.indexOf('--timeout-s');
   const timeoutMs = ti >= 0 && Number(a[ti + 1]) > 0 ? Number(a[ti + 1]) * 1000 : JOB.timeoutS * 1000;
   const hard = setTimeout(() => { console.error('ledger-job: timeout cung'); process.exit(3); }, timeoutMs + 5000);
-  runJob({ timeoutMs, dryRun: a.includes('--dry-run'), candidateSources: defaultCandidateSources() }).then((r) => { console.log(JSON.stringify(r)); clearTimeout(hard); process.exit(0); }, (e) => { console.error('ledger-job:', e.message); process.exit(1); });
+  runJob({ timeoutMs, dryRun: a.includes('--dry-run'), candidateSources: defaultCandidateSources() }).then(async (r) => {
+    console.log(JSON.stringify(r)); clearTimeout(hard);
+    if (!a.includes('--dry-run')) { // autopilot: tu bo qua neu <24h; fail-open; tran cung rieng
+      const h2 = setTimeout(() => process.exit(3), 115000);
+      try { const { runAutopilot } = await import('../../evolve/loop/autopilot.mjs'); await runAutopilot({}); } catch {}
+      clearTimeout(h2);
+    }
+    process.exit(0);
+  }, (e) => { console.error('ledger-job:', e.message); process.exit(1); });
 }

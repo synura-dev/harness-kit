@@ -9,7 +9,7 @@ import { findPatterns } from './patterns.mjs';
 import { runAutopilot, queueOp, confirmTty } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve prune-candidates [--days N] [--record] | patterns [--days N] [--limit N] [--threshold N] [--sessions K] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | eval run|list|baseline|compare|bench';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -38,18 +38,31 @@ export function parseArgs(argv) {
   return o;
 }
 
+const SCAN_KINDS = ['error', 'pattern', 'deprecate'];
+const SCANNERS = {
+  async error(o) {
+      const r = await findCandidates({ ...o, maxBytes: undefined });
+      const items = r.items.slice(0, o.limit || LIMITS.listLimit);
+      const lines = [`evolve scan error: ${r.total} loi lap >= ${r.threshold} lan / ${r.days} ngay (quet ${r.scanned} su kien)`,
+        ...items.map((x) => `${x.id}  x${x.count}  phien=${x.sessions}  ${x.tool}  fp=${x.fp || '-'}  ${x.sample.slice(0, 90)}`)];
+      return { code: 0, summary: capLines(lines, 40).join('\n'), data: { ...r, items }, truncated: r.truncated };
+  },
+  async pattern(o) {
+      const r = await findPatterns({ ...o, maxBytes: undefined });
+      const items = r.items.slice(0, o.limit || LIMITS.listLimit);
+      const lines = [`evolve scan pattern: ${r.total} quy trinh lap / ${r.days} ngay (quet ${r.scanned} su kien)${r.truncated ? ` truncated: ${r.truncated}` : ''}`,
+        ...(r.skipped.prompt ? [`bo qua prompt: ${r.skipped.prompt}`] : []),
+        ...items.map((x) => `${x.id}  ${x.subkind}  x${x.count}  phien=${x.sessions}  ${x.cost_ms}ms  ${x.sample.slice(0, 110)}`)];
+      return { code: 0, summary: capLines(lines, 40).join('\n'), data: { ...r, items }, truncated: r.truncated };
+  },
+  deprecate: (o) => import('./prune-cli.mjs').then((m) => m.runPrune(o)),
+};
+
 export async function render(o) {
   const need = () => { if (!o.arg) throw new Error(`thieu id\n${USAGE}`); return o.arg; };
-  if (o.cmd === 'candidates') {
-    const r = await findCandidates({ ...o, maxBytes: undefined });
-    const items = r.items.slice(0, o.limit || LIMITS.listLimit);
-    const lines = [`evolve candidates: ${r.total} loi lap >= ${r.threshold} lan / ${r.days} ngay (quet ${r.scanned} su kien)`,
-      ...items.map((x) => `${x.id}  x${x.count}  phien=${x.sessions}  ${x.tool}  fp=${x.fp || '-'}  ${x.sample.slice(0, 90)}`)];
-    return { code: 0, summary: capLines(lines, 40).join('\n'), data: { ...r, items }, truncated: r.truncated };
-  }
   if (o.cmd === 'autopilot') {
     const r = await runAutopilot({ dryRun: o.dryRun, force: o.force });
-    const L = (t, a) => a.map((x) => `  ${t}: ${x.entry || x.ver || x.id || x.fp || x} ${x.reason || x.oracle || ''}`.trimEnd());
+    const L = (t, a) => a.map((x) => `  ${t}: ${x.entry || x.ver || x.id || x.fp || x} ${x.reason || ''}`.trimEnd());
     const lines = [`evolve autopilot${r.dryRun ? ' (dry-run, khong ghi)' : ''}${r.skipped ? `: bo qua - ${r.skipped}` : ''}`,
       `ap dung ${r.applied.length} | xep hang ${r.queued.length} | ke hoach ${r.planned.length} | tu choi ${r.refused.length} | rollback ${r.rolledBack.length} | giu ${r.kept.length} | loi ${r.errors.length}`,
       ...L('ap', r.applied), ...L('hang', r.queued), ...L('ke hoach', r.planned), ...L('cam', r.refused), ...L('rollback', r.rolledBack), ...r.errors.map((e) => `  loi: ${e}`)];
@@ -57,17 +70,15 @@ export async function render(o) {
   }
   if (o.cmd === 'queue') {
     const r = await queueOp({ approve: o.approve ? o.arg : null, reject: o.reject ? o.arg : null });
-    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.flatMap((q) => [`${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`, ...(q.sha ? [`  sha256=${q.sha}`] : []), ...(q.after_preview ? q.after_preview.split('\n').map((l) => `  | ${l}`) : []), ...(q.after_truncated ? ['  | ... (cat 40 dong)'] : [])])], 200).join('\n'), data: r };
+    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.flatMap((q) => [`${q.id}  ${q.kind} -> ${q.target || '-'}  ${q.reason}`, ...(q.sha ? [`  sha256=${q.sha}`] : []), ...(q.after_preview ? q.after_preview.split('\n').map((l) => `  | ${l}`) : []), ...(q.after_truncated ? ['  | ... (cat 40 dong)'] : [])])], 200).join('\n'), data: r };
     return { code: r.code, summary: r.code === 0 ? `queue ${r.id}: ${r.status}${r.ver ? ` (ver ${r.ver})` : r.manual ? ' (sua tay: khong co duong ap tu dong)' : ''}` : `queue tu choi: ${r.reason}`, data: r };
   }
-  if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);
-  if (o.cmd === 'patterns') {
-    const r = await findPatterns({ ...o, maxBytes: undefined });
-    const items = r.items.slice(0, o.limit || LIMITS.listLimit);
-    const lines = [`evolve patterns: ${r.total} quy trinh lap / ${r.days} ngay (quet ${r.scanned} su kien)${r.truncated ? ` truncated: ${r.truncated}` : ''}`,
-      ...(r.skipped.prompt ? [`bo qua prompt: ${r.skipped.prompt}`] : []),
-      ...items.map((x) => `${x.id}  ${x.subkind}  x${x.count}  phien=${x.sessions}  ${x.cost_ms}ms  ${x.sample.slice(0, 110)}`)];
-    return { code: 0, summary: capLines(lines, 40).join('\n'), data: { ...r, items }, truncated: r.truncated };
+  if (o.cmd === 'scan') {
+    const kinds = o.kind ? [o.kind] : ['error', 'pattern', 'deprecate'];
+    if (kinds.some((k) => !SCAN_KINDS.includes(k))) throw new Error(`--kind phai thuoc ${SCAN_KINDS.join('|')}`);
+    const rs = [];
+    for (const k of kinds) rs.push(await SCANNERS[k](o));
+    return { code: 0, summary: rs.map((r) => r.summary).join('\n'), data: o.kind ? rs[0].data : Object.fromEntries(kinds.map((k, i) => [k, rs[i].data])), truncated: rs.find((r) => r.truncated)?.truncated };
   }
   if (o.cmd === 'propose') {
     const p = await propose(need(), o);
