@@ -56,17 +56,23 @@ export function hasGitAncestor(dir) {
   }
 }
 
-export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg)) {
+export const SWEEP_INTERVAL_MS = 6 * 3600 * 1000;
+
+/** Sweep nen: khong chan SessionStart. Throttle 1 lan/6h bang stamp trong data; background:false -> khong chay. Hanh vi prune giu nguyen. */
+export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg), opts = {}) {
   const { workspaceRoot } = await import('../../core/io/paths.mjs');
-  // Du an khong phai git: khong co worktree de don -> bo qua som, khong spawn node + git.
+  if (opts.background === false) return { removed: 0, skipped: 'no-background' };
+  // Du an khong phai git: khong co worktree de don -> bo qua som.
   if (!hasGitAncestor(workspaceRoot())) return { removed: 0, skipped: 'no-git' };
-  const { spawnSync } = await import('../../core/runtime/proc.mjs');
+  const { dataPathFor } = await import('../../core/io/storage.mjs');
+  const stamp = dataPathFor('worktree', 'sweep.stamp');
+  const now = opts.now ?? Date.now();
+  try { if (now - fs.statSync(stamp).mtimeMs < (opts.intervalMs ?? SWEEP_INTERVAL_MS)) return { removed: 0, skipped: 'throttled' }; } catch {}
   const cli = path.join(HERE, '..', '..', 'cli', 'commands', 'worktree.mjs');
-  const r = spawnSync(process.execPath, [cli, 'prune', '--apply', '--min-age-hours', String(cfg.minAgeHours), '--timeout', String(cfg.sweepTimeoutSec)], { encoding: 'utf8', timeout: (cfg.sweepTimeoutSec + 3) * 1000 });
-  const out = String(r.stdout || '');
-  const removed = (out.match(/=> removed/g) || []).length;
-  if (removed || r.status !== 0) await emit({ event: 'WorktreeSweep', removed, status: r.status, tail: out.split('\n').slice(-4).join(' | ').slice(0, 300) }, cfg);
-  return { removed };
+  const spawnBg = opts.spawnBackground || (await import('../../core/runtime/proc.mjs')).spawnBackground;
+  const pid = spawnBg({ cmd: process.execPath, args: [cli, 'prune', '--apply', '--min-age-hours', String(cfg.minAgeHours), '--timeout', String(cfg.sweepTimeoutSec)], key: 'worktree-sweep', deadlineMs: (cfg.sweepTimeoutSec + 10) * 1000, cwd: workspaceRoot() });
+  if (pid) { try { fs.mkdirSync(path.dirname(stamp), { recursive: true }); fs.writeFileSync(stamp, String(now)); } catch {} }
+  return { removed: 0, started: !!pid };
 }
 
 const EVENT_OF = Object.freeze({ create: 'WorktreeCreate', remove: 'WorktreeRemove', sweep: 'SessionStart' });
@@ -97,7 +103,7 @@ export async function handle(event, input, ctx = {}) {
   if (!cfg.enabled) return {};
   try {
     if (event === 'WorktreeRemove') return { record: await remove(input, cfg, emit), records };
-    return { record: await sweep(cfg, emit), records };
+    return { record: await sweep(cfg, emit, { background: ctx.background, ...(ctx.sweep || {}) }), records };
   } catch (e) {
     const msg = String(e.message || e).slice(0, 300);
     await emit({ event: MODE_OF[event], error: msg });

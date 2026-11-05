@@ -161,3 +161,17 @@ test('parseInject chi nhan khai bao hop le; MODULE hop le', () => {
   for (const bad of [null, {}, { inject: { events: 'x', args: [] } }, { inject: { events: [], args: [1] } }]) expect(parseInject(bad)).toBeNull();
   expect(validateHookModule(mod)).toEqual([]);
 });
+
+test('cache theo hash ext: hit khong spawn, hash doi => lam moi', async () => {
+  const { ctx, calls } = mk();
+  await handle('SessionStart', S({ session_id: 'a' }), ctx);
+  expect(calls).toHaveLength(1);
+  const r2 = await handle('SessionStart', S({ session_id: 'b' }), ctx);
+  expect(r2).toEqual({ additionalContext: 'line1\nline2' });
+  expect(calls).toHaveLength(1); // hit
+  const c2 = { ...ctx, list: () => [{ id: 'alpha', root: '/x/alpha', hash: 'h2' }], hashOf: () => 'h2' };
+  await handle('SessionStart', S({ session_id: 'c' }), c2);
+  expect(calls).toHaveLength(2); // miss
+  await handle('SessionStart', S({ session_id: 'd' }), { ...c2, now: Date.now() + 3600e3 * 2 });
+  expect(calls).toHaveLength(3); // het TTL
+});
