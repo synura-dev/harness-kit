@@ -6,11 +6,11 @@ const ev = (sid, i, cmd) => ({ event: 'PostToolUse', ts: new Date(Date.now() - i
 
 test('patternSource: dung ignore tu luat; thieu luat -> []', () => {
   const events = [];
-  for (let s = 0; s < 4; s++) for (let i = 0; i < 4; i++) { events.push(ev('s' + s, i, 'bun test x.test.mjs')); events.push(ev('s' + s, i, 'git diff')); events.push(ev('s' + s, i, 'node a.mjs')); }
+  for (let s = 0; s < 4; s++) for (let i = 0; i < 4; i++) { events.push(ev('s' + s, i, 'bun test x.test.mjs')); events.push(ev('s' + s, i, 'git diff')); events.push(ev('s' + s, i, 'node a.mjs')); events.push(ev('s' + s, i, 'git add .')); }
   const { defs } = loadDefinitions();
   const items = patternSource(events, '', { defs });
   const sigs = items.map((x) => x.sample + x.fp).join(' ');
-  expect(items.some((x) => /bun test/.test(x.sample))).toBe(true);
+  expect(items.some((x) => /bun test.*git add/.test(x.sample))).toBe(true);
   expect(/git diff|node a/.test(sigs)).toBe(false);
   expect(patternSource(events, '', { defs: [] })).toEqual([]);
 });

@@ -86,3 +86,18 @@ test('prompt: nguong rieng count>=3, sessions>=2; bo prompt <= 3 tu khoa', () =>
   expect(detectPatterns(mkp(1, ['s1', 's2', 's3'], ['ok', 'tiep'])).items.length).toBe(0); // prompt ngan
   expect(detectPatterns(mkp(1, ['s1', 's2', 's3'], kw5), { minSessions: 3, minCount: 10 }).items.length).toBe(1); // khong dung chung nguong lenh
 });
+
+test('sequence: bo chuoi chi Edit/Write va chuoi it hon 2 lenh Bash khac loai', () => {
+  const only = [];
+  for (const s of ['a', 'b', 'c']) only.push(ev(s, 'Edit', 'a.mjs'), ev(s, 'Write', 'b.ts'), ev(s, 'Edit', 'c.mjs'));
+  expect(detectSequences(streamsOf(only), o)).toEqual([]);
+  const one = [];
+  for (const s of ['a', 'b', 'c']) one.push(ev(s, 'Edit', 'a.mjs'), ev(s, 'Bash', 'git add .'), ev(s, 'Edit', 'c.mjs'));
+  expect(detectSequences(streamsOf(one), o)).toEqual([]);
+});
+
+test('detectPatterns: khong tao muc cho lenh don (command)', () => {
+  const evs = [];
+  for (const s of ['a', 'b', 'c']) for (let i = 0; i < 12; i++) evs.push(ev(s, 'Bash', 'bun test x'));
+  expect(detectPatterns(evs).items).toEqual([]);
+});

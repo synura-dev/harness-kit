@@ -80,3 +80,21 @@ test('runJob: audit gia -> so, doc/ghi qua HUB_DATA_DIR tam, job lan 2 khong nha
   assert.equal(readLedger(file).filter((e) => e.rule === 'repeated-error').length, 1);
   writeLedger(file, []); fs.rmSync(dir, { recursive: true, force: true });
 });
+
+test('ledger close: dry-run khong ghi, --yes dong muc khop kind+match', async () => {
+  const { closeMain, closable } = await import('./cli.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'lclose-'));
+  const file = path.join(dir, 'ledger.jsonl');
+  const mk = (id, rule, sample) => ({ id, rule, fp: id, status: 'open', sample, message: sample, first_seen: 'x', last_seen: 'x', warn_count: 0, warn_ts: [], due: false });
+  writeLedger(file, [mk('1', 'repeated-pattern', 'Edit:.mjs'), mk('2', 'repeated-pattern', 'Bash:git add'), mk('3', 'other', 'Edit:.mjs')]);
+  assert.equal(closable(readLedger(file), { kind: 'repeated-pattern', match: 'edit' }).length, 1);
+  const log = console.log; console.log = () => {};
+  try {
+    closeMain(['--kind', 'repeated-pattern'], file);
+    assert.equal(readLedger(file).filter((e) => e.status === 'resolved').length, 0);
+    closeMain(['--kind', 'repeated-pattern', '--match', 'Edit:', '--yes'], file);
+  } finally { console.log = log; }
+  const st = Object.fromEntries(readLedger(file).map((e) => [e.id, e.status]));
+  assert.deepEqual(st, { 1: 'resolved', 2: 'open', 3: 'open' });
+  fs.rmSync(dir, { recursive: true, force: true });
+});

@@ -88,6 +88,10 @@ export function opSignature(ev) {
   return String(tool);
 }
 
+// Chuoi chi gom thao tac sua file (Edit/Write/Read...) hoac < 2 lenh Bash khac loai: khong co y nghia tu dong hoa.
+const FILE_OP = /^(Read|Edit|Write|MultiEdit|NotebookEdit)(:|$)/;
+export const meaningfulSequence = (sigs) => !sigs.every((x) => FILE_OP.test(x)) && new Set(sigs.filter((x) => x.startsWith('Bash:'))).size >= 2;
+
 export const isIgnored = (sig, ignore = DEFAULT_IGNORE) => ignore.some((r) => r.test(sig));
 
 // Luong thao tac theo (sid, actor, agent_id), sap theo thoi gian. Chi PostToolUse (co dur_ms), tranh dem doi Pre/Post.
@@ -146,7 +150,7 @@ export function detectSequences(streams, o) {
       const seen = new Set(); // moi phien dem 1 lan / n-gram
       for (let i = 0; i + n <= ops.length; i++) {
         const g = ops.slice(i, i + n);
-        if (new Set(g.map((x) => x.sig)).size < 2) continue; // lap 1 thao tac -> thuoc `command`
+        if (!meaningfulSequence(g.map((x) => x.sig))) continue; // 1 tool don/tool+duoi file/chi Edit-Write: khong bao cao
         const key = g.map((x) => x.sig).join(' > ');
         if (seen.has(key)) continue;
         seen.add(key);
@@ -206,7 +210,8 @@ export function detectPatterns(events, opts = {}) {
   const o = { ...PATTERN_DEFAULTS, promptMinCount: PROMPT_THRESHOLDS.count, promptMinSessions: PROMPT_THRESHOLDS.sessions, ignore: DEFAULT_IGNORE, info: DEFAULT_INFO, ...clean };
   const streams = buildStreams(events, o);
   const p = detectPrompts(events, o);
-  const items = [...detectCommands(streams, o), ...detectSequences(streams, o), ...detectInfoFetch(streams, o), ...p.items];
+  // detectCommands van export (dung le) nhung khong dua vao ledger: lenh don khong phai mau tu dong hoa.
+  const items = [...detectSequences(streams, o), ...detectInfoFetch(streams, o), ...p.items];
   return { items: rank(items), skipped: { prompt: p.skipped } };
 }
 
