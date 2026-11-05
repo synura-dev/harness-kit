@@ -4,7 +4,7 @@
 // updatedInput bi agy chan -> khong dung. Su kien lay tu argv (payload agy khong co hook_event_name; adapter audit tu suy ra nhu cu).
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { main } from './run.mjs';
 import { TOOL_MAP, getCommand, makePick } from '../../core/io/agy-payload.mjs';

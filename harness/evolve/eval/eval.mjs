@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot, isObj, isInside } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';

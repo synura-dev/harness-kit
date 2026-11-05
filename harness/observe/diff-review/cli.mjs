@@ -2,7 +2,7 @@
 // harness review pack [dir] [--base R] [--json] [--raw] [--max-bytes N] [--timeout-s N]: goi review tat dinh tu git diff (base = merge-base main|master|origin/HEAD,
 // gom thay doi chua commit). Chi doc; stdout <= 40 dong, khong chua noi dung dong diff. Phan doan de cho /code-review, /security-review, subagent reviewer.
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, capLines } from '../../core/io/out.mjs';
 import { LIMITS, FLAGS, buildPack, parseNumstat, parseNameStatus, parseAddedLines } from './pack.mjs';

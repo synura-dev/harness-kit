@@ -7,7 +7,7 @@
 // Qua han -> `truncated: timeout` (hoac `max`).
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot, samePath, isInside } from '../../core/io/paths.mjs';
 import { listWorktrees, removeWorktreeAt } from '../../core/runtime/worktree.mjs';

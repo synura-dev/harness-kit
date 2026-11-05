@@ -8,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { DEFAULT_TOOLS, loadToolsConfig } from '../core/agy/adapters-report.mjs';
 import { workspaceRoot, samePath } from '../core/io/paths.mjs';
 import { loadAgents, rolesTable, replaceBlock } from '../core/agy/agents.mjs';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../core/runtime/proc.mjs';
 import { parseFrontmatter } from './adapters/_util.mjs';
 const ROOT = workspaceRoot();
 

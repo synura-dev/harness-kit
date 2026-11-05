@@ -3,7 +3,7 @@
 // Lenh: view [YYYY-MM-DD] | why | map | query | digest | prune | runs | sizes | data-prune | cost | evidence
 // Ten domain cu (audit, audit-query, runs, data) chay qua compat/*.mjs -> goi main() o day voi tien to lenh.
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot, samePath } from '../../core/io/paths.mjs';
 import { auditReadRoots } from '../../core/audit/audit-write.mjs';

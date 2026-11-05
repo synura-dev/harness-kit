@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from './proc.mjs';
 
 export const SHIM_MARK = 'harness-kit user shim';
 const pp = (platform) => (platform === 'win32' ? path.win32 : path.posix);

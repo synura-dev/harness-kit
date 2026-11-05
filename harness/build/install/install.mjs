@@ -3,7 +3,7 @@
 // Khong import build/skills (IMPORT_RULES build:self = cung nhom con): goi CLI `skills` qua tien trinh con (--json). Doctor cung chay qua tien trinh con co timeout.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
 import { syncUserShim } from '../../core/runtime/user-shim.mjs';

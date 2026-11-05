@@ -2,7 +2,7 @@
 // harness evolve candidates|propose|check|apply|rollback|log|list. Xem README.md.
 // Chung: --json --raw --max-bytes N --timeout-s N (scan audit).
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';

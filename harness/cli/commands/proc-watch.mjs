@@ -6,7 +6,7 @@
 //        [--only-pid N] [--timeout-ms 15000] [--max-procs 5000] [--json]
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { samePath, ensureDataIgnore } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';

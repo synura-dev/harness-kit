@@ -7,7 +7,7 @@
 // Hook chay that => audit ghi session `latency-base` (chap nhan).
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot, samePath } from '../../../core/io/paths.mjs';
 import { loadConfig } from '../../../core/config/config.mjs';

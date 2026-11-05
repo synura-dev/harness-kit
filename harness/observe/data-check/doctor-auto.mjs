@@ -1,7 +1,7 @@
 // Batch check re cua doctor chay nen (<=1 lan/24h): ref, import, manifest, clutter, stray. Ghi state; hook chi doc. Khong check nang.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnBackground } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 
 const REL = ['.state', 'data-check-doctor.json'];
@@ -13,6 +13,7 @@ export const stateFile = (dd) => path.join(dd, ...REL);
 export async function collectErrors(hubRoot, repoDir) {
   const out = [];
   const M = (p) => import(new URL(p, import.meta.url).href);
+  try { const { scanProcDirect } = await M('../../core/checks/proc-check.mjs'); for (const v of scanProcDirect(hubRoot)) out.push(`proc-direct: ${v.file}:${v.line}`); } catch {}
   try { const { checkManifest, checkRegistry } = await M('../../core/checks/manifest-check.mjs'); for (const m of [...checkManifest(hubRoot), ...checkRegistry(hubRoot)]) out.push(`manifest: ${m}`); } catch {}
   try {
     const { buildScanInput, collectStray } = await M('../../core/checks/scan-input.mjs');
@@ -58,8 +59,7 @@ export function doctorAuto(dd, cfg, ctx = {}) {
       if (!(lock && now - Number(lock.ts) < 5 * 60e3)) {
         wj(lf, { ts: now, pid: process.pid });
         (ctx.spawnDoctor || (() => {
-          const p = spawn(process.execPath, [fileURLToPath(import.meta.url), '--run', dd], { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, HARNESS_GATEWAY: '1' } });
-          p.on('error', () => {}); p.unref();
+          spawnBackground({ cmd: process.execPath, args: [fileURLToPath(import.meta.url), '--run', dd], key: 'doctor-auto', deadlineMs: 10 * 60e3, env: { ...process.env, HARNESS_GATEWAY: '1' } });
         }))();
       }
     }

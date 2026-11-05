@@ -1,7 +1,7 @@
 // Hook data-check: canh bao vi pham data dau phien + rac khi ghi file. Chi warn, fail-open.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnBackground } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 import { TOP_FILES } from '../../core/config/contract.mjs';
@@ -58,8 +58,7 @@ function kickScan(dd, cfg, ctx = {}) {
     wj(path.join(dd, '.state', 'data-check-scan.lock'), { ts: now, pid: process.pid });
     const go = ctx.spawnScan || (() => {
       const cli = path.join(REPO_DIR, 'harness', 'cli', 'harness.mjs');
-      const p = spawn(process.execPath, [cli, 'data', 'scan', '--json'], { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, HARNESS_GATEWAY: '1' } });
-      p.on('error', () => {}); p.unref();
+      spawnBackground({ cmd: process.execPath, args: [cli, 'data', 'scan', '--json'], key: 'data-scan', deadlineMs: 5 * 60e3, env: { ...process.env, HARNESS_GATEWAY: '1' } });
     });
     go();
     return true;
@@ -89,8 +88,7 @@ export function autoClean(dd, cfg, ctx = {}) {
         const go = ctx.spawnClean || (() => {
           const cli = path.join(REPO_DIR, 'harness', 'cli', 'harness.mjs');
           const a = [cli, 'data', 'clean', '--auto', '--yes', '--max-files', String(ac.maxFiles), '--max-bytes', String(ac.maxBytes), '--timeout-s', String(ac.timeoutS)];
-          const p = spawn(process.execPath, a, { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, HARNESS_GATEWAY: '1' } });
-          p.on('error', () => {}); p.unref();
+          spawnBackground({ cmd: process.execPath, args: a, key: 'data-clean', deadlineMs: (ac.timeoutS + 60) * 1000, env: { ...process.env, HARNESS_GATEWAY: '1' } });
         });
         go();
       }
