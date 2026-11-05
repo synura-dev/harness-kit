@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve prune-candidates [--days N] [--record] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -25,6 +25,7 @@ export function parseArgs(argv) {
     else if (k === '--target') o.target = val();
     else if (k === '--approve') o.approve = true;
     else if (k === '--force') o.force = true;
+    else if (k === '--record') o.record = true;
     else if (!o.cmd && !a.startsWith('-')) o.cmd = a;
     else if (!o.arg && !a.startsWith('-')) o.arg = a;
     else throw new Error(`tham so la: ${a}`);
@@ -73,6 +74,7 @@ export async function render(o) {
     const lines = [`evolve proposals: ${ps.length}`, ...ps.map((p) => `${p.id}  ${p.status}  ${p.kind} -> ${p.change.target}${p.ver ? `  ver=${p.ver}` : ''}`)];
     return { code: 0, summary: capLines(lines, 40).join('\n'), data: ps.map(({ change, ...p }) => ({ ...p, target: change.target })) };
   }
+  if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);
   throw new Error(`lenh la: ${o.cmd ?? '(trong)'}\n${USAGE}`);
 }
 
