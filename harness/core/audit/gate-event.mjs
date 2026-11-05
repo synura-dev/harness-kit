@@ -84,6 +84,7 @@ export function gateEnvelope(ev, ctx = {}, opts = {}) {
   const agent_type = ctx.agent_type ? truncStr(String(ctx.agent_type), 60) : null;
   const tid = (opts.env || process.env).HUB_TASK_ID || ctx.task_id;
   const data = { gate: g, task_id: tid ? safeId(String(tid)) : null };
+  if (ev.signal) data.signal = safeId(ev.signal, 20) || undefined; // tin hieu ket qua (vd verify_fail)
   if (ctx.tool_use_id) data.tool_use_id = truncStr(String(ctx.tool_use_id).replace(/[^A-Za-z0-9_-]/g, ''), 80);
   const summary = truncStr(`${agent_id || agent_type ? agent_type || 'sub' : 'main'} ${g.kind} ${g.decision}${g.hook ? ' ' + g.hook : ''}${g.rule ? ':' + g.rule : ''}${g.reason ? ' | ' + g.reason : ''}`, 120);
   return {

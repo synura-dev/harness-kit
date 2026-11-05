@@ -5,6 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { safeId } from '../../core/io/safe-id.mjs';
 import { fingerprint, isVerifyCommand, verifyKind, verifierOutcome, relFiles } from '../../core/audit/fingerprint.mjs';
 import { gateFromPayload } from '../../core/audit/gate-event.mjs';
+import { promptTrace, promptSignal, bashSignal, versionStamp } from '../../core/audit/signals.mjs';
 import { readStdinRaw } from './stdin.mjs';
 import { partitionFile, writeEnvelope } from '../../core/audit/audit-write.mjs';
 import { loadAuditConfig, auditRoot, hook_events } from './defaults.mjs';
@@ -179,6 +180,24 @@ function addOutcomeFields(data, c) {
   }
 }
 
+// Tin hieu (data.signal), vet prompt (prompt_hash/prompt_kw, khong nguyen van), dau phien ban luc SessionStart (data.version). Chi hook ghi.
+// Khong thu duoc: Stop (payload khong co co interrupt; chi tool events co interrupted/is_interrupt), gate_override (can doi chieu truoc-sau, khong re).
+function addSignalFields(data, c) {
+  const { inp, ti, tool, event, status } = c;
+  let signal = null;
+  if (event === 'UserPromptSubmit' && typeof inp.prompt === 'string') {
+    const t = promptTrace(inp.prompt);
+    if (t) { data.prompt_hash = t.prompt_hash; data.prompt_kw = t.prompt_kw; }
+    signal = promptSignal(inp.prompt);
+  } else if (event === 'SessionStart') {
+    data.version = versionStamp({ cwd: inp.cwd });
+  } else if (tool === 'Bash' && event === 'PostToolUse') {
+    signal = bashSignal(ti.command);
+  }
+  if (!signal && status === 'interrupted') signal = 'interrupt';
+  if (signal) data.signal = signal;
+}
+
 // opts.root (audit root) enables the SubagentStop agent_type lookup; omitted -> no file access.
 export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
   const res = compile(cfg.redact);
@@ -281,6 +300,7 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
   if (runKind) data.run_kind = cut(String(runKind).replace(/[^A-Za-z0-9_.-]/g, ''), 20);
   const runId = (opts.env || process.env).HUB_RUN_ID;
   if (runId) data.run_id = safeId(runId);
+  try { addSignalFields(data, { inp, ti, tool, event, status }); } catch {} // tin hieu + vet prompt + dau phien ban (re, fail-open)
   try { addOutcomeFields(data, { inp, ti, tr, tool, event, ok, status, sid, res, cfg, now, opts }); } catch {} // fail-open: khong lam mat su kien
   try { const g = gateFromPayload(inp, { hook: 'audit', redact: (s) => redact(s, res) }); if (g) data.gate = g; } catch {} // su kien duyet co cau truc neu payload co
   const env = {

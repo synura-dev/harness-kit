@@ -37,6 +37,7 @@ function signature(dir) {
       else if (f.endsWith('.jsonl')) for (const l of fs.readFileSync(f, 'utf8').split('\n').filter(Boolean)) {
         try {
           const j = JSON.parse(l);
+          if (j.type === 'hook') continue; // HookRun (do tre module) la du lieu do luong, khong thuoc chu ky hanh vi
           const g = j.data && j.data.gate;
           sig.push(g ? `gate|${g.hook}:${g.rule}:${g.decision}` : j.hook === 'guard' ? `guard|${j.id}` : `${j.type}|${j.event}|${j.tool || ''}`);
         } catch {}
