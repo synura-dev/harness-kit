@@ -46,6 +46,11 @@ export const DEFAULTS = {
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('proc-orphans', { defaults: DEFAULTS, files, env: { HOOK_PROC_ORPHANS_ENABLED: 'enabled' } });
 
+/** Pid con song that (signal 0). EPERM = con song. */
+export const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return !!e && e.code === 'EPERM'; } };
+/** Loc danh sach tien trinh da cache: bo con cua chinh hook (powershell lien ke cua listProcesses) va pid da chet (cache cu -> con "ma" bi dem nham). */
+export const pruneCached = (procs, selfPid, alive = pidAlive) => procs.filter((p) => p.pid !== selfPid && p.ppid !== selfPid && alive(p.pid));
+
 /** Thuan: procs [{pid,ppid,name,startMs,cmd}] -> {rootPid, children[]} (khong co root => rootPid null). */
 export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   const by = new Map(procs.map((p) => [p.pid, p]));
@@ -93,13 +98,14 @@ export async function scanChildren(cfg, ctx = {}) {
     try {
       const c = JSON.parse(fs.readFileSync(dataPathsFor('proc-orphans', 'scan-cache.json', eo)[0] || file, 'utf8'));
       if (c && Array.isArray(c.procs) && Date.now() - c.ts < ttl * 1000 && c.ts <= Date.now() + 1000) {
-        const r = findChildren([...c.procs.filter((p) => p.pid !== self.pid), self], self.pid, cfg);
+        const r = findChildren([...pruneCached(c.procs, self.pid), self], self.pid, cfg);
         if (r.rootPid != null) return r;
       }
     } catch {}
   }
   const { listProcesses } = await import('../../core/runtime/proc-list.mjs');
-  const { procs } = listProcesses({ timeoutMs: cfg.timeoutMs });
+  const { procs: all } = listProcesses({ timeoutMs: cfg.timeoutMs });
+  const procs = all.filter((p) => p.ppid !== process.pid); // powershell dung de liet ke la con cua hook: khong phai tien trinh mo coi
   if (ttl > 0 && ctx.cache !== false) {
     let tmp = null;
     try {

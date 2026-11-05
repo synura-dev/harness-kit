@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { DEFAULTS, findChildren, load, handle, MODULE, seenRecently, signatureOf } from './hook.mjs';
+import { DEFAULTS, findChildren, pruneCached, load, handle, MODULE, seenRecently, signatureOf } from './hook.mjs';
 import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const script = path.join(import.meta.dir, 'hook.mjs');
@@ -136,4 +136,12 @@ test('shell co con nang (bun) van bao con that', () => {
   const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
   const ps = [R(1, 0, 'claude.exe'), R(3, 1, 'cmd.exe'), R(5, 3, 'bun.exe'), R(99, 1, 'hook.exe')];
   expect(findChildren(ps, 99, DEFAULTS, NOW).children.map((c) => c.pid)).toEqual([5]);
+});
+
+test('cache cu: pid da chet va con cua hook (powershell liet ke) khong bi dem nham; tien trinh that con song van bao', () => {
+  const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
+  const ps = [R(1, 0, 'claude.exe'), R(50, 99, 'powershell.exe'), R(60, 1, 'node.exe'), R(70, 1, 'bun.exe'), R(99, 1, 'node.exe')];
+  const kept = pruneCached(ps, 99, (pid) => pid !== 60);
+  expect(kept.map((p) => p.pid)).toEqual([1, 70]);
+  expect(findChildren([...kept, R(99, 1, 'node.exe')], 99, DEFAULTS, NOW).children.map((c) => c.pid)).toEqual([70]);
 });
