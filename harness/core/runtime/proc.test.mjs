@@ -3,12 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import cp from 'node:child_process';
-import { spawnSync, spawn, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP } from './proc.mjs';
+import { spawnSync, spawn, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP, readLedger } from './proc.mjs';
 import { withLock, acquireLock } from './lockfile.mjs';
 import { checkProcDirect, scanProcDirect, PROC_EXCEPTIONS } from '../checks/proc-check.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'proc-t-'));
-const read = (d) => JSON.parse(fs.readFileSync(ledgerPath(d), 'utf8')).entries;
+const read = (d) => readLedger(ledgerPath(d));
+const seed = (f, entries) => fs.writeFileSync(f, entries.map((e) => JSON.stringify({ op: 'add', ...e }) + '\n').join(''));
 
 test('spawnSync/spawn luon windowsHide:true, ke ca khi nguoi goi dat false', () => {
   const seen = [];
@@ -54,12 +55,12 @@ test('sweepLedger: PID chet -> xoa; qua han + con song -> kill; con han -> giu; 
   const f = ledgerPath(d);
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const now = 1e12;
-  fs.writeFileSync(f, JSON.stringify({ entries: [
+  seed(f, [
     { pid: 1, key: 'dead', cmd: 'a', deadline: now + 1e6 },
     { pid: 2, key: 'over', cmd: 'b', deadline: now - 1 },
     { pid: 3, key: 'fresh', cmd: 'c', deadline: now + 1e6 },
     { pid: 4, key: 'reused', cmd: 'd', deadline: now - 1 },
-  ] }));
+  ]);
   const killed = [];
   const r = sweepLedger({ dir: d, now, alive: (p) => p !== 1, kill: (p) => killed.push(p), matches: (p) => p !== 4 });
   expect(killed).toEqual([2]);
@@ -72,7 +73,7 @@ test('sweepLedger: kill chay SAU khi nha khoa so (khoa khong bi giu trong luc ta
   const f = ledgerPath(d);
   fs.mkdirSync(path.dirname(f), { recursive: true });
   const now = 1e12;
-  fs.writeFileSync(f, JSON.stringify({ entries: [{ pid: 2, key: 'over', cmd: 'b', deadline: now - 1 }, { pid: 3, key: 'fresh', cmd: 'c', deadline: now + 1e6 }] }));
+  seed(f, [{ pid: 2, key: 'over', cmd: 'b', deadline: now - 1 }, { pid: 3, key: 'fresh', cmd: 'c', deadline: now + 1e6 }]);
   const seen = [];
   sweepLedger({ dir: d, now, alive: () => true, kill: (p) => seen.push({ p, locked: fs.existsSync(`${f}.lock`), keys: read(d).map((e) => e.key) }), matches: () => true });
   expect(seen).toEqual([{ p: 2, locked: false, keys: ['fresh'] }]);
@@ -111,10 +112,10 @@ test('matchEntry: can ca duong dan script day du va thoi diem tao khop; lenh ron
 test('sweepLedger: khong xac minh duoc (null) -> khong kill, giu muc; qua han + 24h -> xoa khong kill', () => {
   const d = tmp(); const f = ledgerPath(d); fs.mkdirSync(path.dirname(f), { recursive: true });
   const now = 1e12;
-  fs.writeFileSync(f, JSON.stringify({ entries: [
+  seed(f, [
     { pid: 5, key: 'unk', cmd: 'a', deadline: now - 1000 },
     { pid: 6, key: 'old', cmd: 'b', deadline: now - SWEEP.staleAfterMs - 1 },
-  ] }));
+  ]);
   const killed = [];
   const r = sweepLedger({ dir: d, now, alive: () => true, kill: (p) => killed.push(p), matches: () => null });
   expect(killed).toEqual([]); expect(r).toEqual({ removed: 1, killed: 0 });

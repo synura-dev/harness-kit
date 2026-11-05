@@ -49,32 +49,34 @@ export function spawnTimed(cmd, args, opts = {}) {
 
 // ---- Tac vu nen: so PID + khoa ----
 // So PID: state cua data harness (zone system, khoa 'proc' trong observe/storage/registry.json); chi khi khong resolve duoc moi roi ve tmpdir.
-// Muc: {pid, key, cmd, script?, needle, startedAt, deadline}. Doc-sua-ghi so luon qua khoa file (withLock).
+// Muc: {pid, key, cmd, script?, needle, startedAt, deadline}. Them dong khong khoa; sweep don duoi khoa (withLock).
 function procDir() {
   try { return dataPathFor('proc', { quiet: true }); } catch { return path.join(os.tmpdir(), 'harness-kit'); }
 }
-export const ledgerPath = (dir) => path.join(dir || process.env.HARNESS_PROC_DIR || procDir(), 'proc-ledger.json');
-const readLedger = (f) => { try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); return Array.isArray(j.entries) ? j.entries : []; } catch { return []; } };
-/** Doc de ghi (trong khoa): rename de len tren Windows co cua so ngan doc loi (EPERM/EBUSY/ENOENT/JSON do). Thu lai ngan; van loi thi throw de KHONG ghi de so bang [] (mat muc). File that su khong co -> []. */
-function readLedgerStrict(f) {
-  let last;
-  for (let i = 0; i < 40; i++) {
-    try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); return Array.isArray(j.entries) ? j.entries : []; } catch (e) {
-      last = e;
-      if (e && e.code === 'ENOENT' && !fs.existsSync(f) && i >= 2) return [];
-    }
-    try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); } catch { /* bo qua */ }
+export const ledgerPath = (dir) => path.join(dir || process.env.HARNESS_PROC_DIR || procDir(), 'proc-ledger.jsonl');
+// So = JSONL chi-noi-them: {op:'add',...entry} | {op:'done',pid?,key?}. Doc = gop cac dong theo thu tu. Them 1 dong nho khong can khoa; chi sweep don (compact) duoi khoa.
+const fold = (text) => {
+  const m = new Map();
+  for (const ln of text.split('\n')) {
+    if (!ln) continue;
+    let r; try { r = JSON.parse(ln); } catch { continue; } // dong rach/do -> bo qua
+    if (r.op === 'add') { m.delete(r.pid); const { op, ...e } = r; m.set(r.pid, e); }
+    else if (r.op === 'done') for (const [p, e] of m) if ((r.pid != null && e.pid === r.pid) || (r.key != null && e.key === r.key)) m.delete(p);
   }
-  throw last;
+  return [...m.values()];
+};
+export const readLedger = (f) => { try { return fold(fs.readFileSync(f, 'utf8')); } catch { return []; } };
+/** Them 1 dong vao so (O_APPEND, khong khoa). Loi tam thoi (EPERM/EBUSY) thu lai; van loi -> false. */
+function appendLedger(f, rec) {
+  for (let i = 0; i < 20; i++) {
+    try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.appendFileSync(f, JSON.stringify(rec) + '\n'); return true; } catch { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); } catch { /* bo qua */ } }
+  }
+  return false;
 }
-function writeLedger(f, entries) {
+/** Don so: ghi lai chi cac muc con lai (tmp + rename), duoi khoa. */
+function compactLedger(f, entries) {
   const t = `${f}.${process.pid}.tmp`;
-  try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(t, JSON.stringify({ entries })); fs.renameSync(t, f); } catch { try { fs.unlinkSync(t); } catch {} }
-}
-/** Doc-sua-ghi so duoi khoa. fn(entries) -> entries moi | null (khong ghi). Khong lay duoc khoa -> bo qua (tra false). */
-function updateProcLedger(f, fn) {
-  let r; try { r = withLock(f, () => { const next = fn(readLedgerStrict(f)); if (next) writeLedger(f, next); return true; }, { staleMs: 15000, retries: 120, waitMs: 25 }); } catch { return false; }
-  return r.ok;
+  try { fs.writeFileSync(t, entries.map((e) => JSON.stringify({ op: 'add', ...e }) + '\n').join('')); fs.renameSync(t, f); } catch { try { fs.unlinkSync(t); } catch { /* bo qua */ } }
 }
 export const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
@@ -85,8 +87,8 @@ export function isRunning(key, { dir, now = Date.now(), alive = isAlive } = {}) 
 
 /** Xoa muc theo key hoac pid (tac vu goi khi xong). */
 export function ledgerDone({ key, pid } = {}, { dir } = {}) {
-  const f = ledgerPath(dir);
-  updateProcLedger(f, (es) => es.filter((e) => !(key != null && e.key === key) && !(pid != null && e.pid === pid)));
+  if (key == null && pid == null) return;
+  appendLedger(ledgerPath(dir), { op: 'done', pid: pid ?? null, key: key ?? null });
 }
 
 export const SWEEP = Object.freeze({ staleAfterMs: 24 * 3600e3, startToleranceMs: 30000, minIntervalMs: 3600e3 });
@@ -114,7 +116,8 @@ export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = kil
   const f = ledgerPath(dir);
   let removed = 0, killed = 0; let toKill = [];
   // Trong khoa chi doc + quyet dinh + ghi so; kill (taskkill dong bo, co the toi 10s/PID) lam SAU khi nha khoa (khoa stale 15s).
-  const ok = updateProcLedger(f, (es) => {
+  const r = withLock(f, () => {
+    const es = readLedger(f);
     const keep = []; removed = 0; killed = 0; toKill = [];
     for (const e of es) {
       if (!alive(e.pid)) { removed++; continue; }
@@ -125,8 +128,10 @@ export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = kil
       if (now - e.deadline >= staleAfterMs) { removed++; continue; } // khong xac minh duoc: chi bo muc, khong kill
       keep.push(e);
     }
-    return removed ? keep : null;
-  });
+    if (removed) compactLedger(f, keep);
+    return true;
+  }, { staleMs: 15000, retries: 120, waitMs: 25 });
+  const ok = r.ok;
   if (ok) for (const pid of toKill) { try { kill(pid); } catch { /* da chet */ } }
   return { removed, killed };
 }
@@ -148,7 +153,7 @@ export function spawnBackground({ cmd, args = [], key, deadlineMs = 10 * 60e3, d
     try { os.setPriority(p.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* khong dat duoc */ }
     const script = scriptOf(args);
     const entry = { pid: p.pid, key: key || null, cmd: [cmd, ...args].join(' ').slice(0, 300), script, needle: script || [cmd, ...args].join(' ').slice(0, 400), startedAt, deadline: now + deadlineMs };
-    updateProcLedger(ledgerPath(dir), (es) => [...es.filter((e) => e.pid !== p.pid), entry]);
+    appendLedger(ledgerPath(dir), { op: 'add', ...entry });
     return p.pid;
   } catch { return null; }
 }
