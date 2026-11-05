@@ -1,0 +1,14 @@
+{
+  "desc": "loi lap >= 10 lan va >= 3 phien -> de xuat sua (dau vao cho evolve autopilot); fp trung candidate (khong group_by)",
+  "source": "candidates",
+  "days": 7,
+  "filter": {
+    "kind": "error"
+  },
+  "metric": "count",
+  "threshold": 10,
+  "min_sessions": 3,
+  "action": "propose",
+  "cooldown_hours": 168,
+  "message": "loi lap {count} lan/{sessions} phien: {sample} -> de xuat sua (harness evolve queue)"
+}
