@@ -4,6 +4,7 @@
 //   hook.mjs sweep   : SessionStart. `prune --apply` an toan (clean + da merge + qua minAgeHours + khong locked). Fail-open, LUON exit 0.
 // Log 1 dong JSONL vao <data>/worktree/hook.jsonl. Dung core/runtime/worktree.mjs (cung ham voi dispatch-worker).
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
@@ -70,7 +71,8 @@ export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg), opts 
   try { if (now - fs.statSync(stamp).mtimeMs < (opts.intervalMs ?? SWEEP_INTERVAL_MS)) return { removed: 0, skipped: 'throttled' }; } catch {}
   const cli = path.join(HERE, '..', '..', 'cli', 'commands', 'worktree.mjs');
   const spawnBg = opts.spawnBackground || (await import('../../core/runtime/proc.mjs')).spawnBackground;
-  const pid = spawnBg({ cmd: process.execPath, args: [cli, 'prune', '--apply', '--min-age-hours', String(cfg.minAgeHours), '--timeout', String(cfg.sweepTimeoutSec)], key: 'worktree-sweep', deadlineMs: (cfg.sweepTimeoutSec + 10) * 1000, cwd: workspaceRoot() });
+  // con 'sweep-run' (main duoi) chay prune dong bo va ghi log neu exit != 0; onError ghi loi spawn
+  const pid = spawnBg({ cmd: process.execPath, args: [fileURLToPath(import.meta.url), 'sweep-run', cli, String(cfg.minAgeHours), String(cfg.sweepTimeoutSec)], key: 'worktree-sweep', deadlineMs: (cfg.sweepTimeoutSec + 10) * 1000, cwd: workspaceRoot(), onError: (why) => { try { Promise.resolve(emit({ event: 'sweep', error: String(why).slice(0, 200) })).catch(() => {}); } catch {} } });
   if (pid) { try { fs.mkdirSync(path.dirname(stamp), { recursive: true }); fs.writeFileSync(stamp, String(now)); } catch {} }
   return { removed: 0, started: !!pid };
 }
@@ -125,7 +127,14 @@ async function main(mode) {
     try { const r = await handle(event, readJsonStdin(), { cfg, write: true }); process.stdout.write(r.record.path); process.exit(0); }
     catch (e) { process.stderr.write(`worktree create loi: ${e.message || e}\n`); process.exit(1); }
   }
-  try { await handle(event, readJsonStdin(), { cfg, write: true }); } catch {}
+  if (mode === 'sweep-run') { // [cli, minAgeHours, timeoutSec] tu argv
+    const [cli, minAge, tsec] = process.argv.slice(3);
+    const r = spawnSync(process.execPath, [cli, 'prune', '--apply', '--min-age-hours', String(minAge), '--timeout', String(tsec)], { encoding: 'utf8', timeout: (Number(tsec) + 5) * 1000, windowsHide: true });
+    if (r.status !== 0) { try { await log({ event: 'sweep', error: `prune exit ${r.status ?? r.signal ?? 'error'}: ${String(r.stderr || (r.error && r.error.message) || '').replace(/s+/g, ' ').slice(0, 200)}` }, cfg); } catch {} }
+    process.exit(0);
+  }
+  const bg = !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'); // nhu dispatcher: test/NO_BG khong spawn prune that
+  try { await handle(event, readJsonStdin(), { cfg, write: true, background: bg }); } catch {}
   process.exit(0);
 }
 

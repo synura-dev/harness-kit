@@ -9,7 +9,7 @@ export const DEFAULTS = {
   // tran thoi gian TONG moi su kien (ms), < `timeout` trong settings. Het -> tra phan da co, bo module chua chay.
   budgetsMs: {
     PreToolUse: 2500, PostToolUse: 2500, PostToolUseFailure: 2500, SubagentStart: 2500, PermissionRequest: 2500, PermissionDenied: 2500,
-    Notification: 2500, SessionEnd: 2500, UserPromptSubmit: 2800, Stop: 14000, SubagentStop: 14000, SessionStart: 3000,
+    Notification: 2500, SessionEnd: 2500, UserPromptSubmit: 2800, Stop: 14000, SubagentStop: 14000, SessionStart: 5000,
     WorktreeCreate: 42000, WorktreeRemove: 27000,
   },
 };
@@ -41,7 +41,7 @@ export const ORDER = Object.freeze({
   SessionEnd: [AUDIT],
   Stop: [AUDIT, PROC_ORPHANS],
   SubagentStop: [AUDIT, PROC_ORPHANS],
-  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, EXT_INJECT, LEDGER_WARN, AGY_HEAL],
+  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, LEDGER_WARN, AGY_HEAL, EXT_INJECT],
   UserPromptSubmit: [AUDIT, LEDGER_WARN],
   WorktreeCreate: [WORKTREE],
   WorktreeRemove: [WORKTREE],

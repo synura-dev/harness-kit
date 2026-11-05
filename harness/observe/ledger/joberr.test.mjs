@@ -116,3 +116,13 @@ test('updateState: khoa dang bi giu -> fail-open (false, khong ghi, khong nem)',
   assert.equal(readState(o).a, 2);
   rm(d);
 });
+
+test('runJob chay tron reset errWarnedAt de loi moi sau do van duoc bao', async () => {
+  const d = mk(); const env = { HUB_DATA_DIR: d }; const dataOpts = { env };
+  writeState(dataOpts, { lastRun: 1, errWarnedAt: 777, lastError: 'x', lastErrorAt: 5 });
+  await runJob({ dataOpts, nowMs: NOW, events: [], hubDir: d, projectDir: null });
+  assert.equal(readState(dataOpts).errWarnedAt, undefined);
+  recordJobError(dataOpts, 'exit', 'moi', NOW + 1000);
+  assert.match(jobErrorLine(dataOpts, NOW + 2000), /job lo that bai/);
+  rm(d);
+});

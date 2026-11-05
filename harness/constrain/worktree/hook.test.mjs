@@ -14,7 +14,7 @@ function tmpRepo() {
   git(d, '-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
   return d;
 }
-const run = (mode, input, repo) => spawnSync(process.execPath, [script, mode], { input, encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: repo, HUB_DATA_DIR: path.join(repo, 'data') } });
+const run = (mode, input, repo) => spawnSync(process.execPath, [script, mode], { input, encoding: 'utf8', timeout: 60000, env: { ...process.env, HARNESS_NO_BG: '1', HUB_DIR: repo, HUB_DATA_DIR: path.join(repo, 'data') } });
 
 test('mac dinh khi thieu config', () => {
   expect(load([path.join(os.tmpdir(), 'nope-wt.json')]).config.minAgeHours).toBe(DEFAULTS.minAgeHours);
@@ -111,4 +111,23 @@ test('sweep nen: background:false khong chay; throttle 6h bang stamp; spawnBackg
     for (const k of Object.keys(prev)) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; }
     fs.rmSync(repo, { recursive: true, force: true });
   }
+});
+
+test('sweep truc tiep (main) ton trong HARNESS_NO_BG=1: khong spawn prune, khong ghi stamp', () => {
+  const repo = tmpRepo();
+  expect(run('sweep', '', repo).status).toBe(0); // helper dat HARNESS_NO_BG=1
+  const stamps = fs.readdirSync(repo, { recursive: true }).filter((f) => /sweep\.stamp$/.test(String(f)));
+  expect(stamps).toEqual([]);
+  try { fs.rmSync(repo, { recursive: true, force: true }); } catch {}
+});
+test('sweep-run: prune exit != 0 => ghi dong error vao nhat ky worktree', () => {
+  const repo = tmpRepo();
+  const bad = path.join(repo, 'bad-cli.mjs');
+  fs.writeFileSync(bad, "console.error('boom'); process.exit(3);");
+  const r = spawnSync(process.execPath, [script, 'sweep-run', bad, '1', '5'], { encoding: 'utf8', timeout: 30000, env: { ...process.env, HUB_DIR: repo, HUB_DATA_DIR: path.join(repo, 'data') } });
+  expect(r.status).toBe(0);
+  const logs = fs.readdirSync(path.join(repo, 'data'), { recursive: true }).filter((f) => /hook\.jsonl$/.test(String(f)));
+  expect(logs.length).toBeGreaterThan(0);
+  expect(fs.readFileSync(path.join(repo, 'data', String(logs[0])), 'utf8')).toMatch(/prune exit 3/);
+  try { fs.rmSync(repo, { recursive: true, force: true }); } catch {}
 });

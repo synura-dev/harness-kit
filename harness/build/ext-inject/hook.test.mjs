@@ -117,7 +117,7 @@ test('defaultRun that: timeout => kill tien trinh con (khong con ghi marker), tr
   const bin = path.join(dir, 'slow.mjs');
   fs.writeFileSync(bin, `import fs from 'node:fs'; setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'x'), 1500); setInterval(() => {}, 1000);`);
   const t0 = Date.now();
-  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 300, maxBytes: 1536, bin })).toBe('');
+  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 300, maxBytes: 1536, bin })).toBeNull();
   expect(Date.now() - t0).toBeLessThan(1200);
   await new Promise((r) => setTimeout(r, 2000));
   expect(fs.existsSync(marker)).toBe(false);
@@ -129,7 +129,7 @@ test('defaultRun that: timeout giet ca chau (khong mo coi, khong ghi marker)', a
   const bin = path.join(dir, 'parent.mjs');
   fs.writeFileSync(grand, `import fs from 'node:fs'; setTimeout(() => fs.writeFileSync(${JSON.stringify(marker)}, 'x'), 1500); setInterval(() => {}, 1000);`);
   fs.writeFileSync(bin, `import { spawn } from 'node:child_process'; spawn(process.execPath, [${JSON.stringify(grand)}], { stdio: 'ignore' }); setInterval(() => {}, 1000);`);
-  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 600, maxBytes: 1536, bin })).toBe('');
+  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 600, maxBytes: 1536, bin })).toBeNull();
   await new Promise((r) => setTimeout(r, 2500));
   expect(fs.existsSync(marker)).toBe(false);
 });
@@ -139,7 +139,7 @@ test('defaultRun that: exit 0 tra stdout; exit != 0 tra rong', async () => {
   fs.writeFileSync(ok, `console.log('hi ' + process.argv.slice(2).join(' '));`);
   fs.writeFileSync(bad, `console.log('x'); process.exit(3);`);
   expect((await defaultRun('d', ['a'], { cwd: dir, timeoutMs: 5000, maxBytes: 1536, bin: ok })).trim()).toBe('hi d a');
-  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 5000, maxBytes: 1536, bin: bad })).toBe('');
+  expect(await defaultRun('d', [], { cwd: dir, timeoutMs: 5000, maxBytes: 1536, bin: bad })).toBeNull();
 });
 test('cat 12 dong va 1.5KB', async () => {
   const many = Array.from({ length: 30 }, (_, i) => `l${i}`).join('\n');
@@ -174,4 +174,25 @@ test('cache theo hash ext: hit khong spawn, hash doi => lam moi', async () => {
   expect(calls).toHaveLength(2); // miss
   await handle('SessionStart', S({ session_id: 'd' }), { ...c2, now: Date.now() + 3600e3 * 2 });
   expect(calls).toHaveLength(3); // het TTL
+});
+
+test('ext loi/timeout => KHONG cache (khong ghi cache session lan out); ext ok het => cache', async () => {
+  const two = { list: () => [{ id: 'a', root: 'a', hash: 'h1' }, { id: 'b', root: 'b', hash: 'h1' }], readManifest: (r) => ({ ...INJ, domain: 'd-' + r }) };
+  const bad = mk({ ...two, run: async (d) => (d === 'd-a' ? null : 'fine') });
+  expect(await handle('SessionStart', S(), bad.ctx)).toEqual({ additionalContext: 'fine' });
+  expect(fs.readdirSync(bad.ctx.cacheDir)).toEqual([]);
+  const ok = mk({ ...two, run: async (d) => (d === 'd-a' ? '' : 'fine') }); // rong hop le van la thanh cong
+  await handle('SessionStart', S(), ok.ctx);
+  expect(fs.readdirSync(ok.ctx.cacheDir).length).toBe(2);
+  const hang = mk({ run: () => new Promise(() => {}), cfg: { ...DEFAULTS, totalMs: 100 } });
+  await handle('SessionStart', S(), hang.ctx);
+  expect(fs.readdirSync(hang.ctx.cacheDir)).toEqual([]);
+});
+test('ctx.deadline cat totalMs (con 300ms bien); ghi cache ngay khi xong', async () => {
+  const t0 = Date.now();
+  const m = mk({ run: () => new Promise(() => {}) });
+  await handle('SessionStart', S(), { ...m.ctx, deadline: Date.now() + 500 });
+  expect(Date.now() - t0).toBeLessThan(1500);
+  expect(DEFAULTS.totalMs).toBeLessThan(DEFAULTS.totalMs + 1);
+  expect(mod.timeoutMs).toBeGreaterThan(DEFAULTS.totalMs);
 });

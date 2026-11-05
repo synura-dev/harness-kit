@@ -53,3 +53,12 @@ test('observe query va evolve eval chay trong thu muc tam', () => {
   expect(e.status).not.toBe(null);
   expect(e.stderr).not.toContain('Cannot find module');
 });
+
+test('SessionStart: module re truoc ext-inject; budget > timeout ext-inject va tran tong ext-inject', async () => {
+  const ids = ORDER.SessionStart.map((m) => m.id);
+  expect(ids.indexOf('ext-inject')).toBe(ids.length - 1);
+  expect(ids.indexOf('ledger-warn')).toBeLessThan(ids.indexOf('ext-inject'));
+  expect(ids.indexOf('agy-heal')).toBeLessThan(ids.indexOf('ext-inject'));
+  const ei = (await import('../../build/ext-inject/hook.mjs')).default;
+  expect(ei.timeoutMs).toBeLessThan(DEFAULTS.budgetsMs.SessionStart);
+});
