@@ -113,7 +113,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       if (m.error) { trace(m.id, m.error); if (m.gate) gw(m.id, m.error); continue; }
       if (!applies(m.mod, ev, state.input)) continue;
       if (m.gate && state.denied) continue; // deny cat chuoi gate; audit van chay
-      const left = m.own ? m.own : budget - (Date.now() - startedAt);
+      const left = m.own ? Math.max(m.own, budget - (Date.now() - startedAt)) : budget - (Date.now() - startedAt);
       if (left < 50) { trace(m.id, 'budget'); if (m.gate && m.mod.onError !== 'closed') gw(m.id, 'budget'); continue; }
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();

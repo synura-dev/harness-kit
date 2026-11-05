@@ -171,11 +171,35 @@ test('guard: register ghim khai bao vao registry; manifest doi/xoa khoa guard kh
   expect(g).toEqual({ ...G, domain: 'demo' });
   fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'] })); // xoa khoa guard tren dia
   expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard).toEqual(g);
-  expect((await R.approve('demo', opts)).code).toBe(0); // manifest khong co guard: registry giu guard
+  const prompts = [];
+  const cap = { ...opts, confirm: (m) => { prompts.push(m); return true; } };
+  expect((await R.approve('demo', { ...opts, confirm: () => false })).code).toBe(1); // tu choi: registry van giu guard
   expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard).toEqual(g);
+  expect((await R.approve('demo', { ...opts, confirm: undefined, isTTY: false })).code).toBe(2); // gop guard can TTY
+  expect((await R.approve('demo', cap)).code).toBe(0); // manifest khong co guard: prompt ghi GO GUARD, duyet moi go
+  expect(prompts[0]).toContain('GO GUARD');
+  expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard).toBeUndefined();
+  fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: G }));
+  expect((await R.approve('demo', cap)).code).toBe(0);
+  expect(prompts[1]).toContain('THEM guard');
   fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: { ...G, matcher: 'Write' } }));
   expect((await R.approve('demo', opts)).code).toBe(0); // khai bao doi: approve ghi lai
   expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard.matcher).toBe('Write');
   fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: { event: 'PreToolUse', matcher: '(', args: [] } }));
   expect((await R.register('ext/demo', opts)).code).toBe(2); // guard sai bi tu choi
+});
+
+test('remove: ext co guard bat buoc TTY (khong TTY => code 2 + huong dan), co TTY thi go; tu choi thi giu', async () => {
+  const { root, opts } = setup();
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: { event: 'PreToolUse', matcher: 'Write', args: ['guard'] } }));
+  expect((await R.register('ext/demo', opts)).code).toBe(0);
+  const noTty = { ...opts, confirm: undefined, isTTY: false, yes: true };
+  const r = await R.remove('demo', noTty);
+  expect(r.code).toBe(2); expect(r.text).toContain('PowerShell');
+  expect(R.list(opts).text).toContain('demo');
+  expect((await main(['remove', 'demo', '--yes'], { ...opts, confirm: undefined, isTTY: false })).code).toBe(2);
+  expect((await R.remove('demo', { ...opts, confirm: () => false, yes: true })).code).toBe(1);
+  expect(R.list(opts).text).toContain('demo');
+  expect((await R.remove('demo', { ...opts, confirm: () => true, yes: true })).text).toContain('da go');
+  expect(R.list(opts).text).not.toContain('demo');
 });

@@ -1,7 +1,7 @@
 // Hook ext-guard: guard tong quat tu extension. Manifest extension khai (ghim vao REGISTRY luc ext register/approve; luc chay doc TU REGISTRY, khong doc manifest tren dia)
 //   "guard": { "event": "PreToolUse", "matcher": "<regex tool_name>", "args": ["guard"] }
 // PreToolUse: voi moi ext da dang ky VA hash ok (drift/chua duyet => chan) co matcher khop tool_name, chay
-//   `harness <domain> <args>` (khong shell) voi JSON su kien tren stdin, timeout < budget PreToolUse (2500ms).
+//   `harness <domain> <args>` (khong shell) voi JSON su kien tren stdin, timeout 2500ms (config), dispatcher cap budget rieng 3000ms cho module nay.
 //   exit 0 = qua; exit 2 = chan (deny, ly do = stderr); exit khac/timeout/loi/hash lech = FAIL-CLOSED (chan + audit) cho tool da khop matcher. Khong hard-code ten ext.
 import path from 'node:path';
 import { spawn } from '../../core/runtime/proc.mjs';

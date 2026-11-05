@@ -33,7 +33,7 @@ const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-injec
 export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn', 'agy-heal']);
 
 export const ORDER = Object.freeze({
-  PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, EXT_GUARD, AUDIT],
+  PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, EXT_GUARD, { ...AUDIT, ownBudgetMs: 300 }], // audit: budget rieng toi thieu 300ms, khong bi bo khi ext-guard chay lau (tong < timeout hooks.json 8s)
   PostToolUse: [AUDIT, DATA_CHECK],
   PostToolUseFailure: [AUDIT],
   PermissionRequest: [AUDIT],
