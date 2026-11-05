@@ -45,7 +45,7 @@ test('create thieu name => exit 1 + stderr; remove/sweep rac => exit 0', () => {
   expect(r.stdout).toBe('');
   expect(run('remove', 'rac', repo).status).toBe(0);
   expect(run('sweep', '', repo).status).toBe(0);
-  fs.rmSync(repo, { recursive: true, force: true });
+  try { fs.rmSync(repo, { recursive: true, force: true }); } catch {} // sweep nen con giu cwd tam thoi
 });
 test('sweep: du an khong phai git -> bo qua som (khong spawn), repo git van chay', async () => {
   const plain = fs.mkdtempSync(path.join(os.tmpdir(), 'wt plain '));
@@ -58,8 +58,8 @@ test('sweep: du an khong phai git -> bo qua som (khong spawn), repo git van chay
     expect(validateHookResult(r)).toEqual([]);
     const repo = tmpRepo();
     process.env.HUB_DIR = repo;
-    const g = await handle('SessionStart', {}, { cfg: DEFAULTS, write: false });
-    expect(g.record).toEqual({ removed: 0 });
+    const g = await handle('SessionStart', {}, { cfg: DEFAULTS, write: false, background: false });
+    expect(g.record.removed).toBe(0);
     fs.rmSync(repo, { recursive: true, force: true });
   } finally {
     for (const k of Object.keys(prev)) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; }
@@ -88,3 +88,27 @@ test('handle(): WorktreeCreate tra record.path; thieu name -> throw; remove hop 
     fs.rmSync(repo, { recursive: true, force: true });
   }
 }, 60000);
+
+test('sweep nen: background:false khong chay; throttle 6h bang stamp; spawnBackground duoc dung', async () => {
+  const repo = tmpRepo();
+  const prev = { HUB_DIR: process.env.HUB_DIR, HUB_DATA_DIR: process.env.HUB_DATA_DIR };
+  process.env.HUB_DIR = repo; process.env.HUB_DATA_DIR = path.join(repo, 'data');
+  try {
+    const calls = [];
+    const spawnBackground = (o) => { calls.push(o); return 4242; };
+    const ctx = (extra) => ({ cfg: DEFAULTS, write: false, sweep: { spawnBackground }, ...extra });
+    expect((await handle('SessionStart', {}, ctx({ background: false }))).record.skipped).toBe('no-background');
+    expect(calls).toHaveLength(0);
+    expect((await handle('SessionStart', {}, ctx({ background: true }))).record.started).toBe(true);
+    expect(calls).toHaveLength(1);
+    expect(calls[0].key).toBe('worktree-sweep');
+    expect((await handle('SessionStart', {}, ctx({ background: true }))).record.skipped).toBe('throttled');
+    expect(calls).toHaveLength(1);
+    const later = { sweep: { spawnBackground, now: Date.now() + 7 * 3600e3 } };
+    expect((await handle('SessionStart', {}, ctx({ background: true, ...later }))).record.started).toBe(true);
+    expect(calls).toHaveLength(2);
+  } finally {
+    for (const k of Object.keys(prev)) { if (prev[k] === undefined) delete process.env[k]; else process.env[k] = prev[k]; }
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+});

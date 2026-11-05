@@ -96,6 +96,16 @@ function writeCache(dir, sid, ws, text) {
   } catch { /* cache la tien ich, khong lam hong hook */ }
 }
 
+const OUT_TTL_MS = 30 * 60 * 1000;
+const outFile = (dir, key) => path.join(dir, `out-${key}.json`);
+function readOutCache(dir, key, now, ttl) {
+  const j = readJson(outFile(dir, key));
+  return j && typeof j.text === 'string' && now - j.at < ttl ? j.text : null;
+}
+function writeOutCache(dir, key, text, now) {
+  try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(outFile(dir, key), JSON.stringify({ at: now, text })); } catch { /* bo qua */ }
+}
+
 /**
  * Hop dong HOOK_MODULE: handle(event, input, ctx) -> {} | {additionalContext}. Khong decision. Fail-open.
  * ctx (test): {cfg, env, list(workspace, opts), hashOf(root), readManifest(root), core(), run(domain, args, opts), cacheDir}.
@@ -123,26 +133,33 @@ export async function handle(event, input, ctx = {}) {
     const run = ctx.run || defaultRun;
     let core; // tinh lazy, chi khi co ext can chay
     const jobs = [];
+    const parts = [];
     for (const e of list) {
       try {
         const m = readManifest(e.root);
         const inj = parseInject(m);
         if (!inj || !inj.events.includes(event)) continue;
         if (hashOf(e.root) !== e.hash) continue; // drift/chua duyet/thieu: bo qua
+        parts.push(e.root, e.hash, JSON.stringify(inj));
         core = core === undefined ? (ctx.core ? ctx.core() : coreDomains()) : core;
         if (!core) continue;
         const domain = manifestDomains(m).find((d) => !core.has(d));
         if (!domain) continue; // khong co domain rieng (trung core): khong dinh tuyen
         const args = inj.args.map((a) => a.split('{cwd}').join(evCwd));
-        jobs.push(Promise.resolve(run(domain, args, { cwd: ws, timeoutMs: cfg.timeoutMs, maxBytes: cfg.maxBytes, env })).then((o) => clip(o, cfg.maxLines, cfg.maxBytes), () => ''));
+        jobs.push(() => Promise.resolve(run(domain, args, { cwd: ws, timeoutMs: cfg.timeoutMs, maxBytes: cfg.maxBytes, env })).then((o) => clip(o, cfg.maxLines, cfg.maxBytes), () => ''));
       } catch { /* mot ext loi khong anh huong ext khac */ }
     }
+    // Cache theo hash ext da dang ky + manifest inject (+ workspace, cwd su kien). Hash doi => lam moi. TTL ngan de output dong khong cu qua lau.
+    const ckey = jobs.length ? crypto.createHash('sha256').update([norm(ws), evCwd, ...parts].join('\0')).digest('hex').slice(0, 32) : '';
+    const hit = ckey ? readOutCache(cdir, ckey, ctx.now ?? Date.now(), cfg.cacheTtlMs ?? OUT_TTL_MS) : null;
+    if (hit !== null) { if (sid) writeCache(cdir, sid, ws, hit); return hit ? { additionalContext: hit } : {}; }
     let total;
     const deadline = new Promise((r) => { total = setTimeout(() => r(null), cfg.totalMs); });
-    const outs = await Promise.race([Promise.all(jobs), deadline]);
+    const outs = await Promise.race([Promise.all(jobs.map((j) => j())), deadline]);
     clearTimeout(total);
     const text = (outs || []).filter(Boolean).join('\n\n');
     if (sid) writeCache(cdir, sid, ws, text);
+    if (ckey && outs) writeOutCache(cdir, ckey, text, ctx.now ?? Date.now());
     return text ? { additionalContext: text } : {};
   } catch { return {}; }
 }
