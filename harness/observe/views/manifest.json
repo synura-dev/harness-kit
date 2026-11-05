@@ -4,15 +4,15 @@
   "layer": "ext",
   "entry": "observe.mjs",
   "domain": "observe",
-  "desc": "cong doc audit/du lieu: sizes|data-prune|ledger|report (chi doc, prune mac dinh dry-run)",
-  "cmds": "sizes | data-prune | ledger [list] | report",
+  "desc": "cong doc audit/du lieu: sizes|data-prune|usage|ledger|report (chi doc, prune mac dinh dry-run)",
+  "cmds": "sizes | data-prune | usage | ledger [list] | report",
   "default": "index",
   "domains": {
-    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (sizes, data-prune, ledger, report)", "cmds": "sizes | data-prune | ledger [list] | report", "default": "index" }
+    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (sizes, data-prune, usage, ledger, report)", "cmds": "sizes | data-prune | usage | ledger [list] | report", "default": "index" }
   },
   "files": {
-    "helpers": ["data.mjs", "sizes.mjs", "prune.mjs"], "query": ["query/files.mjs"] },
-  "tests": ["data.test.mjs", "sizes.test.mjs"],
+    "helpers": ["data.mjs", "sizes.mjs", "prune.mjs", "usage.mjs"], "query": ["query/files.mjs"] },
+  "tests": ["data.test.mjs", "sizes.test.mjs", "usage.test.mjs"],
   "config": { "defaults": null, "schema": null },
   "data": "audit",
   "tier": "T1"
