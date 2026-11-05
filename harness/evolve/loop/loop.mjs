@@ -99,7 +99,7 @@ export async function findCandidates(o = {}) {
       const evs = (x._evs || []).slice().sort((a, b) => String(a.ts || '').localeCompare(String(b.ts || '')));
       const last = evs[evs.length - 1] || {};
       return {
-        id: x.id, fp: x._fp || null, count: x.evidenceCount, tool: last.tool || (last.data && last.data.tool) || 'unknown',
+        id: x.id, fp: x._fp || null, legacy_fps: x._legacy || [], count: x.evidenceCount, tool: last.tool || (last.data && last.data.tool) || 'unknown',
         sessions: new Set(evs.map((e) => e.sid || e.session_id || '-')).size,
         first_ts: evs[0] ? evs[0].ts || null : null, last_ts: last.ts || null,
         sample: redact(extractErrorDetails(last)), pattern: redactPattern(x.pattern), hint: redact(x.hint),

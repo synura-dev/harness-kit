@@ -222,3 +222,33 @@ test('giu khi fp giam (khong con lap)', async () => {
   expect(t8.kept.length).toBe(1);
   expect(fs.existsSync(target)).toBe(true);
 });
+
+test('protectiveRates bo HookRun khoi mau so', () => {
+  const ev = [{ kind: 'test', ok: true }, { type: 'hook', event: 'HookRun' }, { event: 'HookRun' }, { signal: 'correction' }];
+  const r = protectiveRates(ev);
+  expect(r.n).toBe(2); expect(r.correction_rate).toBe(0.5);
+});
+
+test('shouldRollback: khong do duoc -> khong giu, khong rollback', () => {
+  const d = shouldRollback({ count_before: 3, rates_before: {} }, 0, { verify_n: 0, n: 0, verify_fail_rate: 0, correction_rate: 0 }, undefined, { measurable: false });
+  expect(d.rollback).toBe(false); expect(d.unmeasurable).toBe(true);
+});
+
+test('moc fp cu khac dinh dang: unmeasurable + ghi ledger; fp = error_fp goc khop nguoc qua legacy_fps', async () => {
+  fs.writeFileSync(o.ledgerFile, JSON.stringify(entry(FP)) + '\n');
+  await runAutopilot(o);
+  const st = readState(o);
+  expect(st.applied[0].legacy_fps).toContain(FP);
+  const sp = path.join(apDir(o), 'state.json');
+  const bad = JSON.parse(JSON.stringify(st)); bad.applied[0].fp = 'oldformat0'; bad.applied[0].legacy_fps = []; bad.lastRun = 0;
+  fs.writeFileSync(sp, JSON.stringify(bad));
+  const t8 = await runAutopilot({ ...o, nowMs: NOW + 8 * DAY, ledgerEntries: [], force: true });
+  expect(t8.unmeasured.length).toBe(1); expect(t8.kept.length + t8.rolledBack.length).toBe(0);
+  expect(readState(o).applied[0].status).toBe('unmeasurable');
+  const led = JSON.parse(fs.readFileSync(o.ledgerFile, 'utf8').split('\n')[0]);
+  expect(led.evolve.status).toBe('unmeasurable');
+  const good = JSON.parse(JSON.stringify(st)); good.applied[0].fp = FP; good.applied[0].legacy_fps = []; good.lastRun = 0;
+  fs.writeFileSync(sp, JSON.stringify(good));
+  const g8 = await runAutopilot({ ...o, nowMs: NOW + 8 * DAY, ledgerEntries: [], force: true });
+  expect(g8.unmeasured.length).toBe(0); expect(g8.kept.length).toBe(1);
+});

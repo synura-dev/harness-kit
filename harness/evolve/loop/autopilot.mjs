@@ -13,6 +13,7 @@ import { findCandidates, propose, check, apply, rollback, ctx, nestedDateDirs, c
 import { ruleDef } from './rule-content.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { withLock } from '../../core/runtime/lockfile.mjs';
+import { isHookRun } from '../../core/audit/signals.mjs';
 
 export const CFG = Object.freeze({
   intervalHours: 24, timeoutS: 100, maxProposals: 5, maxModelCallsWeek: 0, rollbackAfterDays: 7,
@@ -73,7 +74,7 @@ const isVerify = (k) => k === 'test' || k === 'build';
 export function protectiveRates(events) {
   let vn = 0, vf = 0, corr = 0, n = 0;
   for (const e of events || []) {
-    if (!e) continue; n++;
+    if (!e || isHookRun(e)) continue; n++; // HookRun khong phai thao tac cua agent
     if (isVerify(auditField(e, 'kind'))) { vn++; if (e.ok === false || e.event === 'PostToolUseFailure') vf++; }
     if (auditField(e, 'signal') === 'correction') corr++;
   }
@@ -84,8 +85,20 @@ export function worsened(before, after, cfg = CFG) {
   const w = (a, b, nA) => nA >= cfg.minSamples && b > a * (1 + cfg.tolerance) && b - a > 0.005;
   return w(before.verify_fail_rate, after.verify_fail_rate, after.verify_n) || w(before.correction_rate, after.correction_rate, after.n);
 }
+/** Candidate khop moc (fp chinh tac hoac error_fp cu cua nhom, hai chieu). */
+export const matchCand = (items, rec) => {
+  const mine = new Set([rec.fp, ...(rec.legacy_fps || [])].filter(Boolean));
+  return (items || []).find((x) => mine.has(x.fp) || (x.legacy_fps || []).some((l) => mine.has(l)));
+};
+/** Moc do duoc neu co candidate khop, hoac co su kien mang dung fp/error_fp cua moc. Thuan. */
+export const isMeasurable = (rec, items, events) => {
+  if (matchCand(items, rec)) return true;
+  const mine = new Set([rec.fp, ...(rec.legacy_fps || [])].filter(Boolean));
+  return (events || []).some((e) => e && e.data && (mine.has(e.data.error_fp) || mine.has(e.data.fp)));
+};
 /** Quyet dinh rollback cho 1 moc: fp khong giam hoac chi so xau di. Thuan. */
-export function shouldRollback(rec, countNow, ratesNow, cfg = CFG) {
+export function shouldRollback(rec, countNow, ratesNow, cfg = CFG, { measurable = true } = {}) {
+  if (!measurable) return { rollback: false, unmeasurable: true, reason: 'khong do duoc: fp cua moc khac dinh dang (khong su kien/candidate nao mang fp hoac error_fp do)' };
   if (!(countNow < rec.count_before)) return { rollback: true, reason: `count fp khong giam (${rec.count_before} -> ${countNow})` };
   if (worsened(rec.rates_before || {}, ratesNow, cfg)) return { rollback: true, reason: 'chi so bao ve xau di (verify_fail/correction tang)' };
   return { rollback: false, reason: null };
@@ -176,7 +189,7 @@ export async function runAutopilot(o = {}) {
   const cfg = { ...CFG, ...(o.cfg || {}) };
   const nowMs = Number(o.nowMs) || Date.now();
   const dry = !!o.dryRun;
-  const res = { dryRun: dry, skipped: null, planned: [], applied: [], queued: [], refused: [], rolledBack: [], kept: [], errors: [] };
+  const res = { dryRun: dry, skipped: null, planned: [], applied: [], queued: [], refused: [], rolledBack: [], kept: [], unmeasured: [], errors: [] };
   if (!o.force && !autopilotDue(o, nowMs, cfg)) { res.skipped = 'chua toi han (<24h)'; return res; }
   let lock = null;
   if (!dry) { lock = lockAcquire(o, nowMs, cfg); if (!lock) { res.skipped = 'khoa: lo khac dang chay'; return res; } }
@@ -197,8 +210,18 @@ export async function runAutopilot(o = {}) {
       const rates = protectiveRates(await readEventsWindow(o, cfg.rollbackAfterDays, nowMs, 15000));
       for (const a of due) {
         if (timeUp()) { res.errors.push('timeout'); break; }
-        const now = cands.items.find((x) => x.fp === a.fp);
-        const d = shouldRollback(a, now ? now.count : 0, rates, cfg);
+        const now = matchCand(cands.items, a);
+        let meas = true;
+        if (!now) { // count 0 co the do khac dinh dang fp: kiem tra cua so rong (truoc/sau ap dung)
+          const wide = await findCandidates({ ...o, days: cfg.oracleDays, threshold: 1, nowMs, timeoutMs: 15000 });
+          meas = isMeasurable(a, wide.items, await readEventsWindow(o, cfg.oracleDays, nowMs, 15000));
+        }
+        const d = shouldRollback(a, now ? now.count : 0, rates, cfg, { measurable: meas });
+        if (d.unmeasurable) {
+          res.unmeasured.push({ ver: a.ver, fp: a.fp, reason: d.reason });
+          if (!dry) { a.status = 'unmeasurable'; a.reason = d.reason; if (a.entry_id) notes.set(a.entry_id, { status: 'unmeasurable', reason: d.reason, ver: a.ver }); }
+          continue;
+        }
         if (!d.rollback) { res.kept.push({ ver: a.ver, fp: a.fp }); if (!dry) a.status = 'kept'; continue; }
         if (dry) { res.rolledBack.push({ ver: a.ver, fp: a.fp, reason: d.reason, dry: true }); continue; }
         const r = rollback(a.ver, { ...o, approve: true });
@@ -242,7 +265,7 @@ export async function runAutopilot(o = {}) {
       }
       if (!toQueue && p) {
         // Ghi moc 'applying' (fp, dich, count truoc) vao state TRUOC khi apply: crash giua chung van con moc de rollback/hoan tat.
-        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, rates_before: baseRates, status: 'applying', target: p.change.target };
+        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, rates_before: baseRates, legacy_fps: cand.legacy_fps || [], status: 'applying', target: p.change.target };
         st.applied.push(rec);
         if (!save()) { st.applied.pop(); notes.set(e.id, { status: 'refused', reason: 'khong ghi duoc moc applying' }); continue; }
         const r = apply(p.id, { ...o, approve: true }); // autopilot LA cong duyet cua muc 1 (bang phan muc tat dinh); policy van chan cam

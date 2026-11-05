@@ -53,13 +53,14 @@ export function repeatedFailureCandidates(events, nowIso) {
     const root = find(nodes[0]);
     if (!mfpMin.has(root) || recomputed < mfpMin.get(root)) mfpMin.set(root, recomputed);
   }
-  for (const { ev, nodes, norm } of pending) {
+  for (const { ev, nodes, norm, stored } of pending) {
     const root = nodes.length ? find(nodes[0]) : null;
     const key = root ? (mfpMin.get(root) || canon.get(root) || root) : norm.signature;
     if (!failedSigCounts.has(key)) failedSigCounts.set(key, { count: 0, norm, fp: key, evs: [] });
     const entry = failedSigCounts.get(key);
     entry.count++;
     entry.evs.push(ev);
+    if (stored && stored !== key) (entry.legacy || (entry.legacy = new Set())).add(stored); // error_fp goc trong nhom (khop nguoc voi fp cu)
   }
   const out = [];
   for (const [sig, data] of failedSigCounts.entries()) {
@@ -78,6 +79,7 @@ export function repeatedFailureCandidates(events, nowIso) {
         ...(data.evs[0] && typeof data.evs[0].source === 'string' ? { source: data.evs[0].source } : {}), // external: ext:<id>
         _evs: data.evs,
         _fp: data.fp,
+        _legacy: data.legacy ? [...data.legacy].sort() : [],
       });
     }
   }
