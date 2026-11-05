@@ -4,6 +4,7 @@
 //   hook.mjs sweep   : SessionStart. `prune --apply` an toan (clean + da merge + qua minAgeHours + khong locked). Fail-open, LUON exit 0.
 // Log 1 dong JSONL vao <data>/worktree/hook.jsonl. Dung core/runtime/worktree.mjs (cung ham voi dispatch-worker).
 import fs from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
@@ -56,17 +57,24 @@ export function hasGitAncestor(dir) {
   }
 }
 
-export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg)) {
+export const SWEEP_INTERVAL_MS = 6 * 3600 * 1000;
+
+/** Sweep nen: khong chan SessionStart. Throttle 1 lan/6h bang stamp trong data; background:false -> khong chay. Hanh vi prune giu nguyen. */
+export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg), opts = {}) {
   const { workspaceRoot } = await import('../../core/io/paths.mjs');
-  // Du an khong phai git: khong co worktree de don -> bo qua som, khong spawn node + git.
+  if (opts.background === false) return { removed: 0, skipped: 'no-background' };
+  // Du an khong phai git: khong co worktree de don -> bo qua som.
   if (!hasGitAncestor(workspaceRoot())) return { removed: 0, skipped: 'no-git' };
-  const { spawnSync } = await import('../../core/runtime/proc.mjs');
+  const { dataPathFor } = await import('../../core/io/storage.mjs');
+  const stamp = dataPathFor('worktree', 'sweep.stamp');
+  const now = opts.now ?? Date.now();
+  try { if (now - fs.statSync(stamp).mtimeMs < (opts.intervalMs ?? SWEEP_INTERVAL_MS)) return { removed: 0, skipped: 'throttled' }; } catch {}
   const cli = path.join(HERE, '..', '..', 'cli', 'commands', 'worktree.mjs');
-  const r = spawnSync(process.execPath, [cli, 'prune', '--apply', '--min-age-hours', String(cfg.minAgeHours), '--timeout', String(cfg.sweepTimeoutSec)], { encoding: 'utf8', timeout: (cfg.sweepTimeoutSec + 3) * 1000 });
-  const out = String(r.stdout || '');
-  const removed = (out.match(/=> removed/g) || []).length;
-  if (removed || r.status !== 0) await emit({ event: 'WorktreeSweep', removed, status: r.status, tail: out.split('\n').slice(-4).join(' | ').slice(0, 300) }, cfg);
-  return { removed };
+  const spawnBg = opts.spawnBackground || (await import('../../core/runtime/proc.mjs')).spawnBackground;
+  // con 'sweep-run' (main duoi) chay prune dong bo va ghi log neu exit != 0; onError ghi loi spawn
+  const pid = spawnBg({ cmd: process.execPath, args: [fileURLToPath(import.meta.url), 'sweep-run', cli, String(cfg.minAgeHours), String(cfg.sweepTimeoutSec)], key: 'worktree-sweep', deadlineMs: (cfg.sweepTimeoutSec + 10) * 1000, cwd: workspaceRoot(), onError: (why) => { try { Promise.resolve(emit({ event: 'sweep', error: String(why).slice(0, 200) })).catch(() => {}); } catch {} } });
+  if (pid) { try { fs.mkdirSync(path.dirname(stamp), { recursive: true }); fs.writeFileSync(stamp, String(now)); } catch {} }
+  return { removed: 0, started: !!pid };
 }
 
 const EVENT_OF = Object.freeze({ create: 'WorktreeCreate', remove: 'WorktreeRemove', sweep: 'SessionStart' });
@@ -97,7 +105,7 @@ export async function handle(event, input, ctx = {}) {
   if (!cfg.enabled) return {};
   try {
     if (event === 'WorktreeRemove') return { record: await remove(input, cfg, emit), records };
-    return { record: await sweep(cfg, emit), records };
+    return { record: await sweep(cfg, emit, { background: ctx.background, ...(ctx.sweep || {}) }), records };
   } catch (e) {
     const msg = String(e.message || e).slice(0, 300);
     await emit({ event: MODE_OF[event], error: msg });
@@ -119,7 +127,14 @@ async function main(mode) {
     try { const r = await handle(event, readJsonStdin(), { cfg, write: true }); process.stdout.write(r.record.path); process.exit(0); }
     catch (e) { process.stderr.write(`worktree create loi: ${e.message || e}\n`); process.exit(1); }
   }
-  try { await handle(event, readJsonStdin(), { cfg, write: true }); } catch {}
+  if (mode === 'sweep-run') { // [cli, minAgeHours, timeoutSec] tu argv
+    const [cli, minAge, tsec] = process.argv.slice(3);
+    const r = spawnSync(process.execPath, [cli, 'prune', '--apply', '--min-age-hours', String(minAge), '--timeout', String(tsec)], { encoding: 'utf8', timeout: (Number(tsec) + 5) * 1000, windowsHide: true });
+    if (r.status !== 0) { try { await log({ event: 'sweep', error: `prune exit ${r.status ?? r.signal ?? 'error'}: ${String(r.stderr || (r.error && r.error.message) || '').replace(/s+/g, ' ').slice(0, 200)}` }, cfg); } catch {} }
+    process.exit(0);
+  }
+  const bg = !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'); // nhu dispatcher: test/NO_BG khong spawn prune that
+  try { await handle(event, readJsonStdin(), { cfg, write: true, background: bg }); } catch {}
   process.exit(0);
 }
 

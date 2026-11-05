@@ -34,7 +34,7 @@ test('handle(write:false) khong ghi file, tra records hop le', async () => {
   try {
     const guardLog = path.join(dir, 'guard.jsonl');
     const mpCfg = { ...MP_DEFAULTS, roles: { verifier: { model: 'haiku' } } };
-    const ctx = { write: false, env };
+    const ctx = { write: false, background: false, env };
 
 
     const g = await guard.handle('PreToolUse', bash('echo ' + 'a'.repeat(100001)), { ...ctx, config: { ...loadGuard().config, logFile: guardLog } });

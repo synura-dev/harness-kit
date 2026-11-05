@@ -145,7 +145,7 @@ function postWrite(input, cfg, ctx) {
 export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;
-    if (ctx.write === false) { const nop = () => {}; ctx = { ...ctx, spawnScan: ctx.spawnScan || nop, spawnClean: ctx.spawnClean || nop, spawnDoctor: ctx.spawnDoctor || nop }; } // write:false: khong spawn nen
+    if (ctx.background === false) { const nop = () => {}; ctx = { ...ctx, spawnScan: ctx.spawnScan || nop, spawnClean: ctx.spawnClean || nop, spawnDoctor: ctx.spawnDoctor || nop }; } // background:false: khong spawn nen
     if (!cfg.enabled || !input || typeof input !== 'object') return {};
     if (event === 'PostToolUse') return postWrite(input, cfg, ctx);
     if (event !== 'SessionStart') return {};

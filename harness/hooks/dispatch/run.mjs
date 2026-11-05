@@ -25,7 +25,7 @@ const TIMEOUT = Symbol('timeout');
 /** Module loi (luon bat, khong go): bo qua khi ghi `module-acted` va khi doctor tim module khong dung. Module khac (OPTIONAL...) co the go khoi ORDER. */
 export const CORE_MODULES = Object.freeze(['audit', 'guard', 'data-gate', 'bash-guard', 'worktree-hook']);
 /** Module bao tri lam viec im lang (data-check: don nen khong de vet; user-shim: tra `{}` khi shim on): doctor khong bao gio xet "khong dung". Van ghi module-acted khi co tac dung (lam moc "tinh nang da bat"). */
-export const MAINTENANCE_MODULES = Object.freeze(['data-check', 'user-shim']);
+export const MAINTENANCE_MODULES = Object.freeze(['data-check', 'user-shim', 'agy-heal']);
 /** Ket qua co tac dung ma chua de lai dau trong audit: chan (decision deny hoac block:true; decision 'block' khong hop le voi hop dong), hoi, sua input, context; khong tinh `{}`/undefined/allow tran (verify-gate tra allow moi lan). Module tra `records` da tu hien trong audit (gate hook:<id>, type=proc...) -> khong ghi trung. */
 export const hasEffect = (r) => isObj(r) && !(Array.isArray(r.records) && r.records.length > 0) && (r.decision === 'deny' || r.decision === 'ask' || r.block === true || isObj(r.updatedInput) || !!r.additionalContext);
 
@@ -118,7 +118,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
       try {
-        const ctx = { write: false, deadline: Date.now() + tmo };
+        const ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
       if (!kind && validateHookResult(res).length) kind = 'bad-result';

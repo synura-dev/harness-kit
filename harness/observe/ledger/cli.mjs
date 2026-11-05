@@ -4,7 +4,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
-import { readLedger, ledgerFile, readState, STATUSES } from './ledger.mjs';
+import { readLedger, ledgerFile, readState, jobHealth, STATUSES } from './ledger.mjs';
 
 const USAGE = 'ledger [--status open|warned|acted|ignored|resolved] [--action A] [--limit N] [--json] [--raw]';
 
@@ -32,6 +32,7 @@ export function render(o, file = ledgerFile(), state = readState()) {
   const counts = {}; for (const e of all) counts[e.status] = (counts[e.status] || 0) + 1;
   const lastRun = state.lastRun ? new Date(state.lastRun).toISOString() : '-';
   const lines = [`ledger: ${items.length}/${rows.length} (tong ${all.length}; ${STATUSES.filter((s) => counts[s]).map((s) => `${s}=${counts[s]}`).join(' ') || 'rong'}) job=${lastRun}${state.truncated ? ' truncated: ' + state.truncated : ''}`,
+    ...(jobHealth(state) ? [`[warn] job loi: ${jobHealth(state).error} (${new Date(jobHealth(state).at).toISOString()})`] : []),
     ...items.map((e) => `${String(e.last_seen).slice(0, 16)}  ${e.status.padEnd(8)} ${e.rule}  warn=${e.warn_count || 0}  ${String(e.message || e.fp).slice(0, 90)}`)];
   return { summary: capLines(lines, 40).join('\n'), data: { items, total: rows.length, counts, state }, truncated: rows.length > items.length ? 'limit' : state.truncated || null, raw: JSON.stringify(items, null, 2) };
 }

@@ -40,8 +40,9 @@ export function sumUsage(text, deadline = Infinity) {
     if (!prev || (m.usage.output_tokens || 0) >= (prev.output_tokens || 0)) by.set(id, m.usage);
     if (m.model && m.model !== '<synthetic>') model = m.model;
   }
-  const r = { input: 0, output: 0, cache_read: 0, cache_creation: 0, msgs: by.size, model };
+  const r = { input: 0, output: 0, cache_read: 0, cache_creation: 0, total_tokens: 0, msgs: by.size, model };
   for (const u of by.values()) { r.input += u.input_tokens || 0; r.output += u.output_tokens || 0; r.cache_read += u.cache_read_input_tokens || 0; r.cache_creation += u.cache_creation_input_tokens || 0; }
+  r.total_tokens = r.input + r.output + r.cache_creation; // khop tokens_in+tokens_out (khong tinh cache_read)
   return r;
 }
 
@@ -56,7 +57,7 @@ export function readUsageDelta(file, { root = null, limits = USAGE_TAIL, now = D
     if (prev > st.size) prev = 0; // transcript bi cat/xoay
     const start = Math.max(prev, st.size - limits.maxBytes);
     const len = st.size - start;
-    if (len <= 0) return { input: 0, output: 0, cache_read: 0, cache_creation: 0, msgs: 0, model: null, truncated: false };
+    if (len <= 0) return { input: 0, output: 0, cache_read: 0, cache_creation: 0, total_tokens: 0, msgs: 0, model: null, truncated: false };
     const buf = Buffer.alloc(len);
     const fd = fs.openSync(file, 'r');
     try { fs.readSync(fd, buf, 0, len, start); } finally { fs.closeSync(fd); }

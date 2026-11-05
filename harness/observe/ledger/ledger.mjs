@@ -9,7 +9,7 @@ import { withLock } from '../../core/runtime/lockfile.mjs';
 
 export const STATUSES = Object.freeze(['open', 'warned', 'acted', 'ignored', 'resolved']);
 export const POLICY = Object.freeze({ actedAfterHours: 24, resolveAfterHours: 168, maxEntries: 1000, maxWarnTs: 20, maxBytes: 2 * 1048576, maxWarnLines: 3 });
-export const JOB = Object.freeze({ timeoutS: 25, scanMaxBytes: 128 * 1048576, minIntervalHours: 1, lockMinutes: 5 });
+export const JOB = Object.freeze({ timeoutS: 60, errWarnHours: 24, scanMaxBytes: 128 * 1048576, minIntervalHours: 1, lockMinutes: 5 });
 const H = 3600e3;
 
 export const ledgerDir = (opts = {}) => dataPathFor('ledger', { quiet: true, ...opts });
@@ -89,6 +89,25 @@ export function updateLedger(file, fn, { lock } = {}) {
 }
 export const readState = (opts) => readJson(stateFile(opts), {}) || {};
 export const writeState = (opts, st) => atomicWrite(stateFile(opts), JSON.stringify(st) + '\n');
+/** Doc-sua-ghi state duoi khoa (timeout ngan, fail-open: khong khoa duoc -> false, bo qua lan ghi). fn(state) -> state moi | null (khong ghi). */
+export function updateState(opts, fn) {
+  try {
+    const f = stateFile(opts);
+    const r = withLock(f, () => { const next = fn(readState(opts)); return next ? writeState(opts, next) : false; }, { retries: 10, waitMs: 20 });
+    return r.ok && r.value === true;
+  } catch { return false; }
+}
+/** Gop patch vao state (giu truong khac, vd errWarnedAt). */
+export const mergeState = (opts, patch) => updateState(opts, (cur) => ({ ...cur, ...patch }));
+/** Ghi loi job vao state (lastError/lastErrorAt), giu truong khac; khong bao gio nem. kind: kick|spawn|exit|timeout|lock|unfinished|autopilot. */
+export function recordJobError(opts, kind, detail = '', nowMs = Date.now()) {
+  try { return mergeState(opts, { lastError: `${kind}${detail ? ': ' + String(detail).replace(/\s+/g, ' ').slice(0, 120) : ''}`, lastErrorAt: nowMs }); } catch { return false; }
+}
+/** Loi job con hieu luc (xay ra sau lan chay thanh cong cuoi)? Tra {error, at} hoac null. Thuan. */
+export function jobHealth(st) {
+  const at = Number(st && st.lastErrorAt);
+  return st && st.lastError && at && at >= (Number(st.lastRun) || 0) ? { error: String(st.lastError), at } : null;
+}
 
 const iso = (ms) => new Date(ms).toISOString();
 
