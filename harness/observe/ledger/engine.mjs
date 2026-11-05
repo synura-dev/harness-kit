@@ -1,6 +1,6 @@
 // Engine luat khai bao: 1 dinh nghia = 1 file JSON. Them luat = them file, khong sua code.
 // Dinh nghia: {id?, desc?, enabled?, source:'candidates'|'audit'|'ledger', days?, filter?, group_by?, metric?, threshold, action, cooldown_hours?, message?}
-//   filter: {field: gia_tri | [gia_tri..] | {not:..} | {gte:n} | {regex:'..'}} hoac {any:[filter..]}; "$hub" = thu muc hub (scope).
+//   filter: {field: gia_tri | [gia_tri..]} (khop bang); "$hub" = thu muc hub (scope).
 //   metric: count (mac dinh) | sessions | sum:cost_ms. action: log|warn|propose|report.
 // Quy uoc thu muc: mac dinh trong defaults/ ; <project>/.harness/rules/*.json CUNG TEN thi THAY (enabled:false = tat). Khong registry, khong config bat buoc.
 import fs from 'node:fs';
