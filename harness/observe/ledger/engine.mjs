@@ -9,7 +9,7 @@ import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { isHookRun } from '../../core/audit/signals.mjs';
-import { safeText } from '../../core/audit/safe-text.mjs';
+import { safeText, cleanLine } from '../../core/audit/safe-text.mjs';
 import { samePath, workspaceRoot } from '../../core/io/paths.mjs';
 import { readEntries } from '../../core/ext/ext-trust.mjs';
 
@@ -143,9 +143,11 @@ export function matchFilter(get, filter, ctx = {}) {
   return Object.entries(filter).every(([k, c]) => matchOne(get(k), c, ctx));
 }
 
-// Bien tu audit (chuoi) di qua safeText (chong chen prompt); so giu nguyen.
-const fmtVar = (v) => (v == null ? '' : typeof v === 'number' ? String(v) : safeText(v));
-const fmt = (tpl, vars) => String(tpl || '{rule}: {key} {value}').replace(/\{(\w+)\}/g, (_, k) => fmtVar(vars[k])).replace(/\s+/g, ' ').trim().slice(0, 200);
+// Bien tu audit (sample, target, value...) di qua safeText (normalize + chong chen prompt, tran 80); so giu nguyen.
+// Bien dinh danh noi bo ({rule}, {key}, {count}, {sessions}, {days}) KHONG normalize (se doi id/duong dan), chi cleanLine + bo '>'.
+const INTERNAL_VARS = new Set(['rule', 'key', 'count', 'sessions', 'days']);
+const fmtVar = (v, k) => (v == null ? '' : typeof v === 'number' ? String(v) : INTERNAL_VARS.has(k) ? cleanLine(v, 200).replace(/>/g, '') : safeText(v));
+const fmt = (tpl, vars) => String(tpl || '{rule}: {key} {value}').replace(/\{(\w+)\}/g, (_, k) => fmtVar(vars[k], k)).replace(/\s+/g, ' ').trim().slice(0, 200);
 
 function finish(def, key, g) {
   const value = g.value;

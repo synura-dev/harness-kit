@@ -119,3 +119,13 @@ test('warn-pending: lech so (bytes) -> readPending null; hook rebuild toi da 1 l
   assert.equal(claimRebuild(file, NOW + 11 * 60e3), true); // qua 10 phut -> duoc rebuild lai
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+test('fmt: bien dinh danh noi bo ({rule},{key},{count},{sessions}) khong normalize; bien audit (sample) giu tran 80', () => {
+  const KEY = 'tool-3f2a9c1b-7d4e-4a6b-8c5d-1e2f3a4b5c6d';
+  const def = { id: 'r-ident', source: 'candidates', days: 7, filter: { kind: 'error' }, group_by: ['tool'], threshold: 1, action: 'warn', message: '{rule}|{key}|{count}|{sessions}|{sample}' };
+  const c = { id: 'i', kind: 'error', tool: KEY, fp: 'f1', count: 3, sessions: 2, first_ts: '2026-11-02T00:00:00Z', last_ts: '2026-11-05T00:00:00Z', sample: 'y'.repeat(300) };
+  const [f] = evaluate(def, { candidates: [c] }, { nowMs: NOW });
+  const [rule, key, count, sessions, sample] = f.message.split('|');
+  assert.equal(rule, 'r-ident'); assert.equal(key, KEY); assert.equal(count, '3'); assert.equal(sessions, '2');
+  assert.ok(sample.length <= 80 && sample.length > 0);
+});
