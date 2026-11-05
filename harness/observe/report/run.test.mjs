@@ -11,7 +11,7 @@ const ev = { ts: new Date(NOW - 86400000).toISOString(), sid: 's1', event: 'Post
 
 test('buildReport tren du lieu tiem vao: du muc, khong loi, baseline null', async () => {
   const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, projectDir: null });
-  assert.equal(r.results.length, 10); assert.deepEqual(r.errors, []);
+  assert.equal(r.results.length, 11); assert.deepEqual(r.errors, []);
   assert.match(r.markdown, /# Bao cao harness tuan 2026-11-05/);
   assert.match(r.markdown, /chua chot/);
 });

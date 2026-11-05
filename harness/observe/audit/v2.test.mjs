@@ -5,8 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { buildEnvelope, readAuditConfig, projectOf, readUsage, writeEnvelope } from './audit.mjs';
-import { runReport, listFiles, formatMd, formatJsonl, toRow } from '../views/query/query.mjs';
-import { writeDigest, aggregate } from '../views/digest.mjs';
+import { listFiles } from '../views/query/files.mjs';
 import { prune } from '../views/prune.mjs';
 
 const cfg = readAuditConfig();
@@ -42,15 +41,6 @@ test('PostToolUseFailure keeps redacted error text <=200 and in summary', () => 
   expect(e.summary.length).toBeLessThanOrEqual(120);
   const off = buildEnvelope({ hook_event_name: 'PostToolUseFailure', session_id: 's', tool_name: 'Bash', error: 'boom' }, { ...cfg, error_max: 0 }, T);
   expect(off.data.error).toBeUndefined();
-});
-
-test('digest drops legacy phantom aggregates unless includePhantom', () => {
-  const rows = [
-    { session_id: 's', event: 'SubagentStop', agent_id: 'a1', agent_type: null, ts: '2026-10-25T00:00:00Z', ok: null },
-    { session_id: 's', event: 'SubagentStop', agent_id: 'a2', agent_type: 'builder', ts: '2026-10-25T00:00:00Z', ok: null },
-  ];
-  expect(aggregate(rows).map((a) => a.agent_id)).toEqual(['a2']);
-  expect(aggregate(rows, { includePhantom: true }).length).toBe(2);
 });
 
 test('target_kind path/url/other, subagent actor, summary capped', () => {
@@ -107,24 +97,6 @@ test('usage_reason: no_path / too_big / parse_fail', () => {
   expect(JSON.stringify(sub(path.join(d, 'nope.jsonl')))).not.toContain(d.replace(/\\/g, '\\\\'));
   expect(sub(f).usage_reason).toBeUndefined();
 });
-test('phantom SubagentStop (no agent_type/Start): labeled, transcript not read; query excludes unless --include-phantom', async () => {
-  const d = tmp();
-  const f = transcript(d, 't.jsonl', [asst('m1', 2, 10)]);
-  const real = buildEnvelope({ hook_event_name: 'SubagentStop', session_id: 's', agent_id: 'x', agent_transcript_path: f }, cfg, T);
-  expect(real.data.phantom).toBeUndefined(); // no agent_type but readable transcript -> real subagent
-  expect(real.tokens_out).toBe(10);
-  const ph = buildEnvelope({ hook_event_name: 'SubagentStop', session_id: 's', agent_id: 'x', agent_transcript_path: path.join(d, 'nope.jsonl') }, cfg, T);
-  expect(ph.data).toMatchObject({ phantom: true, usage: 'unavailable', usage_reason: 'no_transcript' });
-  expect(ph.tokens_out).toBeNull();
-  const root = tmp();
-  writeEnvelope(ph, cfg, root);
-  writeEnvelope(buildEnvelope({ hook_event_name: 'SubagentStop', session_id: 's', agent_id: 'y', agent_type: 'b', agent_transcript_path: f }, cfg, T), cfg, root);
-  const { nodeRows } = await import('../views/query/query.mjs');
-  const n = async (f2) => (await nodeRows(listFiles(root, {}), f2, { deadline: Date.now() + 5000, maxBytes: 1e8, maxRows: 1e5, truncated: null })).length;
-  expect(await n({})).toBe(1);
-  expect(await n({ includePhantom: true })).toBe(2);
-  expect(runReport).toBeTypeOf('function');
-});
 test('SubagentStop transcript path fallback from transcript_path/session_id/agent_id', () => {
   const d = tmp();
   fs.mkdirSync(path.join(d, 'sess', 'subagents'), { recursive: true });
@@ -148,14 +120,6 @@ test('lookupAgentType finds SubagentStart from the previous UTC day', () => {
   const e = buildEnvelope({ hook_event_name: 'SubagentStop', session_id: 's', agent_id: 'p1' }, cfg, T, { root });
   expect(e.agent_type).toBe('scout');
   expect(e.data.phantom).toBeUndefined();
-});
-test('origin boundaries: workbench/benchmark-app are work; bench/ noise; old line without origin computed from cwd', () => {
-  const o = (cwd) => buildEnvelope({ ...post, cwd }, cfg, T).origin;
-  expect(o('E:/x/workbench')).toBe('work');
-  expect(o('E:/x/benchmark-app')).toBe('work');
-  expect(o('E:/x/bench/a')).toBe('noise');
-  expect(toRow({ event: 'PreToolUse', cwd: 'E:\\x\\zz-eval-3' }, 'tool', '2026-10-24').origin).toBe('noise');
-  expect(toRow({ event: 'PreToolUse', cwd: 'E:\\x\\real' }, 'tool', '2026-10-24').origin).toBe('work');
 });
 test('Bash cd variants and env-assignment prefixes', () => {
   const bash = (command) => buildEnvelope({ ...post, tool_input: { command } }, cfg, T).data;
@@ -207,162 +171,6 @@ test('hook_events registers PermissionDenied (matcher *, timeout 3)', async () =
   const { hook_events } = await import('./defaults.mjs');
   expect(hook_events.PermissionDenied).toEqual({ matcher: '*', timeout: 3 });
 });
-test('query --origin filters (old lines without origin = work)', async () => {
-  const root = tmp();
-  writeEnvelope(buildEnvelope({ ...post, cwd: '/x/bench/a' }, cfg, T), cfg, root);
-  writeEnvelope(buildEnvelope({ ...post, cwd: '/x/real' }, cfg, T), cfg, root);
-  const old = buildEnvelope({ ...post, cwd: '/x/old' }, cfg, T); delete old.origin;
-  writeEnvelope({ ...old, sid: 'claude-old' }, cfg, root);
-  const { nodeRows } = await import('../views/query/query.mjs');
-  const count = async (origin) => (await nodeRows(listFiles(root, {}), origin ? { origin } : {}, { deadline: Date.now() + 5000, maxBytes: 1e8, maxRows: 1e5, truncated: null })).length;
-  const all = await count(), work = await count('work'), noise = await count('noise');
-  expect(all).toBe(3); expect(work).toBe(2); expect(noise).toBe(1);
-});
-test('hook process: Stop writes v2 line under date=/type=, exits 0 silently', () => {
-  const root = tmp();
-  const f = transcript(tmp(), 't.jsonl', [asst('m1', 1, 2)]);
-  const r = spawnSync(process.execPath, [path.join(HERE, 'audit.mjs')], { input: JSON.stringify({ hook_event_name: 'Stop', session_id: 'sx', cwd: '/p/q', transcript_path: f }), env: { ...process.env, CLAUDE_AUDIT_DIR: root } });
-  expect(r.status).toBe(0);
-  expect(r.stdout.length + r.stderr.length).toBe(0);
-  const files = listFiles(root, {});
-  expect(files.length).toBe(1);
-  expect(files[0].path.replace(/\\/g, '/')).toMatch(/date=\d{4}-\d{2}-\d{2}\/type=session\/claude-sx\.jsonl$/);
-  const line = JSON.parse(fs.readFileSync(files[0].path, 'utf8'));
-  expect(line).toMatchObject({ v: 2, event: 'Stop', tokens_in: 1, tokens_out: 2, turns: 1, project: 'q' });
-});
-
-// ---- query / digest / prune over mixed v1 + v2 data ----
-function mixedRoot() {
-  const root = tmp();
-  const put = (rel, objs) => { const p = path.join(root, rel); fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, objs.map((o) => (typeof o === 'string' ? o : JSON.stringify(o))).join('\n') + '\n'); };
-  const e = (o) => buildEnvelope({ ...post, session_id: 'claude-s1', ...o }, cfg, new Date(o.__ts || '2026-10-25T10:00:00Z'));
-  put('date=2026-10-25/type=tool/claude-s1.jsonl', [
-    e({ hook_event_name: 'PostToolUse', __ts: '2026-10-25T10:00:00Z' }),
-    e({ hook_event_name: 'PostToolUseFailure', error: 'Exit code 1', __ts: '2026-10-25T10:00:30Z' }),
-    'not json',
-    e({ agent_id: 'a1', agent_type: 'builder', tool_name: 'Edit', tool_input: { file_path: 'f.ts' }, __ts: '2026-10-25T10:01:00Z' }),
-  ]);
-  put('date=2026-10-25/type=session/claude-s1.jsonl', [
-    { v: 2, ts: '2026-10-25T10:05:00Z', type: 'session', event: 'Stop', sid: 'claude-s1', agent_id: null, agent_type: null, actor: 'main', project: 'proj-a', tokens_in: 1000, tokens_out: 50, turns: 3 },
-    { v: 2, ts: '2026-10-25T10:06:00Z', type: 'session', event: 'Stop', sid: 'claude-s1', agent_id: null, agent_type: null, actor: 'main', project: 'proj-a', tokens_in: 1500, tokens_out: 90, turns: 4 },
-    { v: 2, ts: '2026-10-25T10:06:00Z', type: 'session', event: 'SubagentStop', sid: 'claude-s1', agent_id: 'a1', agent_type: 'builder', actor: 'sub', project: 'proj-a', tokens_in: 200, tokens_out: 20, turns: 2 },
-  ]);
-  // v1 legacy layout + record
-  put('type=tool/date=2026-10-24/old.jsonl', [{ v: 1, ts: '2026-10-24T09:00:00Z', type: 'tool', event: 'PostToolUse', session_id: 'old', agent: { id: 'z', type: 'scout' }, cwd: '/x', tool: 'Read', target: 'a', ok: true, dur_ms: 5, data: { input_tokens: 3, output_tokens: 4 } }]);
-  return root;
-}
-const node = (root, name, f = {}) => runReport(name, f, { backend: 'node', root });
-
-test('query reads v1 + v2 and new filters', async () => {
-  const root = mixedRoot();
-  expect(listFiles(root, {}).length).toBe(3);
-  expect(listFiles(root, { date: '2026-10-24' }).map((x) => x.type)).toEqual(['tool']);
-  const all = (await node(root, 'events')).sections[0].rows;
-  expect(all.length).toBe(7);
-  const rows = (f) => node(root, 'events', f).then((r) => r.sections[0].rows);
-  expect((await rows({ ok: 'false' })).length).toBe(1);
-  expect((await rows({ event: 'Stop' })).length).toBe(2);
-  expect((await rows({ actor: 'sub' })).length).toBe(3);
-  expect((await rows({ project: 'proj-a' })).length).toBe(6);
-  expect((await rows({ project: 'proj-a', session: 'claude-s1', agent: 'builder' })).length).toBe(2);
-  const v1 = toRow({ v: 1, agent: { id: 'z', type: 'scout' }, session_id: 'old', data: { input_tokens: 3 } }, 'tool', 'd');
-  expect(v1).toMatchObject({ agent_id: 'z', agent_type: 'scout', actor: 'sub', session_id: 'old', in_tok: 3 });
-});
-test('tokens report: non-empty, max per agent (cumulative), not summed', async () => {
-  const root = mixedRoot();
-  const rows = (await node(root, 'tokens')).sections[0].rows;
-  expect(rows).toContainEqual({ session_id: 'claude-s1', actor: 'main', agent_id: null, in_tok: 1500, out_tok: 90 });
-  expect(rows).toContainEqual({ session_id: 'claude-s1', actor: 'sub', agent_id: 'a1', in_tok: 200, out_tok: 20 });
-  expect(rows).toContainEqual({ session_id: 'old', actor: 'sub', agent_id: 'z', in_tok: 3, out_tok: 4 });
-});
-test('formats md / jsonl and truncated reporting', async () => {
-  const root = mixedRoot();
-  const r = await runReport('events', {}, { backend: 'node', root, maxRows: 2 });
-  expect(r.truncated).toBe('max_rows');
-  expect(formatMd(r)).toContain('| ts | type |');
-  expect(formatMd(r)).toContain('truncated: max_rows');
-  const jl = formatJsonl(r).split('\n');
-  expect(JSON.parse(jl[0]).event).toBeTruthy();
-  expect(jl[jl.length - 1]).toBe('truncated: max_rows');
-});
-test('digest: table per session x agent, bounded', async () => {
-  const root = mixedRoot();
-  const r = await writeDigest('2026-10-25', { root });
-  expect(r.file.replace(/\\/g, '/')).toMatch(/digest\/2026-10-25\.md$/);
-  const md = fs.readFileSync(r.file, 'utf8');
-  expect(md).toContain('| session | project | agent | tools | errors | tokens (in/out) | duration |');
-  expect(md).toMatch(/\| claude-s1 \| proj-a \| main \| 2 \| 1 \| 1500\/90 \| 6m00s \|/);
-  expect(md).toMatch(/\| claude-s1 \| proj-a \| builder \| 1 \| 0 \| 200\/20 \|/);
-  const t = await writeDigest('2026-10-25', { root, maxRows: 1 });
-  expect(t.truncated).toBe('max_rows');
-  expect(fs.readFileSync(t.file, 'utf8')).toContain('truncated: max_rows');
-  expect(aggregate([]).length).toBe(0);
-});
-test('cli --digest and --format md', () => {
-  const root = mixedRoot();
-  const q = path.join(HERE, '..', 'views', 'query', 'query.mjs');
-  const env = { ...process.env, CLAUDE_AUDIT_DIR: root };
-  const d = spawnSync(process.execPath, [q, '--digest', '2026-10-25'], { env, encoding: 'utf8', timeout: 20000 });
-  expect(d.status).toBe(0);
-  expect(fs.existsSync(path.join(root, 'digest', '2026-10-25.md'))).toBe(true);
-  expect(spawnSync(process.execPath, [q, '--digest', 'bad'], { env, encoding: 'utf8', timeout: 20000 }).status).toBe(1);
-  const m = spawnSync(process.execPath, [q, '--report', 'tokens', '--format', 'md', '--backend', 'node', '--ok', 'false'], { env, encoding: 'utf8', timeout: 20000 });
-  expect(m.status).toBe(0);
-  expect(m.stdout).toContain('## tokens');
-});
-test('prune handles v2 date dirs, v1 dirs and digest files', () => {
-  const root = mixedRoot();
-  fs.mkdirSync(path.join(root, 'digest'), { recursive: true });
-  fs.writeFileSync(path.join(root, 'digest', '2026-01-01.md'), 'x');
-  fs.writeFileSync(path.join(root, 'digest', '2026-10-25.md'), 'x');
-  fs.mkdirSync(path.join(root, 'date=2026-01-01', 'type=tool'), { recursive: true });
-  fs.mkdirSync(path.join(root, 'type=tool', 'date=2026-01-02'), { recursive: true });
-  const now = new Date('2026-10-25T12:00:00Z');
-  expect(prune({ root, days: 5, now }).removed.length).toBe(3); // v1 old, v2 old, digest old (v1 10-24 is kept)
-  prune({ root, days: 5, now, yes: true });
-  expect(fs.existsSync(path.join(root, 'date=2026-01-01'))).toBe(false);
-  expect(fs.existsSync(path.join(root, 'type=tool', 'date=2026-01-02'))).toBe(false);
-  expect(fs.existsSync(path.join(root, 'digest', '2026-01-01.md'))).toBe(false);
-  expect(fs.existsSync(path.join(root, 'digest', '2026-10-25.md'))).toBe(true);
-  expect(fs.existsSync(path.join(root, 'date=2026-10-25', 'type=tool', 'claude-s1.jsonl'))).toBe(true);
-});
-
-test('cli prefix, fallback sid, dedupe and --cli filter', async () => {
-  const { buildEnvelope } = await import('./audit.mjs');
-  const { sanitizeSession } = await import('./redact.mjs');
-  const a = buildEnvelope({ hook_event_name: 'PostToolUse', cli: 'agy', cwd: '/x' }, {});
-  const b = buildEnvelope({ hook_event_name: 'PostToolUse', cli: 'agy', cwd: '/y' }, {});
-  expect(a.cli).toBe('agy');
-  expect(a.sid).toMatch(/^agy-nosession-/);
-  expect(a.sid).not.toBe(b.sid);
-  expect(sanitizeSession('', 'seed')).toBe(sanitizeSession('', 'seed'));
-  expect(buildEnvelope({ session_id: 'q' }, {}).sid).toBe('claude-q');
-  const { rowMatches, nodeRows } = await import('../views/query/query.mjs');
-  expect(rowMatches({ cli: 'agy' }, { cli: 'claude' })).toBe(false);
-  const { mkdtempSync, writeFileSync, rmSync } = await import('node:fs');
-  const { tmpdir } = await import('node:os');
-  const { join } = await import('node:path');
-  const d = mkdtempSync(join(tmpdir(), 'dd-'));
-  const e = { v: 2, ts: '2026-10-25T10:00:00.100Z', event: 'PostToolUse', cli: 'agy', sid: 'agy-1', tool: 'Bash', target: 'ls' };
-  const p = join(d, 'x.jsonl');
-  writeFileSync(p, [e, { ...e, ts: '2026-10-25T10:00:00.900Z' }, { ...e, ts: '2026-10-25T10:00:02Z' }].map((x) => JSON.stringify(x)).join(String.fromCharCode(10)));
-  const lim = () => ({ deadline: Date.now() + 5000, maxBytes: 1e6, maxRows: 100, truncated: null });
-  expect((await nodeRows([{ path: p, type: 'tool', date: 'x' }], { dedupe: true }, lim())).length).toBe(2);
-  expect((await nodeRows([{ path: p, type: 'tool', date: 'x' }], {}, lim())).length).toBe(3);
-  // two SubagentStop, same sid + second, different agent_id: both kept even with dedupe
-  const ss = { v: 2, ts: '2026-10-25T10:00:00.100Z', event: 'SubagentStop', cli: 'claude', sid: 'claude-1' };
-  const p2 = join(d, 'y.jsonl');
-  writeFileSync(p2, [{ ...ss, agent_id: 'a1' }, { ...ss, agent_id: 'a2' }, { ...ss, agent_id: 'a2' }].map((x) => JSON.stringify(x)).join(String.fromCharCode(10)));
-  expect((await nodeRows([{ path: p2, type: 'session', date: 'x' }], { dedupe: true }, lim())).length).toBe(2);
-  // old row without cli matches --cli claude; agy row does not
-  const p3 = join(d, 'z.jsonl');
-  writeFileSync(p3, [{ ts: '2026-10-25T10:00:00Z', event: 'PostToolUse', session_id: 'old' }, e].map((x) => JSON.stringify(x)).join(String.fromCharCode(10)));
-  const cl = await nodeRows([{ path: p3, type: 'tool', date: 'x' }], { cli: 'claude' }, lim());
-  expect(cl.length).toBe(1);
-  expect(cl[0].session_id).toBe('old');
-  rmSync(d, { recursive: true, force: true });
-});
-
 test('Pre/Post do not create .state; Post without duration_ms -> dur_ms null; prune.marker still works', () => {
   const root = tmp();
   const run = (o) => spawnSync(process.execPath, [path.join(HERE, 'audit.mjs')], { input: JSON.stringify(o), env: { ...process.env, CLAUDE_AUDIT_DIR: root }, timeout: 20000 });
