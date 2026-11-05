@@ -80,3 +80,39 @@ test('contract background: background:false khong kick; background:true (dispatc
   await handle('SessionStart', { session_id: 's' }, { ...base, background: true }); assert.equal(n, 1);
   rm(d);
 });
+
+import { updateState, mergeState, stateFile } from './ledger.mjs';
+import { jobErrorLine } from './hook.mjs';
+import { acquireLock } from '../../core/runtime/lockfile.mjs';
+
+test('mergeState giu errWarnedAt (job ghi lai state khong lam mat cooldown)', () => {
+  const d = mk(); const o = { env: { HUB_DATA_DIR: d } };
+  writeState(o, { lastRun: 1, errWarnedAt: 777, lastError: 'x', lastErrorAt: 5 });
+  mergeState(o, { lastRun: 2, findings: 3 });
+  const st = readState(o);
+  assert.equal(st.errWarnedAt, 777); assert.equal(st.lastRun, 2); assert.equal(st.findings, 3);
+  rm(d);
+});
+
+test('jobErrorLine: canh bao 1 lan roi cooldown; recordJobError sau do khong xoa errWarnedAt', () => {
+  const d = mk(); const o = { env: { HUB_DATA_DIR: d } };
+  recordJobError(o, 'exit', 'boom', NOW);
+  assert.match(jobErrorLine(o, NOW + 1000), /job lo that bai/);
+  recordJobError(o, 'exit', 'boom2', NOW + 2000);
+  assert.equal(jobErrorLine(o, NOW + 3000), null);
+  assert.equal(readState(o).errWarnedAt, NOW + 1000);
+  rm(d);
+});
+
+test('updateState: khoa dang bi giu -> fail-open (false, khong ghi, khong nem)', () => {
+  const d = mk(); const o = { env: { HUB_DATA_DIR: d } };
+  writeState(o, { a: 1 });
+  const rel = acquireLock(stateFile(o));
+  assert.ok(rel);
+  assert.equal(updateState(o, (s) => ({ ...s, a: 2 })), false);
+  assert.equal(readState(o).a, 1);
+  rel();
+  assert.equal(updateState(o, (s) => ({ ...s, a: 2 })), true);
+  assert.equal(readState(o).a, 2);
+  rm(d);
+});

@@ -11,7 +11,7 @@ import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { loadDefinitions, evaluateAll } from './engine.mjs';
-import { readLedger, updateLedger, applyFindings, ledgerFile, writeState, recordJobError, JOB, jobDue } from './ledger.mjs';
+import { readLedger, updateLedger, applyFindings, ledgerFile, mergeState, recordJobError, JOB, jobDue } from './ledger.mjs';
 export { JOB, jobDue };
 
 const DAY = 86400000;
@@ -71,7 +71,7 @@ export async function runJob(opts = {}) {
   if (opts.dryRun) merge(readLedger(file));
   else if (!updateLedger(file, merge, { lock: { retries: 200, waitMs: 25 } }).ok) { recordJobError(opts.dataOpts, 'lock', 'khong khoa duoc so', nowMs); return { defs: defs.length, errors, events: ev.events.length, findings: f1.length, entries: 0, truncated: 'lock', ms: Date.now() - t0 }; }
   // Ghi state moi (xoa loi cu); chay xong nhung bi cat theo timeout -> van ghi lastRun + lastError=timeout (hien o observe/doctor).
-  if (!opts.dryRun) { writeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length, ...(truncated === 'timeout' ? { lastError: 'timeout: doc audit bi cat, du lieu mot phan', lastErrorAt: nowMs } : {}) }); }
+  if (!opts.dryRun) { mergeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length, lastError: undefined, lastErrorAt: undefined, ...(truncated === 'timeout' ? { lastError: 'timeout: doc audit bi cat, du lieu mot phan', lastErrorAt: nowMs } : {}) }); }
   return { defs: defs.length, errors, events: ev.events.length, findings: f1.length + f2.length, entries: entries.length, truncated, ms: Date.now() - t0 };
 }
 
