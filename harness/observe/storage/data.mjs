@@ -83,7 +83,6 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
     if (ent.zone === 'workspaces' && !ent.workspace) W('missing-field', key, key, 'thieu workspace', 'them "workspace" cho muc zone=workspaces');
     const p = phys(key, ent); const abs = path.join(root, p);
     if (ent.deprecatedPath) W('deprecated-path', p, key, 'path cu the khai bao trong manifest data[] (workspaces/<ws>/<tool> co dinh)', 'khai bao {zone:"workspaces", tool, class} (khong path) de dung mau workspaces/*/<tool>');
-    if (ent.legacy && ent.legacy !== p && fs.existsSync(abs) && fs.existsSync(path.join(root, ent.legacy))) W('duplicate', p, key, `ton tai ca ${p} va ${ent.legacy}`, `gop thu cong roi xoa ${ent.legacy}`);
     if (!isInside(abs, root) || samePath(abs, root) || !fs.existsSync(abs)) continue;
     const st = fs.statSync(abs);
     const w = st.isDirectory() ? walk(abs, opts) : { files: [{ p: abs, size: st.size, mtime: st.mtimeMs }], truncated: null };
@@ -301,11 +300,11 @@ export function tailDomain({ root = dataRoot(), reg = loadRegistry(), domain, n 
   const dirs = [];
   for (const [k, e] of Object.entries(reg.entries)) {
     const p = phys(k, e).replace(/\\/g, '/').replace(/\/+$/, '');
-    if (k === dom || k.split('/').pop() === dom || p === dom || p.split('/').pop() === dom || e.tool === dom) { dirs.push(path.join(root, p)); if (e.legacy) dirs.push(path.join(root, String(e.legacy).replace(/\\/g, '/').replace(/\/+$/, ''))); }
+    if (k === dom || k.split('/').pop() === dom || p === dom || p.split('/').pop() === dom || e.tool === dom) { dirs.push(path.join(root, p)); }
   }
   for (const [k, e] of Object.entries(reg.entries)) { // alias tuong minh: entry.tailPaths[alias] = thu muc con (vd audit -> gateway)
     const sub = e.tailPaths && Object.prototype.hasOwnProperty.call(e.tailPaths, dom) ? String(e.tailPaths[dom]) : null;
-    if (sub && !/(^|[\\/])\.\.([\\/]|$)/.test(sub) && !path.isAbsolute(sub)) { dirs.push(path.join(root, phys(k, e), sub)); if (e.legacy) dirs.push(path.join(root, String(e.legacy), sub)); }
+    if (sub && !/(^|[\\/])\.\.([\\/]|$)/.test(sub) && !path.isAbsolute(sub)) { dirs.push(path.join(root, phys(k, e), sub)); }
   }
   if (!dirs.length) throw new Error(`domain chua dang ky: ${dom}`);
   const deadline = opts.deadline ?? Date.now() + LIMITS.timeoutS * 1000;

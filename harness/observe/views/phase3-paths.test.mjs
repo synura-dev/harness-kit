@@ -19,18 +19,6 @@ test('dataPathFor ton trong HUB_DATA_DIR va path moi cua entry (gateway)', () =>
   expect(p).toBe(path.join(d, 'system', 'audit', 'gateway', 'date=2026-10-30'));
 });
 
-test('runs doc: mode read lui ve legacy khi path moi chua co', () => {
-  const d = tmp();
-  fs.mkdirSync(path.join(d, 'runs'));
-  fs.writeFileSync(path.join(d, 'runs', 'a.md'), '# bao cao a\n');
-  const dir = dataPathFor('runs', { env: env(d), registry: reg, mode: 'read', quiet: true });
-  expect(dir).toBe(path.join(d, 'runs'));
-  const out = [];
-  runsRun(['list', '--json'], { dir, emitOpts: { write: (s) => out.push(s) } });
-  fs.mkdirSync(path.join(d, 'system', 'runs'), { recursive: true });
-  expect(dataPathFor('runs', { env: env(d), registry: reg, mode: 'read', quiet: true })).toBe(path.join(d, 'system', 'runs'));
-});
-
 test('prune runs chay doc lap khi audit va runs o cho khac nhau', () => {
   const d = tmp();
   const audit = path.join(d, 'system', 'audit'); const runs = path.join(d, 'elsewhere', 'runs');
@@ -42,9 +30,9 @@ test('prune runs chay doc lap khi audit va runs o cho khac nhau', () => {
   expect(fs.existsSync(old)).toBe(false);
 });
 
-test('auditReadRoots tra goc moi + legacy; CLAUDE_AUDIT_DIR thang the', () => {
+test('auditReadRoots tra goc moi; CLAUDE_AUDIT_DIR thang the', () => {
   const d = tmp();
-  expect(auditReadRoots({ env: env(d), registry: reg })).toEqual([path.join(d, 'system', 'audit'), path.join(d, 'audit')]);
+  expect(auditReadRoots({ env: env(d), registry: reg })).toEqual([path.join(d, 'system', 'audit')]);
   expect(auditReadRoots({ env: { CLAUDE_AUDIT_DIR: 'X:/a' } })).toEqual(['X:/a']);
 });
 

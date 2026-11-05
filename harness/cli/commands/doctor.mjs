@@ -218,8 +218,6 @@ try {
   for (const m of checkRegistry(HUB_ROOT)) warn('registry', m);
 } catch (e) { console.log('[warn] registry check loi:', e.message); }
 try {
-  const { checkLegacyWrites } = await import(new URL('../../core/registry/data-registry.mjs', import.meta.url).href);
-  for (const m of checkLegacyWrites()) warn('data', m);
 } catch (e) { console.log('[warn] legacy-write check loi:', e.message); }
 if (!BARE) try {
   const { syncArchitecture } = await import(new URL('../../core/registry/plugin-registry.mjs', import.meta.url).href);
