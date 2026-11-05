@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnBackground, sweepBackground } from '../../core/runtime/proc.mjs';
+import { kickReport } from '../report/run.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
 import { readLedger, writeLedger, claimDue, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
@@ -38,7 +39,7 @@ export async function handle(event, input, ctx = {}) {
     const r = claimDue(readLedger(file), nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines });
     if (r.changed) writeLedger(file, r.entries);
     if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
-    if (event === 'SessionStart' && cfg.kick !== false) kickJob(dataOpts, ctx, nowMs);
+    if (event === 'SessionStart' && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
     return r.lines.length ? { additionalContext: r.lines.join('\n') } : {};
   } catch { return {}; }
 }

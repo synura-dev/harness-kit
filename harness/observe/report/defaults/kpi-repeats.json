@@ -1,0 +1,1 @@
+{"order":2,"id":"kpi-repeats","title":"KPI 2: loi lap + pattern lap / 1000 su kien","source":"candidates","filter":{"kind":["error","pattern"]},"group_by":["kind"],"metric":["per_1000",{"as":"tong","metric":"count"}],"window_days":7,"compare":"prev_window","format":"table","limit":10}

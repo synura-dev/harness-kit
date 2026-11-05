@@ -1,0 +1,1 @@
+{"order":4,"id":"kpi-size","title":"KPI 4: kich thuoc he thong (lenh/hook/skill/rule/agent)","source":"inventory","group_by":["kind"],"metric":"count","window_days":0,"compare":"baseline","format":"table","empty_note":"chua co prune inventory (evolve prune-candidates) - bo qua"}

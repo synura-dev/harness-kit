@@ -1,0 +1,13 @@
+{
+  "id": "report",
+  "kind": "lib",
+  "layer": "ext",
+  "entry": "cli.mjs",
+  "desc": "bao cao tuan khai bao (defaults/*.json, ghi de <project>/.harness/report/): 4 KPI + bao ve + canh bao + subagent-vs-main; baseline; xuat obsidian",
+  "cmds": "[--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly]",
+  "files": { "helpers": ["engine.mjs", "run.mjs"] },
+  "tests": ["engine.test.mjs", "run.test.mjs"],
+  "config": { "defaults": null, "schema": null },
+  "data": "ledger",
+  "tier": "T1"
+}
