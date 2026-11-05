@@ -2,7 +2,8 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
-## Unreleased
+## 0.2.3
+- Release of the changes previously listed under Unreleased (ledger, evolve patterns, guard protectedPaths, knowledge module removal).
 - BREAKING: removed the knowledge module. `harness knowledge ...` (vault gateway: put/get/links/query/context/map/index/check/prune/migrate) and the `knowledge-inject` hook (UserPromptSubmit/SessionStart/SubagentStart context injection) are gone; the dispatcher keeps only `audit` on UserPromptSubmit/SubagentStart. The harness is a mechanism layer and no longer holds knowledge content; read/write notes via your own tool (e.g. `harness obsidian`).
 - BREAKING: `evolve propose --kind fact` removed (facts were written through the knowledge gateway); only `--kind skill` remains. Config key `factDir` and env `HARNESS_KNOWLEDGE_ROOT` are no longer read.
 - Data: the `memory` registry entry (`data/knowledge/memory`) is removed; existing directories become unregistered (data scan warns, no data is deleted). The `knowledge` data zone is kept (tasks, evolve, eval write under `data/knowledge/`).
