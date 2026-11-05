@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { DEFAULTS, run } from './hook.mjs';
 import { decide, runnerSpec } from './gate.mjs';
-import { verifyKind, verifierOutcome } from '../../core/audit/fingerprint.mjs';
+import { verifyKind, verifierOutcome } from '../../../harness/core/audit/fingerprint.mjs';
 
 let n = 0;
 const T = () => new Date(Date.UTC(2026, 9, 29, 9, 0, n++)).toISOString();

@@ -1,6 +1,6 @@
 // Tim file thuc thi cho engine play (claude/agy/node...). Ban cua core; phan mo rong ben ngoai giu ban rieng (import core mot chieu).
 import path from 'node:path';
-import { spawnSync } from '../../core/runtime/proc.mjs';
+import { spawnSync } from '../../../harness/core/runtime/proc.mjs';
 
 const ENV_BIN = { claude: 'HUB_CLAUDE_BIN', agy: 'HUB_AGY_BIN' };
 

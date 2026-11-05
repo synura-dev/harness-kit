@@ -1,7 +1,7 @@
 // Playbook schema: validate + load + params + substitution (buildArgv).
 import fs from 'node:fs';
 import path from 'node:path';
-import { workspaceRoot, isInside, isObj } from '../../../core/io/paths.mjs';
+import { workspaceRoot, isInside, isObj } from '../../../../harness/core/io/paths.mjs';
 import { denyRun, resolveBuiltin } from './policy.mjs';
 
 export const DEFAULT_LIMITS = { timeout_s: 120, max_output_bytes: 200000 };

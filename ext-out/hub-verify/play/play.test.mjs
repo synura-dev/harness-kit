@@ -8,7 +8,7 @@ import { validatePlaybook, loadPlaybook, resolveParams } from './playbook/schema
 import { denyRun } from './playbook/policy.mjs';
 import { resolveSpawn, summarizeOutput } from './playbook/exec.mjs';
 import { runPlaybook, formatResult } from './playbook/run.mjs';
-import { dataPathFor } from '../../core/io/storage.mjs';
+import { dataPathFor } from '../../../harness/core/io/storage.mjs';
 
 const SRC = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const playData = (d) => dataPathFor('play', { repoDir: d });
@@ -237,7 +237,7 @@ test('shipped playbooks validate; verify-commit refuses git add -A style via den
 });
 
 test('CLI: usage error exit 2, unknown playbook exit 2, dry-run exit 0, compact output <= 25 lines', () => {
-  const play = (...a) => spawnSync(process.execPath, [path.join(SRC, 'harness', 'tools', 'play', 'play.mjs'), ...a], { cwd: REPO, encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: REPO } });
+  const play = (...a) => spawnSync(process.execPath, [path.join(SRC, 'ext-out', 'hub-verify', 'play', 'play.mjs'), ...a], { cwd: REPO, encoding: 'utf8', timeout: 60000, env: { ...process.env, HUB_DIR: REPO } });
   expect(play().status).toBe(2);
   expect(play('no-such-playbook').status).toBe(2);
   expect(play('verify-commit', '--param', 'message=x').status).toBe(2); // thieu paths
@@ -347,7 +347,7 @@ test('play list: liet ke playbook co gioi han, parsePlayArgs nhan list', async (
   expect(r.playbooks.map((p) => p.name)).toContain('verify-commit');
   expect(listPlaybooks({ hub: REPO, limits: { maxFiles: 1 } }).truncated).toBe('max_files');
   expect(listPlaybooks({ hub: REPO, limits: { timeoutMs: -1 } }).truncated).toBe('timeout');
-  const cli = spawnSync(process.execPath, [path.join(SRC, 'harness', 'tools', 'play', 'play.mjs'), 'list'], { cwd: REPO, encoding: 'utf8', timeout: 30000, env: { ...process.env, HUB_DIR: REPO } });
+  const cli = spawnSync(process.execPath, [path.join(SRC, 'ext-out', 'hub-verify', 'play', 'play.mjs'), 'list'], { cwd: REPO, encoding: 'utf8', timeout: 30000, env: { ...process.env, HUB_DIR: REPO } });
   expect(cli.status).toBe(0);
   expect(cli.stdout).toContain('verify-commit');
 });

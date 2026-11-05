@@ -1,7 +1,7 @@
 // Ham thuan verify-gate: tu danh sach su kien audit (da loc theo phien) -> quyet dinh allow|block. Khong I/O
 // (tra git root qua opts.rootOf do hook tiem vao). Ket luan chi tu du lieu audit (event, ok, exit code,
 // verify_kind/verifier_outcome, cwd, lenh); khong phan doan noi dung.
-import { verifyKind } from '../../core/audit/fingerprint.mjs';
+import { verifyKind } from '../../../harness/core/audit/fingerprint.mjs';
 
 const FILE_TOOLS = /^(?:Edit|Write|MultiEdit|NotebookEdit)$/;
 const SHELL_TOOLS = /^(?:Bash|PowerShell)$/;

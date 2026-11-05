@@ -1,6 +1,6 @@
 // Playbook policy: allowlist exe/git/bun/node (mac dinh tu choi) + builtin defaults.
 import path from 'node:path';
-import { isInside } from '../../../core/io/paths.mjs';
+import { isInside } from '../../../../harness/core/io/paths.mjs';
 
 // ---------- allowlist (mac dinh tu choi) ----------
 const ALLOW_EXE = ['git', 'node', 'bun'];

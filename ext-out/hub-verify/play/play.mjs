@@ -5,10 +5,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { workspaceRoot } from '../../core/io/paths.mjs';
+import { workspaceRoot } from '../../../harness/core/io/paths.mjs';
 import { loadPlaybook, PlaybookError } from './playbook/schema.mjs';
 import { runPlaybook, formatResult, prunePlayRuns } from './playbook/run.mjs';
-import { samePath } from '../../core/io/paths.mjs';
+import { samePath } from '../../../harness/core/io/paths.mjs';
 
 const USAGE = 'Usage: node harness/tools/play/play.mjs <playbook-name|path> [--param k=v ...] [--yes] [--dry-run] [--timeout-s N<=1800] [--max-output-bytes N<=5000000]\n       node harness/tools/play/play.mjs --prune [--days N] [--yes]';
 

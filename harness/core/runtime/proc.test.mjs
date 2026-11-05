@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import cp from 'node:child_process';
-import { spawnSync, spawn, compactLedger, COMPACT_MIN_BYTES, readLedger, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP, readLedger } from './proc.mjs';
+import { spawnSync, spawn, compactLedger, COMPACT_MIN_BYTES, readLedger, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP } from './proc.mjs';
 import { withLock, acquireLock } from './lockfile.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'proc-t-'));
