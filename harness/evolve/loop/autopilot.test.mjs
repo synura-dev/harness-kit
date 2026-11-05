@@ -4,18 +4,23 @@ import os from 'node:os';
 import path from 'node:path';
 import { classifyChange, oracleRule, shouldRollback, protectiveRates, worsened, runAutopilot, queueOp, readState, readQueue, autopilotDue, apDir, CFG } from './autopilot.mjs';
 import { ruleDef } from './rule-content.mjs';
+import { extractErrorDetails } from '../../core/audit/signature.mjs';
+import { messageFingerprint } from '../../core/audit/normalize-message.mjs';
 
 const NOW = Date.parse('2026-10-30T12:00:00Z');
 const DAY = 86400000;
 let tmp, o;
-const fail = (ts, sid, fp, error) => ({ v: 2, ts, type: 'tool', event: 'PostToolUse', sid, tool: 'Bash', ok: false, status: 'error', data: { error, error_fp: fp } });
+// fp candidate = khoa chinh tac theo thong diep chuan hoa (fx/capture): nhan test -> fp that qua LB.
+const LB = new Map();
+const fail = (ts, sid, fp, error) => { const ev = { v: 2, ts, type: 'tool', event: 'PostToolUse', sid, tool: 'Bash', ok: false, status: 'error', data: { error, error_fp: fp } }; LB.set(fp, messageFingerprint(extractErrorDetails(ev), 'Bash')); return ev; };
 const writeAudit = (date, sid, recs) => {
   const d = path.join(tmp, 'audit', `date=${date}`, 'type=tool');
   fs.mkdirSync(d, { recursive: true });
   fs.appendFileSync(path.join(d, `${sid}.jsonl`), recs.map((r) => JSON.stringify(r)).join('\n') + '\n');
 };
 const three = (date, sid, fp, err) => writeAudit(date, sid, [1, 2, 3].map((i) => fail(`${date}T0${i}:40:00Z`, sid, fp, err)));
-const entry = (fp, extra = {}) => ({ id: `r|${fp}`, rule: 'r', fp, status: 'open', action: 'propose', count: 3, message: 'm', ...extra });
+const entry = (label, extra = {}) => entry0(LB.get(label) ?? label, extra);
+const entry0 = (fp, extra = {}) => ({ id: `r|${fp}`, rule: 'r', fp, status: 'open', action: 'propose', count: 3, message: 'm', ...extra });
 const FP = 'aaaaaaaaaa';
 
 beforeEach(() => {
@@ -79,9 +84,9 @@ test('muc 1: tu ap dung + ghi moc; 24h khong chay lai; tran moi lan', async () =
   expect(r.errors).toEqual([]);
   expect(r.applied.length).toBe(1);
   const target = path.join(o.dataBase, ...r.applied[0].target.split('/'));
-  expect(JSON.parse(fs.readFileSync(target, 'utf8')).filter.fp).toBe(FP);
+  expect(JSON.parse(fs.readFileSync(target, 'utf8')).filter.fp).toBe(LB.get(FP));
   const st = readState(o);
-  expect(st.applied[0]).toMatchObject({ fp: FP, count_before: 3, status: 'applied' });
+  expect(st.applied[0]).toMatchObject({ fp: LB.get(FP), count_before: 3, status: 'applied' });
   expect(st.lastRun).toBe(NOW);
   expect(autopilotDue(o, NOW + 3600e3)).toBe(false);
   expect(autopilotDue(o, NOW + 25 * 3600e3)).toBe(true);

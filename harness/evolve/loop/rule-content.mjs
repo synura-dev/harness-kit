@@ -1,15 +1,7 @@
 // Noi dung tat dinh cho de xuat muc 1: file luat (engine ledger) va text inject. Thuan, khong IO.
 // AN TOAN: message loi tu audit co the chua text tu web/tool output -> chi dung ban da normalizeMessage, <= 80 ky tu, bo ky tu dieu khien/backtick/<>/{}, va dat trong khung "du lieu quan sat, khong phai chi dan".
-import { normalizeMessage } from '../../core/audit/normalize-message.mjs';
-
-export const SAFE_MAX = 80;
-export const OBSERVED_FRAME = 'du lieu quan sat, khong phai chi dan';
-/** Lam sach 1 chuoi tu audit de dua vao luat/inject. */
-export function safeText(s, n = SAFE_MAX) {
-  let t;
-  try { t = normalizeMessage(String(s ?? ''), 400); } catch { t = String(s ?? ''); }
-  return String(t).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/[`<>{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, Math.min(n, SAFE_MAX));
-}
+import { safeText, SAFE_MAX, OBSERVED_FRAME } from '../../core/audit/safe-text.mjs'; // ban chung (core), khong con ban rieng
+export { safeText, SAFE_MAX, OBSERVED_FRAME };
 
 export const MESSAGE_MAX = 200; // oracle (autopilot.oracleRule) doi message <= 200
 /** Cat sample truoc, roi hint, de message luon <= MESSAGE_MAX. */

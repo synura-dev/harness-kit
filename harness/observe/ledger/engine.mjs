@@ -8,6 +8,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dataPathFor } from '../../core/io/storage.mjs';
+import { isHookRun } from '../../core/audit/signals.mjs';
 import { safeText } from '../../core/audit/safe-text.mjs';
 import { samePath, workspaceRoot } from '../../core/io/paths.mjs';
 import { readEntries } from '../../core/ext/ext-trust.mjs';
@@ -173,7 +174,7 @@ export function evaluate(def, inputs = {}, ctx = {}) {
   };
   if (def.source === 'audit') {
     for (const rec of inputs.events || []) {
-      if (!rec || !inWin(rec.ts)) continue;
+      if (!rec || isHookRun(rec) || !inWin(rec.ts)) continue; // HookRun = do tre hook, khong phai thao tac cua agent
       const get = (k) => auditField(rec, k, ctx);
       if (!matchFilter(get, def.filter, ctx)) continue;
       if (def.allow_paths && allowedByPaths(rec, def.allow_paths, ctx.hubDir)) continue; // ngoai le khai bao trong luat

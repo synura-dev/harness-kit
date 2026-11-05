@@ -5,12 +5,16 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { extractErrorDetails } from '../../core/audit/signature.mjs';
+import { messageFingerprint } from '../../core/audit/normalize-message.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, classifyTarget, redact, redactPattern } from './loop.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const NOW = Date.parse('2026-10-29T12:00:00Z');
 let tmp, hub, o;
-const fail = (ts, sid, fp, error) => ({ v: 2, ts, type: 'tool', event: 'PostToolUse', sid, tool: 'Bash', ok: false, status: 'error', data: { error, error_fp: fp } });
+// fp candidate nay la khoa chinh tac theo thong diep chuan hoa (fx/capture): nhan trong test -> fp that qua FP.
+const FP = new Map();
+const fail = (ts, sid, fp, error) => { const ev = { v: 2, ts, type: 'tool', event: 'PostToolUse', sid, tool: 'Bash', ok: false, status: 'error', data: { error, error_fp: fp } }; FP.set(fp, messageFingerprint(extractErrorDetails(ev), 'Bash')); return ev; };
 const writeAudit = (date, sid, recs) => {
   const d = path.join(tmp, 'audit', `date=${date}`, 'type=tool');
   fs.mkdirSync(d, { recursive: true });
@@ -42,16 +46,16 @@ beforeAll(() => {
 });
 afterAll(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
-const candId = async (fp) => (await findCandidates(o)).items.find((x) => x.fp === fp).id;
+const candId = async (fp) => (await findCandidates(o)).items.find((x) => x.fp === (FP.get(fp) ?? fp)).id;
 const skillAbs = (p) => path.join(o.dataBase, ...p.change.target.split('/'));
 
 test('nguong >= 3 lan trong 7 ngay, toan may', async () => {
   const r = await findCandidates(o);
-  expect(r.items.map((x) => x.fp).sort()).toEqual(['aaaaaaaaaa', 'dddddddddd', 'eeeeeeeeee', 'ffffffffff']);
-  const a = r.items.find((x) => x.fp === 'aaaaaaaaaa');
+  expect(r.items.map((x) => x.fp).sort()).toEqual(['aaaaaaaaaa', 'dddddddddd', 'eeeeeeeeee', 'ffffffffff'].map((l) => FP.get(l)).sort());
+  const a = r.items.find((x) => x.fp === FP.get('aaaaaaaaaa'));
   expect(a.count).toBe(3);
   expect(a.sessions).toBe(2);
-  expect((await findCandidates({ ...o, threshold: 2 })).items.map((x) => x.fp)).toContain('bbbbbbbbbb');
+  expect((await findCandidates({ ...o, threshold: 2 })).items.map((x) => x.fp)).toContain(FP.get('bbbbbbbbbb'));
 });
 
 test('redact (Bearer/Basic, key=value, email) + redactPattern', () => {
@@ -66,7 +70,7 @@ test('propose (mac dinh kind skill) co bang chung; Bearer token bi che khoi evid
   const p = await propose(await candId('aaaaaaaaaa'), o);
   expect(p.kind).toBe('skill');
   expect(p.status).toBe('proposed');
-  expect(p.evidence).toMatchObject({ fp: 'aaaaaaaaaa', count: 3, sessions: 2, window_days: 7, threshold: 3 });
+  expect(p.evidence).toMatchObject({ fp: FP.get('aaaaaaaaaa'), count: 3, sessions: 2, window_days: 7, threshold: 3 });
   expect(p.evidence.sample).not.toContain('abc123secret');
   expect(p.change.target).toMatch(/^evolve\/skills\/evolve-[a-z0-9-]+\/SKILL\.md$/);
   expect(fs.existsSync(pjson(p.id))).toBe(true);
@@ -328,7 +332,7 @@ test('E2E du an sach (khong harness/): CLI candidates -> propose -> check (SKIPP
     const js = (r) => JSON.parse(r.stdout);
     const c = run('candidates');
     expect(c.status).toBe(0);
-    const cid = js(c).items.find((x) => x.fp === 'pppppppppp').id;
+    const cid = js(c).items.find((x) => x.fp === FP.get('pppppppppp')).id;
     const p = js(run('propose', cid));
     expect(p.status).toBe('proposed');
     expect(p.change.target).toMatch(/^evolve\/skills\/evolve-[a-z0-9-]+\/SKILL\.md$/);
@@ -370,8 +374,8 @@ test('E2E du an sach (khong harness/): CLI candidates -> propose -> check (SKIPP
 test('candidates --source loc theo nguon ext:<id>; mac dinh khong loc', async () => {
   const ev = (ts, src) => ({ ...fail(ts, 'sx', 'gggggggggg', 'ext boom'), ...(src ? { source: src } : {}) });
   writeAudit('2026-10-29', 'sx', [ev('2026-10-29T05:00:00Z', 'ext:demo'), ev('2026-10-29T05:10:00Z', 'ext:demo'), ev('2026-10-29T05:20:00Z', 'ext:demo')]);
-  expect((await findCandidates(o)).items.map((x) => x.fp)).toContain('gggggggggg');
-  expect((await findCandidates({ ...o, source: 'ext:demo' })).items.map((x) => x.fp)).toEqual(['gggggggggg']);
+  expect((await findCandidates(o)).items.map((x) => x.fp)).toContain(FP.get('gggggggggg'));
+  expect((await findCandidates({ ...o, source: 'ext:demo' })).items.map((x) => x.fp)).toEqual([FP.get('gggggggggg')]);
   expect((await findCandidates({ ...o, source: 'ext:other' })).items.length).toBe(0);
 });
 
