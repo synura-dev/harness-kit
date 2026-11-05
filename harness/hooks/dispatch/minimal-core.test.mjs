@@ -38,8 +38,8 @@ test('14 su kien van dang ky; chay khong nem khi tat het module tuy chon', async
   expect(wc.code).toBe(1);
 });
 
-test('guard van deny force-push, audit ghi ban ghi', async () => {
-  const r = await dispatch({ event: 'PreToolUse', stdin: JSON.stringify({ session_id: 's1', cwd: tmp, tool_name: 'Bash', tool_input: { command: 'git push --force origin main' } }), cfg: CFG });
+test('guard van deny lenh qua dai, audit ghi ban ghi', async () => {
+  const r = await dispatch({ event: 'PreToolUse', stdin: JSON.stringify({ session_id: 's1', cwd: tmp, tool_name: 'Bash', tool_input: { command: 'echo ' + 'a'.repeat(100001) } }), cfg: CFG });
   expect(r.stdout).toContain('deny');
   expect(r.records.length).toBeGreaterThan(0);
 });
