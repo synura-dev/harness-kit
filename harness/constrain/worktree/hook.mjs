@@ -60,7 +60,7 @@ export async function sweep(cfg = DEFAULTS, emit = (rec) => log(rec, cfg)) {
   const { workspaceRoot } = await import('../../core/io/paths.mjs');
   // Du an khong phai git: khong co worktree de don -> bo qua som, khong spawn node + git.
   if (!hasGitAncestor(workspaceRoot())) return { removed: 0, skipped: 'no-git' };
-  const { spawnSync } = await import('node:child_process');
+  const { spawnSync } = await import('../../core/runtime/proc.mjs');
   const cli = path.join(HERE, '..', '..', 'cli', 'commands', 'worktree.mjs');
   const r = spawnSync(process.execPath, [cli, 'prune', '--apply', '--min-age-hours', String(cfg.minAgeHours), '--timeout', String(cfg.sweepTimeoutSec)], { encoding: 'utf8', timeout: (cfg.sweepTimeoutSec + 3) * 1000 });
   const out = String(r.stdout || '');

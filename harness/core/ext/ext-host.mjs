@@ -2,7 +2,7 @@
 // Moi loi (throw, exit != 0, treo, rac, manifest hong, thieu plugin) bi bat -> 1 dong audit source ext:<id> status ext-fail + ma loi; core khong anh huong.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { auditExt, ctxCompatible, CTX_VERSION, hash8, normalizeDataEntries } from './ctx.mjs';
 import { manifestDomains } from './manifest-domains.mjs';

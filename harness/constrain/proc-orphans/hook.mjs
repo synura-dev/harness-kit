@@ -8,6 +8,19 @@ import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 
 import { readJsonStdin } from '../../core/io/stdio.mjs';
+
+/** Don *.tmp mo coi cu hon 1h trong thu muc state (toi da 50 file/lan). Tra so file da xoa. */
+export function pruneTmp(dir, now = Date.now(), maxAgeMs = 3600e3, max = 50) {
+  let n = 0;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (n >= max) break;
+      if (!/\.tmp$/.test(f)) continue;
+      try { const fp = path.join(dir, f); const st = fs.statSync(fp); if (st.isFile() && now - st.mtimeMs > maxAgeMs) { fs.unlinkSync(fp); n++; } } catch {}
+    }
+  } catch {}
+  return n;
+}
 const isEntry = (u) => !!process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(u);
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -74,14 +87,16 @@ export async function scanChildren(cfg, ctx = {}) {
   const { listProcesses } = await import('../../core/runtime/proc-list.mjs');
   const { procs } = listProcesses({ timeoutMs: cfg.timeoutMs });
   if (ttl > 0 && ctx.cache !== false) {
+    let tmp = null;
     try {
       let okW = true; try { okW = (await import('../../core/io/storage.mjs')).guardWrite(file).ok; } catch {}
       if (!okW) throw new Error('data-enforce');
       fs.mkdirSync(path.dirname(file), { recursive: true });
-      const tmp = file + '.' + process.pid + '.tmp';
+      pruneTmp(path.dirname(file));
+      tmp = file + '.' + process.pid + '.tmp';
       fs.writeFileSync(tmp, JSON.stringify({ ts: Date.now(), procs: procs.map((p) => ({ ...p, cmd: String(p.cmd || '').slice(0, 300) })) }));
       fs.renameSync(tmp, file);
-    } catch {}
+    } catch { if (tmp) try { fs.unlinkSync(tmp); } catch {} }
   }
   return findChildren(procs, process.pid, cfg);
 }
@@ -95,6 +110,7 @@ export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;
     if (!cfg.enabled || !input || typeof input !== 'object' || !cfg.events.includes(event)) return {};
+    if (ctx.sweep !== false) await sweepProcLedger();
     const r = await scanChildren(cfg, ctx);
     if (!r.children.length) return {};
     const ts = new Date().toISOString();
@@ -128,3 +144,18 @@ async function main() {
 }
 
 if (isEntry(import.meta.url)) { await main(); process.exit(0); }
+
+/** Don so PID tac vu nen (proc.mjs): PID chet -> xoa muc; qua han + con song + dung lenh -> kill. Fail-open. */
+export async function sweepProcLedger() {
+  try {
+    const { sweepLedger } = await import('../../core/runtime/proc.mjs');
+    const { listProcesses } = await import('../../core/runtime/proc-list.mjs');
+    let byPid = null;
+    const matches = (pid, cmd) => {
+      if (!byPid) { byPid = new Map(listProcesses({ timeoutMs: 5000 }).procs.map((p) => [p.pid, String(p.cmd || '')])); }
+      const live = byPid.get(pid); const head = String(cmd || '').split(' ').slice(-1)[0];
+      return live != null && (!head || live.includes(head) || String(cmd).includes(live.slice(0, 60)));
+    };
+    return sweepLedger({ matches });
+  } catch { return null; }
+}

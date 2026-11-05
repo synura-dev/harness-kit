@@ -8,7 +8,7 @@ import { handle, DEFAULTS } from './hook.mjs';
 const mk = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ac-')); fs.mkdirSync(path.join(d, '.state'), { recursive: true }); fs.writeFileSync(path.join(d, '.state', 'data-scan.json'), JSON.stringify({ ts: new Date().toISOString(), warnings: [] })); return d; };
 const cfg = { ...DEFAULTS, autoClean: { ...DEFAULTS.autoClean } };
 const sf = (d) => path.join(d, '.state', 'data-check-clean.json');
-const ss = (d, extra = {}, env = {}) => handle('SessionStart', { session_id: 's' }, { cfg, env: { HUB_DATA_DIR: d, ...env }, ...extra });
+const ss = (d, extra = {}, env = {}) => handle('SessionStart', { session_id: 's' }, { cfg, env: { HUB_DATA_DIR: d, HOOK_DATA_CHECK_DOCTOR: '0', ...env }, ...extra });
 
 test('chua toi han: khong spawn; toi han: spawn 1 lan (khoa)', async () => {
   const d = mk(); let n = 0; const spawnClean = () => { n++; };
@@ -36,6 +36,6 @@ test('ket qua phien sau: 1 dong, N=0 im lang, khong lap', async () => {
 test('cong tac env va enabled=false tat; fail-open', async () => {
   const d = mk(); let n = 0; const spawnClean = () => { n++; };
   await ss(d, { spawnClean }, { HOOK_DATA_CHECK_AUTOCLEAN: '0' }); assert.equal(n, 0);
-  await handle('SessionStart', { session_id: 's' }, { cfg: { ...cfg, autoClean: { ...cfg.autoClean, enabled: false } }, env: { HUB_DATA_DIR: d }, spawnClean }); assert.equal(n, 0);
+  await handle('SessionStart', { session_id: 's' }, { cfg: { ...cfg, autoClean: { ...cfg.autoClean, enabled: false } }, env: { HUB_DATA_DIR: d, HOOK_DATA_CHECK_DOCTOR: '0' }, spawnClean }); assert.equal(n, 0);
   assert.deepEqual(await ss(mk(), { spawnClean: () => { throw new Error('x'); } }), {});
 });

@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawn } from 'node:child_process';
+import { spawn } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 import { REPO_DIR, readJson, isObj, dataDir } from '../../core/io/paths.mjs';

@@ -3,7 +3,7 @@
 // Layout: .worktrees/<safeSession>, branch wt-<safeSession>.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from './proc.mjs';
 import { workspaceRoot, samePath } from '../io/paths.mjs';
 
 const GIT_TIMEOUT_MS = 30000;

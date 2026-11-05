@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { ver } from '../../core/runtime/proc-list.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
@@ -274,6 +274,7 @@ try {
   const { checkClutter, checkStray, countSources, countFlat, scanCode } = await import(new URL('../../core/checks/clutter-check.mjs', import.meta.url).href);
   const si = buildScanInput(HUB_ROOT);
   const rows = [];
+  try { const { scanProcDirect } = await import(new URL('../../core/checks/proc-check.mjs', import.meta.url).href); const pd = scanProcDirect(HUB_ROOT); pd.slice(0, 10).forEach((v) => console.log(`[error] proc-direct ${v.file}:${v.line}: dung harness/core/runtime/proc.mjs thay child_process truc tiep`)); rows.push({ name: 'proc-direct', total: pd.length, errors: pd.length, truncated: false }); } catch { /* fail-open */ }
   const cap = (arr, n = 15) => { arr.slice(0, n).forEach((s) => console.log('[warn]', s)); if (arr.length > n) console.log(`[warn] ... con ${arr.length - n} muc nua`); };
   // workspace mode: harness/<loi>/... thuoc plugin, docs lich su la anh chup -> khong phai loi ref cua workspace
   const coreOwned = WS_MODE ? makeCoreOwned({

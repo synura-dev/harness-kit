@@ -5,7 +5,7 @@
 //        constrain config show|sources ...   -> chuyen sang cli/commands/config.mjs (domain `config` cu la alias)
 // Doc-only (hooks): nap thu tung module (import dong, khong chay handler); loi nap -> trang thai error, khong nem.
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { samePath } from '../../core/io/paths.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';

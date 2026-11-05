@@ -1,5 +1,5 @@
 // Liet ke tien trinh (Win32_Process, roi xuong wmic). Dung chung cho cli/proc-watch va hooks/proc-orphans.
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from './proc.mjs';
 
 export const parseDate = (s) => {
   if (!s) return null;

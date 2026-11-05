@@ -1,5 +1,5 @@
 // Playbook exec: spawn khong qua shell, kill tree, summarize, capture.
-import { spawn, spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from '../../../core/runtime/proc.mjs';
 import { resolveBin } from '../bin.mjs';
 
 // ---------- exec ----------

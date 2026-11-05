@@ -1,13 +1,14 @@
 // Hook data-check: canh bao vi pham data dau phien + rac khi ghi file. Chi warn, fail-open.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnBackground } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 import { TOP_FILES } from '../../core/config/contract.mjs';
 import { dataRoot, workspaceRoot, toPosix, REPO_DIR } from '../../core/io/paths.mjs';
 import { SCAN_CACHE_REL, formatWarn } from '../../core/registry/data-registry.mjs';
 import { isStdRootFile } from '../storage/std-root.mjs';
+import { doctorAuto } from './doctor-auto.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS = { enabled: true, timeoutMs: 300, scanTimeoutMs: 8000, retryMinutes: 30, lockMinutes: 2, stateMaxDays: 7, pruneMax: 50, cacheMaxAgeHours: 24, allowlist: [], autoClean: { enabled: true, minIntervalHours: 24, maxFiles: 500, maxBytes: 200000000, timeoutS: 20 } };
@@ -30,7 +31,20 @@ export function clutterOf(file, cfg, root = workspaceRoot()) {
   return null;
 }
 
-const wj = (f, o) => { try { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(o)); fs.renameSync(t, f); return true; } catch { return false; } };
+const wj = (f, o) => { const t = `${f}.${process.pid}.tmp`; try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(t, JSON.stringify(o)); fs.renameSync(t, f); return true; } catch { try { fs.unlinkSync(t); } catch {} return false; } };
+
+/** Don *.tmp mo coi (cu hon maxAgeMs, mac dinh 1h) trong thu muc; toi da max file. Tra so file da xoa. */
+export function pruneTmp(dir, now = Date.now(), maxAgeMs = 3600e3, max = 50) {
+  let n = 0;
+  try {
+    for (const f of fs.readdirSync(dir)) {
+      if (n >= max) break;
+      if (!/\.tmp$/.test(f)) continue;
+      try { const fp = path.join(dir, f); const st = fs.statSync(fp); if (st.isFile() && now - st.mtimeMs > maxAgeMs) { fs.unlinkSync(fp); n++; } } catch {}
+    }
+  } catch {}
+  return n;
+}
 
 /** Spawn scan nen (detached, khong cho). Negative cache + lock nhe. Tra true neu da spawn. */
 function kickScan(dd, cfg, ctx = {}) {
@@ -44,8 +58,7 @@ function kickScan(dd, cfg, ctx = {}) {
     wj(path.join(dd, '.state', 'data-check-scan.lock'), { ts: now, pid: process.pid });
     const go = ctx.spawnScan || (() => {
       const cli = path.join(REPO_DIR, 'harness', 'cli', 'harness.mjs');
-      const p = spawn(process.execPath, [cli, 'data', 'scan', '--json'], { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, HARNESS_GATEWAY: '1' } });
-      p.on('error', () => {}); p.unref();
+      spawnBackground({ cmd: process.execPath, args: [cli, 'data', 'scan', '--json'], key: 'data-scan', deadlineMs: 5 * 60e3, env: { ...process.env, HARNESS_GATEWAY: '1' } });
     });
     go();
     return true;
@@ -75,8 +88,7 @@ export function autoClean(dd, cfg, ctx = {}) {
         const go = ctx.spawnClean || (() => {
           const cli = path.join(REPO_DIR, 'harness', 'cli', 'harness.mjs');
           const a = [cli, 'data', 'clean', '--auto', '--yes', '--max-files', String(ac.maxFiles), '--max-bytes', String(ac.maxBytes), '--timeout-s', String(ac.timeoutS)];
-          const p = spawn(process.execPath, a, { detached: true, stdio: 'ignore', windowsHide: true, env: { ...process.env, HARNESS_GATEWAY: '1' } });
-          p.on('error', () => {}); p.unref();
+          spawnBackground({ cmd: process.execPath, args: a, key: 'data-clean', deadlineMs: (ac.timeoutS + 60) * 1000, env: { ...process.env, HARNESS_GATEWAY: '1' } });
         });
         go();
       }
@@ -106,7 +118,9 @@ async function sessionStart(input, cfg, ctx) {
   const age = scan && scan.ts ? Date.now() - Date.parse(scan.ts) : Infinity;
   if (!(age <= cfg.cacheMaxAgeHours * 3600e3)) kickScan(dd, cfg, ctx);
   pruneState(dd, cfg);
-  const cleanLine = autoClean(dd, cfg, ctx);
+  pruneTmp(path.join(dd, '.state'));
+  pruneTmp(path.dirname(file));
+  const cleanLine = [autoClean(dd, cfg, ctx), ...doctorAuto(dd, cfg, ctx)].filter(Boolean).join('\n') || null;
   const ws = scan && Array.isArray(scan.warnings) ? scan.warnings : [];
   if (!ws.length) return cleanLine ? { additionalContext: cleanLine } : {};
   const sid = String(input.session_id || 'x').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);

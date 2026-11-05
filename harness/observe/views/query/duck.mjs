@@ -1,5 +1,5 @@
 // Backend duckdb (CLI hoac @duckdb/node-api).
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../../core/runtime/proc.mjs';
 import { createRequire } from 'node:module';
 
 const q = (s) => "'" + String(s).replace(/'/g, "''") + "'";

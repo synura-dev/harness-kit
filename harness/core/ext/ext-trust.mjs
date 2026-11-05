@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../runtime/proc.mjs';
 import { isPluginMode, REPO_DIR } from '../io/paths.mjs';
 import { pluginLayerDirs } from '../config/config.mjs';
 

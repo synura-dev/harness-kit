@@ -3,7 +3,7 @@
 // Ten domain cu (skills, install, doctor, adapters) la alias trong manifest -> goi domain nay voi tien to lenh.
 // Moi lenh chay bang tien trinh con (giu nguyen co/timeout cua tung CLI).
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { samePath } from '../../core/io/paths.mjs';
 

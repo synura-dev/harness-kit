@@ -7,7 +7,7 @@
 // Registry = manifest.json cua tung extension (harness/{cli,plugins,tools,hooks}/.../manifest.json): script/desc/cmds/default. Loi/thieu => fallback toi thieu. Hook khong goi qua shim.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit } from '../core/io/out.mjs';
 import { loadExternals, runExternal, blockExternal } from '../core/ext/ext-host.mjs';
