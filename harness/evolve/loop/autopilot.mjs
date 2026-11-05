@@ -10,6 +10,7 @@ import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
 import { readAuditEvents, collectJsonlFiles } from '../../core/audit/scan.mjs';
 import { findCandidates, propose, check, apply, rollback, ctx, nestedDateDirs } from './loop.mjs';
 import { ruleDef } from './rule-content.mjs';
+import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 
 export const CFG = Object.freeze({
   intervalHours: 24, timeoutS: 100, maxProposals: 5, maxModelCallsWeek: 0, rollbackAfterDays: 7,
@@ -261,6 +262,7 @@ export async function queueOp(o = {}) {
 
 /** Che do CLI/spawn: node autopilot.mjs [--dry-run] [--force]; timeout cung. */
 export async function main(argv = process.argv.slice(2)) {
+  bgDoneOnExit();
   const hard = setTimeout(() => { console.error('evolve-autopilot: timeout cung'); process.exit(3); }, (CFG.timeoutS + 10) * 1000);
   try { const r = await runAutopilot({ dryRun: argv.includes('--dry-run'), force: argv.includes('--force') }); console.log(JSON.stringify(r)); clearTimeout(hard); return 0; } catch (e) { console.error('evolve-autopilot:', e.message); clearTimeout(hard); return 1; }
 }

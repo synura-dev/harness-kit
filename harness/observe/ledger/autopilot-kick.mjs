@@ -2,7 +2,7 @@
 // (hop dong import): spawn bang duong dan. Fail-open. Dung chung co che khoa kieu kickJob (kick.json) nhung khoa rieng.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnBackground } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { dataPathFor, readJson } from '../../core/io/storage.mjs';
 
@@ -21,9 +21,7 @@ export function kickAutopilot(dataOpts, ctx = {}, nowMs = Date.now()) {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(lock, JSON.stringify({ ts: nowMs, pid: process.pid }));
     const go = ctx.spawnAutopilot || (() => {
-      // TODO(tich hop): chuyen qua harness/core/runtime/proc.mjs khi se/integrate co file nay.
-      const p = spawn(process.execPath, [AUTOPILOT_SCRIPT], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env });
-      p.on('error', () => {}); p.unref();
+      spawnBackground({ cmd: process.execPath, args: [AUTOPILOT_SCRIPT], key: 'evolve-autopilot', deadlineMs: 5 * 60e3, env: process.env });
     });
     go();
     return true;

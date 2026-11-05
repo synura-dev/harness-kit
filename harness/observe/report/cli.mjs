@@ -3,6 +3,7 @@
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt } from '../../core/io/out.mjs';
+import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { buildReport, saveBaseline, putObsidian, markRun, REPORT } from './run.mjs';
 
 const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--json] [--raw] [--timeout-s N]';
@@ -26,6 +27,7 @@ export function parseArgs(argv) {
 }
 
 export async function main(argv = process.argv.slice(2)) {
+  bgDoneOnExit();
   try {
     const o = parseArgs(argv);
     const res = await buildReport({ days: o.days, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
