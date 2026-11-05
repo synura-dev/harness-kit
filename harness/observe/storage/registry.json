@@ -51,7 +51,7 @@
       "class": "cache",
       "owner": "harness/core/runtime/proc.mjs",
       "retentionDays": 7,
-      "note": "so PID tac vu nen (proc-ledger.json), thay os.tmpdir()",
+      "note": "so PID tac vu nen (proc-ledger.jsonl), thay os.tmpdir()",
       "target": "system/proc",
       "path": "system/proc"
     },
