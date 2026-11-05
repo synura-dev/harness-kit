@@ -11,7 +11,7 @@ import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { loadDefinitions, evaluateAll } from './engine.mjs';
-import { readLedger, updateLedger, applyFindings, ledgerFile, writeState, JOB, jobDue } from './ledger.mjs';
+import { readLedger, updateLedger, applyFindings, ledgerFile, writeState, recordJobError, JOB, jobDue } from './ledger.mjs';
 export { JOB, jobDue };
 
 const DAY = 86400000;
@@ -69,8 +69,9 @@ export async function runJob(opts = {}) {
   };
   const truncated = ev.truncated || dt || null;
   if (opts.dryRun) merge(readLedger(file));
-  else if (!updateLedger(file, merge, { lock: { retries: 200, waitMs: 25 } }).ok) { return { defs: defs.length, errors, events: ev.events.length, findings: f1.length, entries: 0, truncated: 'lock', ms: Date.now() - t0 }; }
-  if (!opts.dryRun) { writeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length }); }
+  else if (!updateLedger(file, merge, { lock: { retries: 200, waitMs: 25 } }).ok) { recordJobError(opts.dataOpts, 'lock', 'khong khoa duoc so', nowMs); return { defs: defs.length, errors, events: ev.events.length, findings: f1.length, entries: 0, truncated: 'lock', ms: Date.now() - t0 }; }
+  // Ghi state moi (xoa loi cu); chay xong nhung bi cat theo timeout -> van ghi lastRun + lastError=timeout (hien o observe/doctor).
+  if (!opts.dryRun) { writeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length, ...(truncated === 'timeout' ? { lastError: 'timeout: doc audit bi cat, du lieu mot phan', lastErrorAt: nowMs } : {}) }); }
   return { defs: defs.length, errors, events: ev.events.length, findings: f1.length + f2.length, entries: entries.length, truncated, ms: Date.now() - t0 };
 }
 
@@ -79,14 +80,16 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const a = process.argv.slice(2);
   const ti = a.indexOf('--timeout-s');
   const timeoutMs = ti >= 0 && Number(a[ti + 1]) > 0 ? Number(a[ti + 1]) * 1000 : JOB.timeoutS * 1000;
-  const hard = setTimeout(() => { console.error('ledger-job: timeout cung'); process.exit(3); }, timeoutMs + 5000);
+  const dry = a.includes('--dry-run');
+  const die = (kind, msg, code) => { console.error('ledger-job:', msg); if (!dry) recordJobError(undefined, kind, msg); process.exit(code); };
+  const hard = setTimeout(() => die('timeout', 'timeout cung', 3), timeoutMs + 5000);
   runJob({ timeoutMs, dryRun: a.includes('--dry-run'), candidateSources: defaultCandidateSources() }).then(async (r) => {
     console.log(JSON.stringify(r)); clearTimeout(hard);
     if (!a.includes('--dry-run')) { // autopilot: tu bo qua neu <24h; fail-open; tran cung rieng
-      const h2 = setTimeout(() => process.exit(3), 115000);
-      try { const { runAutopilot } = await import('../../evolve/loop/autopilot.mjs'); await runAutopilot({}); } catch {}
+      const h2 = setTimeout(() => die('autopilot', 'autopilot timeout', 3), 115000);
+      try { const { runAutopilot } = await import('../../evolve/loop/autopilot.mjs'); await runAutopilot({}); } catch (e) { recordJobError(undefined, 'autopilot', e && e.message); }
       clearTimeout(h2);
     }
     process.exit(0);
-  }, (e) => { console.error('ledger-job:', e.message); process.exit(1); });
+  }, (e) => die('exit', e && e.message, 1));
 }

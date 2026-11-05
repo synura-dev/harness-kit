@@ -118,7 +118,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
       try {
-        const ctx = { write: false, deadline: Date.now() + tmo };
+        const ctx = { write: false, background: true, deadline: Date.now() + tmo };
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
       if (!kind && validateHookResult(res).length) kind = 'bad-result';

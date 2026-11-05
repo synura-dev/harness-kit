@@ -199,6 +199,13 @@ try {
   else if (firstActed > dayStr(days - SLACK)) console.log(`[skip] unused-modules: module-acted dau tien ${firstActed}; bat dau xet tu ${new Date(Date.parse(firstActed) + (days - SLACK) * 86400000).toISOString().slice(0, 10)} (tranh bao nham sau nang cap)`);
   else for (const [id, evs] of cand) if (!seen.has(id)) console.log(`[info] ${id} (${[...evs].join(', ')}) khong co tac dung trong ${days} ngay o audit nay; neu moi du an deu vay, can nhac bo khoi plugin`);
 } catch (e) { console.log('[warn] unused-modules check loi:', e.message); }
+// job lo: loi gan nhat (kick/spawn/exit/timeout/lock) hoac khong chay xong trong 72h.
+try {
+  const { readState, jobHealth } = await import('../../observe/ledger/ledger.mjs');
+  const st = readState(); const jh = jobHealth(st);
+  if (jh) warn('ledger-job', `ledger job loi: ${jh.error} (${new Date(jh.at).toISOString()}); xem harness observe ledger`);
+  else if (st.lastRun && Date.now() - Number(st.lastRun) > 72 * 3600e3) warn('ledger-job', `ledger job khong chay tu ${new Date(Number(st.lastRun)).toISOString()} (>72h)`);
+} catch (e) { console.log('[warn] ledger-job check loi:', e.message); }
 // runtime: config guard hop le + du lieu (data scan: retention/dang ky/stray). Check phat trien nam o dev/.
 try {
   const rows = [];

@@ -7,7 +7,7 @@ import { dataPathFor } from '../../core/io/storage.mjs';
 import { kickReport } from '../report/run.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
-import { readLedger, readPending, updateLedger, claimDue, claimRebuild, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
+import { readState, writeState, recordJobError, jobHealth, readLedger, readPending, updateLedger, claimDue, claimRebuild, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
 import { safeText, cleanLine, OBSERVED_FRAME } from '../../core/audit/safe-text.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -42,15 +42,29 @@ export function kickJob(dataOpts, ctx = {}, nowMs = Date.now()) {
   try {
     if (!jobDue(dataOpts, nowMs)) return false;
     const lock = path.join(ledgerDir(dataOpts), 'kick.json');
-    try { const l = JSON.parse(fs.readFileSync(lock, 'utf8')); if (nowMs - Number(l.ts) < JOB.lockMinutes * 60e3) return false; } catch {}
+    try {
+      const l = JSON.parse(fs.readFileSync(lock, 'utf8'));
+      if (nowMs - Number(l.ts) < JOB.lockMinutes * 60e3) return false;
+      if (Number(l.ts) > (Number(readState(dataOpts).lastRun) || 0)) recordJobError(dataOpts, 'unfinished', `lan kick ${new Date(Number(l.ts)).toISOString()} khong ghi lastRun (job chet/bi kill/loi)`, nowMs);
+    } catch {}
     fs.mkdirSync(path.dirname(lock), { recursive: true });
     fs.writeFileSync(lock, JSON.stringify({ ts: nowMs, pid: process.pid }));
     const go = ctx.spawnJob || (() => {
-      spawnBackground({ cmd: process.execPath, args: [path.join(HERE, 'job.mjs'), '--timeout-s', String(JOB.timeoutS)], key: 'ledger-job', deadlineMs: (JOB.timeoutS + 180) * 1000, env: process.env });
+      spawnBackground({ cmd: process.execPath, args: [path.join(HERE, 'job.mjs'), '--timeout-s', String(JOB.timeoutS)], key: 'ledger-job', deadlineMs: (JOB.timeoutS + 180) * 1000, env: process.env, onError: (why) => recordJobError(dataOpts, 'spawn', why) });
     });
     go();
     return true;
-  } catch { return false; }
+  } catch (e) { recordJobError(dataOpts, 'kick', e && e.message, nowMs); return false; }
+}
+
+/** Dong canh bao loi job (1 lan / errWarnHours, ghi errWarnedAt vao state). null neu khong co loi hoac dang cooldown. */
+export function jobErrorLine(dataOpts, nowMs = Date.now()) {
+  try {
+    const st = readState(dataOpts); const h = jobHealth(st);
+    if (!h || nowMs - (Number(st.errWarnedAt) || 0) < JOB.errWarnHours * 3600e3) return null;
+    writeState(dataOpts, { ...st, errWarnedAt: nowMs });
+    return `ledger[job]: job lo that bai (${h.error}) luc ${new Date(h.at).toISOString()}; chay harness observe ledger / harness doctor`;
+  } catch { return null; }
 }
 
 export async function handle(event, input, ctx = {}) {
@@ -59,7 +73,7 @@ export async function handle(event, input, ctx = {}) {
     if (!cfg.enabled || !input || typeof input !== 'object') return {};
     if (event !== 'SessionStart' && event !== 'UserPromptSubmit') return {};
     const nowMs = ctx.nowMs || Date.now();
-    const noWrite = ctx.write === false; // write:false = khong sweep/spawn nen (ghi so PID, khoa kick, stamp)
+    const bg = ctx.background !== false; // background:false = khong sweep/kick (test); write:false (dispatcher) khong chan
     const dataOpts = ctx.env ? { env: ctx.env } : undefined;
     const file = ledgerFile(dataOpts);
     const sid = String(input.session_id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || null;
@@ -71,10 +85,11 @@ export async function handle(event, input, ctx = {}) {
     if (pending === null ? fs.existsSync(file) && claimRebuild(file, nowMs) : pending.length) {
       updateLedger(file, (es) => { const c = claimDue(es, nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines }); r.lines = c.lines; return c.changed || pending === null ? c.entries : null; }, { lock: { retries: 20, waitMs: 25 } }); // khong khoa duoc -> bo qua lan nay (fail-open)
     }
-    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env && !noWrite) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
-    if (event === 'SessionStart' && !noWrite && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
+    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env && bg) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
+    if (event === 'SessionStart' && bg && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
+    const errLine = event === 'SessionStart' ? jobErrorLine(dataOpts, nowMs) : null;
     const inj = event === 'SessionStart' && cfg.inject !== false ? readInject(dataOpts) : [];
-    const all = [...r.lines.map(frameLine), ...inj];
+    const all = [...(errLine ? [frameLine(errLine)] : []), ...r.lines.map(frameLine), ...inj];
     return all.length ? { additionalContext: all.join('\n') } : {};
   } catch { return {}; }
 }

@@ -125,3 +125,9 @@ test('agent co SubagentStart ma khong co SubagentStop: het liveAgentTtlSec thi h
   expect(warned(await h('Stop', {}, kids(5)))).toBe(false);
   expect(warned(await h('Stop', {}, kids(5), { now: Date.now() + (DEFAULTS.liveAgentTtlSec + 1) * 1000 }))).toBe(true);
 }));
+
+test('contract background: sweep chi theo background !== false (write:false van sweep)', async () => {
+  const src = (await import('node:fs')).readFileSync(new URL('./hook.mjs', import.meta.url), 'utf8');
+  expect(src).toContain('ctx.sweep !== false && ctx.background !== false');
+  expect(src).not.toMatch(/ctx\.write !== false\) await sweepProcLedger/);
+});
