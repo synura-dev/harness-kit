@@ -13,7 +13,7 @@
     },
     "agy": {
       "file": "commands/agy.mjs",
-      "desc": "hook agy qua plugin: sinh/gop .agents/hooks.json + shim (khong launcher); rule allow de xuat",
+      "desc": "agy: hook + rule allow",
       "cmds": "init [--check] [--dir <p>] | rules [--print|--apply]",
       "default": "index"
     }
