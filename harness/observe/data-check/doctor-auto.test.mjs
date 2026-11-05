@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { handle, DEFAULTS, pruneTmp } from './hook.mjs';
-import { runBatch, stateFile } from './doctor-auto.mjs';
+import { runBatch, stateFile, runInWorker } from './doctor-auto.mjs';
 
 const mk = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'da-')); fs.mkdirSync(path.join(d, '.state'), { recursive: true }); fs.writeFileSync(path.join(d, '.state', 'data-scan.json'), JSON.stringify({ ts: new Date().toISOString(), warnings: [] })); return d; };
 const cfg = { ...DEFAULTS, autoClean: { ...DEFAULTS.autoClean, enabled: false } };
@@ -56,4 +56,13 @@ test('SessionStart don tmp mo coi trong .state', async () => {
   const d = mk(); const f = path.join(d, '.state', 'x.json.99.tmp'); fs.writeFileSync(f, 'x');
   const t = new Date(Date.now() - 2 * 3600e3); fs.utimesSync(f, t, t);
   await ss(d, { spawnDoctor: () => {} }); assert.ok(!fs.existsSync(f));
+});
+
+test('runInWorker: worker quet dong bo vo han van bi ngat bang timeout cung', async () => {
+  const d = mk(); const f = path.join(d, 'spin.mjs'); fs.writeFileSync(f, 'while (true) {}');
+  const t = Date.now();
+  assert.equal(await runInWorker(f, {}, 500), 'timeout');
+  assert.ok(Date.now() - t < 5000);
+  const ok = path.join(d, 'ok.mjs'); fs.writeFileSync(ok, "import { parentPort } from 'node:worker_threads'; parentPort.postMessage('x');");
+  assert.equal(await runInWorker(ok, {}, 5000), 'done');
 });

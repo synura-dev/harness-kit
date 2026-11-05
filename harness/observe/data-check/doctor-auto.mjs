@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnBackground, bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
+import { Worker, isMainThread, workerData, parentPort } from 'node:worker_threads';
 
 const REL = ['.state', 'data-check-doctor.json'];
 const wj = (f, o) => { const t = `${f}.${process.pid}.tmp`; try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(t, JSON.stringify(o)); fs.renameSync(t, f); return true; } catch { try { fs.unlinkSync(t); } catch {} return false; } };
@@ -67,12 +68,24 @@ export function doctorAuto(dd, cfg, ctx = {}) {
   } catch { return []; }
 }
 
-if (process.argv[2] === '--run' && process.argv[3] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
+/** Chay file worker voi timeout cung: worker quet dong bo cung khong chan timer cua thread chinh. -> 'done' | 'timeout' | 'error'. */
+export function runInWorker(file, data, timeoutMs) {
+  return new Promise((resolve) => {
+    let w; try { w = new Worker(file, { workerData: data }); } catch { resolve('error'); return; }
+    const t = setTimeout(() => { w.terminate().catch(() => {}); resolve('timeout'); }, timeoutMs);
+    w.on('message', () => { clearTimeout(t); resolve('done'); });
+    w.on('error', () => { clearTimeout(t); resolve('error'); });
+    w.on('exit', () => { clearTimeout(t); resolve('done'); });
+  });
+}
+
+if (!isMainThread && workerData && workerData.doctorBatch) { // thread con: quet dong bo o day
+  try { await runBatch(workerData.dd, workerData.hubRoot, workerData.repoDir); } catch {}
+  parentPort.postMessage('done');
+} else if (process.argv[2] === '--run' && process.argv[3] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const { workspaceRoot, REPO_DIR } = await import('../../core/io/paths.mjs');
   bgDoneOnExit();
-  const kill = setTimeout(() => process.exit(2), 60000); // timeout cung: dung em, lan sau thu lai
-  try { await runBatch(process.argv[3], workspaceRoot(), REPO_DIR); } catch {}
-  clearTimeout(kill);
+  const r = await runInWorker(fileURLToPath(import.meta.url), { doctorBatch: true, dd: process.argv[3], hubRoot: workspaceRoot(), repoDir: REPO_DIR }, 60000); // timeout cung ngat duoc
   try { fs.unlinkSync(path.join(process.argv[3], '.state', 'data-check-doctor.lock')); } catch {}
-  process.exit(0);
+  process.exit(r === 'timeout' ? 2 : 0);
 }
