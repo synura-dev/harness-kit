@@ -46,6 +46,8 @@ export const DEFAULTS = {
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('proc-orphans', { defaults: DEFAULTS, files, env: { HOOK_PROC_ORPHANS_ENABLED: 'enabled' } });
 
+/** Mo ta toi da 3 tien trinh bi dem: "name#pid, ..." (+N them). */
+export const describeChildren = (children, max = 3) => children.slice(0, max).map((c) => `${c.name}#${c.pid}`).join(', ') + (children.length > max ? ` (+${children.length - max})` : '');
 /** Pid con song that (signal 0). EPERM = con song. */
 export const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return !!e && e.code === 'EPERM'; } };
 /** Loc danh sach tien trinh da cache: bo con cua chinh hook (powershell lien ke cua listProcesses) va pid da chet (cache cu -> con "ma" bi dem nham). */
@@ -217,7 +219,7 @@ export async function handle(event, input, ctx = {}) {
     const sid = `claude-${String(input.session_id || 'unknown').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}`;
     const env = {
       ts, sid, type: 'proc', event: 'ProcOrphans', session_id: input.session_id || null, agent_id: input.agent_id || null,
-      origin: 'hook', summary: `${event}: ${r.total} tien trinh con con song (root pid ${r.rootPid})`,
+      origin: 'hook', summary: `${event}: ${r.total} tien trinh con con song (root pid ${r.rootPid}): ${describeChildren(r.children)}`,
       data: { trigger: event, note: 'khong gan duoc pid voi agent; liet ke moi con chau cua session', ...r },
     };
     const wopts = { max_file_bytes: 5242880 };
@@ -225,7 +227,7 @@ export async function handle(event, input, ctx = {}) {
       const { writeEnvelope, auditRoot } = await import('../../core/audit/audit-write.mjs');
       writeEnvelope(env, wopts, auditRoot());
     }
-    return { record: { rootPid: r.rootPid, total: r.total }, additionalContext: `proc-orphans: ${r.total} tien trinh con con song (root pid ${r.rootPid}); dung truoc khi bao cao cuoi`, records: [{ sink: 'audit', data: env, opts: wopts }] };
+    return { record: { rootPid: r.rootPid, total: r.total }, additionalContext: `proc-orphans: ${r.total} tien trinh con con song (root pid ${r.rootPid}: ${describeChildren(r.children)}); dung truoc khi bao cao cuoi`, records: [{ sink: 'audit', data: env, opts: wopts }] };
   } catch { return {}; } // fail-open
 }
 
