@@ -102,7 +102,7 @@ test('usage_reason: no_path / too_big / parse_fail', () => {
   const f = transcript(d, 't.jsonl', [asst('m1', 2, 10)]);
   const sub = (p, c = cfg) => buildEnvelope({ hook_event_name: 'SubagentStop', session_id: 's', agent_id: 'a', agent_type: 'b', agent_transcript_path: p }, c, T).data;
   expect(sub(undefined)).toMatchObject({ usage: 'unavailable', usage_reason: 'no_path' });
-  expect(sub(f, { ...cfg, transcript_max_bytes: 5 })).toMatchObject({ usage: 'unavailable', usage_reason: 'too_big' });
+  expect(sub(f, { ...cfg, transcript_max_bytes: 5 })).toMatchObject({ usage: { msgs: 1 } }); // qua transcript_max_bytes: van co usage tu doc duoi (usage-tail), khong con 'unavailable'
   expect(sub(path.join(d, 'x.txt'))).toMatchObject({ usage_reason: 'parse_fail' });
   expect(JSON.stringify(sub(path.join(d, 'nope.jsonl')))).not.toContain(d.replace(/\\/g, '\\\\'));
   expect(sub(f).usage_reason).toBeUndefined();

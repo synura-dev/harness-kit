@@ -12,6 +12,7 @@ import { loadAuditConfig, auditRoot, hook_events } from './defaults.mjs';
 import { auditReadRoots } from '../../core/audit/audit-write.mjs';
 const rootsOf = (r) => (r === auditRoot() ? auditReadRoots() : [r]);
 import { originOf } from '../../core/config/audit-config.mjs';
+import { readUsageDelta } from './usage-tail.mjs';
 import { compile, redact, cut, sanitizeSession, urlTarget, pathTarget } from './redact.mjs';
 
 // DEFAULTS (defaults.mjs) < audit.config.json < audit.config.local.json < env. Never throws.
@@ -291,6 +292,15 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
       data.phantom = true; data.usage = 'unavailable'; data.usage_reason = 'no_transcript';
     } else if (u) { turns = u.turns; tokens_in = u.tokens_in; tokens_out = u.tokens_out; data.tokens_cache = u.tokens_cache; model = model || u.model; }
     else if (tokens_in == null && tokens_out == null) { data.usage = 'unavailable'; data.usage_reason = reason; }
+    try { // usage moi ke tu Stop truoc (doc duoi transcript, tran 512KB/200ms, offset theo transcript trong state audit)
+      const d = readUsageDelta(file, { root: typeof opts.root === 'string' ? opts.root : null });
+      if (d) {
+        const { model: dm, ...usage } = d;
+        data.usage = usage; delete data.usage_reason; delete data.phantom;
+        if (tokens_in == null && tokens_out == null) { tokens_in = d.input + d.cache_creation; tokens_out = d.output; if (turns == null) turns = d.msgs; }
+        model = model || dm;
+      }
+    } catch { /* fail-open */ }
   }
   if (event === 'SubagentStop') { // payload has no status/turns (verified); record only if a future payload adds them
     if (typeof inp.status === 'string') data.payload_status = cut(inp.status, 30);
