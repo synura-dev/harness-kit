@@ -17,7 +17,6 @@ export const DEFAULTS = {
 const AUDIT = { id: 'audit', load: () => import('../../observe/audit/audit.mjs') };
 const GUARD = { id: 'guard', gate: true, load: () => import('../../constrain/guard/hook.mjs') };
 const DATA_GATE = { id: 'data-gate', gate: true, load: () => import('../../constrain/data-gate/hook.mjs') };
-const APPROVAL = { id: 'approval', gate: true, load: () => import('../../constrain/approval/hook.mjs') };
 const BASH_GUARD = { id: 'bash-guard', gate: true, load: () => import('../../constrain/bash-guard/hook.mjs') };
 const MODEL_POLICY = { id: 'model-policy', gate: true, load: () => import('../../constrain/model-policy/hook.mjs') };
 const VERIFY_GATE = { id: 'verify-gate', load: () => import('../../constrain/verify-gate/hook.mjs') };
@@ -33,7 +32,7 @@ const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-injec
 export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'verify-gate', 'user-shim', 'ext-inject', 'ledger-warn']);
 
 export const ORDER = Object.freeze({
-  PreToolUse: [GUARD, DATA_GATE, APPROVAL, BASH_GUARD, MODEL_POLICY, AUDIT],
+  PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, AUDIT],
   PostToolUse: [AUDIT, DATA_CHECK],
   PostToolUseFailure: [AUDIT],
   PermissionRequest: [AUDIT],
