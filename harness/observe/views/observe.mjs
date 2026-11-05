@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Domain `observe`: mot cong doc audit/du lieu (chi doc, tru prune/data-prune mac dinh dry-run).
-// Lenh: view [YYYY-MM-DD] | why | map | query | digest | prune | runs | sizes | data-prune | cost | evidence
+// Lenh: view [YYYY-MM-DD] | why | map | query | digest | prune | runs | sizes | data-prune | cost | evidence | ledger | report
 // Ten domain cu (audit, audit-query, runs, data) chay qua compat/*.mjs -> goi main() o day voi tien to lenh.
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -17,8 +17,9 @@ const SPAWN = {
   cost: path.join(HERE, '..', 'cost', 'cli.mjs'),
   evidence: path.join(HERE, '..', 'evidence', 'cli.mjs'),
   ledger: path.join(HERE, '..', 'ledger', 'cli.mjs'),
+  report: path.join(HERE, '..', 'report', 'cli.mjs'),
 };
-const COMMANDS = ['view', 'why', 'map', 'query', 'digest', 'prune', 'runs', 'sizes', 'data-prune', 'cost', 'evidence', 'ledger'];
+const COMMANDS = ['view', 'why', 'map', 'query', 'digest', 'prune', 'runs', 'sizes', 'data-prune', 'cost', 'evidence', 'ledger', 'report'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const USAGE = `usage: harness.mjs observe <${COMMANDS.join('|')}> [args]  (view [YYYY-MM-DD] mac dinh khi chi co ngay)`;
 

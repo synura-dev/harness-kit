@@ -1,0 +1,1 @@
+{"order":7,"id":"applied","title":"Da tu ap dung / hoan tac","source":"ledger","filter":{"any":[{"applied":true},{"rolled_back":true}]},"window_days":7,"format":"list","limit":15,"empty_note":"khong co"}

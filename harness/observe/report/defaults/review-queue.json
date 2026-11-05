@@ -1,0 +1,1 @@
+{"order":8,"id":"review-queue","title":"Lo cho duyet","source":"ledger","filter":{"action":"propose","status":["open","warned"]},"window_days":0,"format":"list","limit":15,"empty_note":"trong"}

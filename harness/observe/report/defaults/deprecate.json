@@ -1,0 +1,1 @@
+{"order":9,"id":"deprecate","title":"Thanh phan sap bo","source":"ledger","filter":{"kind":["deprecate","cap"]},"window_days":0,"format":"list","limit":15,"empty_note":"khong co"}
