@@ -1,6 +1,6 @@
 // Golden (Dot 5.5): CUNG stdin -> stdout/exit co dinh, ghi lai tu output chuoi hook tach roi truoc 5.3 (stub da xoa) cho cung cac ca.
 // `sa` = vet audit ky vong cua chuoi cu (type|event|tool, gate hook:rule:decision); vet moi phai la tap con (dispatcher gop 1 lan, cat chuoi gate sau deny).
-import { test, expect } from 'bun:test';
+import { test, expect, afterAll } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -9,8 +9,11 @@ import { spawnSync } from 'node:child_process';
 const ROOT = path.resolve(import.meta.dir, '..', '..', '..');
 const NEW = path.join(ROOT, 'harness', 'hooks', 'dispatch', 'run.mjs');
 
+const TMPS = [];
+const mkTmp = (p) => { const d = fs.mkdtempSync(path.join(os.tmpdir(), p)); TMPS.push(d); return d; };
+afterAll(() => { for (const d of TMPS) { try { fs.rmSync(d, { recursive: true, force: true }); } catch { /* bo qua */ } } });
 function sandbox() {
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-eq-'));
+  const d = mkTmp('dispatch-eq-');
   const env = { ...process.env, HUB_DATA_DIR: path.join(d, 'data'), CLAUDE_AUDIT_DIR: path.join(d, 'audit'), GUARD_LOG_FILE: path.join(d, 'guard.jsonl'), HUB_DIR: ROOT };
   // Bang role model = du lieu config/models (hub co; plugin repo khong ship) -> neu thieu, dung config tam cung bang role de ket qua golden khong doi theo mode.
   if (!fs.existsSync(path.join(ROOT, 'config', 'models', 'default.json'))) {
@@ -122,7 +125,7 @@ const editEvent = (cwd) => JSON.stringify({ hook_event_name: 'PostToolUse', sess
 const stopEvent = (cwd) => JSON.stringify({ hook_event_name: 'Stop', session_id: 'eqstop', cwd, stop_hook_active: false });
 
 test('Stop: binh thuong (khong sua code) -> {}', () => {
-  const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'dispatch-cwd-'));
+  const cwd = mkTmp('dispatch-cwd-');
   check('Stop', stopEvent(cwd), { json: {}, sa: ['session|Stop|'] });
 }, 90000);
 
@@ -134,7 +137,7 @@ test('UserPromptSubmit: chi audit -> {}; co ghi audit prompt', () => {
 /** Repo git tam (goc HUB_DIR) de SessionStart sweep / Worktree khong dong vao worktree that. */
 function repoSandbox(prefix) {
   const s = sandbox();
-  const repo = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const repo = mkTmp(prefix);
   const g = (...a) => spawnSync('git', a, { cwd: repo, encoding: 'utf8' });
   g('init', '-q', '-b', 'main'); g('-c', 'user.name=t', '-c', 'user.email=t@t', 'commit', '-q', '--allow-empty', '-m', 'x');
   s.env.HUB_DIR = repo; s.env.HUB_DATA_DIR = path.join(repo, 'data');
@@ -236,8 +239,18 @@ test('module-acted: ghi that bai (goc audit la file) -> hook van ok, khong nem',
   const { writeRecords } = await import('./run.mjs');
   const r = await actedRun(actedMod('x-ctx', { additionalContext: 'hi' }));
   expect(r.code).toBe(0);
-  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'acted-'));
+  const d = mkTmp('acted-');
   const bad = path.join(d, 'not-a-dir'); fs.writeFileSync(bad, 'x');
   const old = process.env.CLAUDE_AUDIT_DIR; process.env.CLAUDE_AUDIT_DIR = bad;
   try { await expect(writeRecords(r.records, {})).resolves.toBeUndefined(); } finally { if (old === undefined) delete process.env.CLAUDE_AUDIT_DIR; else process.env.CLAUDE_AUDIT_DIR = old; }
 });
+
+test('SessionStart duoi NODE_ENV=test / HARNESS_NO_BG=1: dispatcher background:false -> khong kick job nen (khong kick.json)', () => {
+  const hasKick = (dir) => { try { return fs.readdirSync(dir, { recursive: true }).some((f) => String(f).endsWith('kick.json')); } catch { return false; } };
+  for (const extra of [{ NODE_ENV: 'test' }, { NODE_ENV: 'production', HARNESS_NO_BG: '1' }]) {
+    const b = repoSandbox('dispatch nobg ');
+    const r = runNew('SessionStart', JSON.stringify({ hook_event_name: 'SessionStart', session_id: 'nb1', cwd: ROOT, source: 'startup' }), { ...b.env, ...extra });
+    expect(r.status).toBe(0);
+    expect(hasKick(b.env.HUB_DATA_DIR)).toBe(false);
+  }
+}, 90000);

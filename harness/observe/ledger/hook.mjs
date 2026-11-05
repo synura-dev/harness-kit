@@ -7,7 +7,7 @@ import { dataPathFor } from '../../core/io/storage.mjs';
 import { kickReport } from '../report/run.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
-import { readState, writeState, recordJobError, jobHealth, readLedger, readPending, updateLedger, claimDue, claimRebuild, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
+import { readState, writeState, updateState, recordJobError, jobHealth, readLedger, readPending, updateLedger, claimDue, claimRebuild, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
 import { safeText, cleanLine, OBSERVED_FRAME } from '../../core/audit/safe-text.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -60,9 +60,9 @@ export function kickJob(dataOpts, ctx = {}, nowMs = Date.now()) {
 /** Dong canh bao loi job (1 lan / errWarnHours, ghi errWarnedAt vao state). null neu khong co loi hoac dang cooldown. */
 export function jobErrorLine(dataOpts, nowMs = Date.now()) {
   try {
-    const st = readState(dataOpts); const h = jobHealth(st);
-    if (!h || nowMs - (Number(st.errWarnedAt) || 0) < JOB.errWarnHours * 3600e3) return null;
-    writeState(dataOpts, { ...st, errWarnedAt: nowMs });
+    let h = null;
+    updateState(dataOpts, (st) => { const x = jobHealth(st); if (!x || nowMs - (Number(st.errWarnedAt) || 0) < JOB.errWarnHours * 3600e3) return null; h = x; return { ...st, errWarnedAt: nowMs }; });
+    if (!h) return null;
     return `ledger[job]: job lo that bai (${h.error}) luc ${new Date(h.at).toISOString()}; chay harness observe ledger / harness doctor`;
   } catch { return null; }
 }
