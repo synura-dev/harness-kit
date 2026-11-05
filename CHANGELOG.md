@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.4
+- observe usage dem err dung (PostToolUseFailure); ext khai bao guard (PreToolUse, exit 2 chan, fail-open) qua hook ext-guard.
+
 ## 0.3.3
 - observe usage (dem lenh/ext/hook + loi); repeated-pattern bo lenh don va chuoi Edit/Write; observe ledger close; ext remove.
 
