@@ -8,7 +8,7 @@ import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findPatterns } from './patterns.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve patterns [--days N] [--limit N] [--threshold N] [--sessions K] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve prune-candidates [--days N] [--record] | patterns [--days N] [--limit N] [--threshold N] [--sessions K] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -21,6 +21,7 @@ export function parseArgs(argv) {
     if (k === '--days') o.days = posInt(val());
     else if (k === '--threshold') o.threshold = posInt(val());
     else if (k === '--sessions') o.sessions = posInt(val());
+    else if (k === '--record') o.record = true;
     else if (k === '--limit') o.limit = posInt(val());
     else if (k === '--kind') o.kind = val();
     else if (k === '--source') o.source = val();
@@ -43,6 +44,7 @@ export async function render(o) {
       ...items.map((x) => `${x.id}  x${x.count}  phien=${x.sessions}  ${x.tool}  fp=${x.fp || '-'}  ${x.sample.slice(0, 90)}`)];
     return { code: 0, summary: capLines(lines, 40).join('\n'), data: { ...r, items }, truncated: r.truncated };
   }
+  if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);
   if (o.cmd === 'patterns') {
     const r = await findPatterns({ ...o, maxBytes: undefined });
     const items = r.items.slice(0, o.limit || LIMITS.listLimit);
