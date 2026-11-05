@@ -54,7 +54,7 @@ export async function main(argv) {
     return 0;
   }
   if (cmd === 'runs') { const { run } = await import('./runs.mjs'); return run(rest).code; }
-  if (cmd === 'sizes') { const { dataMain } = await import('./data.mjs'); return dataMain(['sizes', ...rest]); }
+  if (cmd === 'sizes') { const { sizesMain } = await import('./sizes.mjs'); sizesMain(rest); return 0; }
   if (cmd === 'data-prune') { const { dataMain } = await import('./data.mjs'); return dataMain(['prune', ...rest]); }
   if (Object.hasOwn(SPAWN, cmd)) {
     const r = spawnSync(process.execPath, [SPAWN[cmd], ...rest], { stdio: 'inherit' });

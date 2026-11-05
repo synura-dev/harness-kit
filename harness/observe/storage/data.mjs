@@ -1,4 +1,4 @@
-// harness/data/data.mjs - domain `data`: ls [domain] | stat | clean [--yes] [--days N] | scan | adopt [--yes] | inbox ls|rm|restore|prune | prune|sizes (chuyen sang observe).
+// harness/data/data.mjs - domain `data`: ls [domain] | stat | clean [--yes] [--days N] | scan | adopt [--yes] | inbox ls|rm|restore|prune | (prune/sizes: dung observe data-prune|sizes).
 // Chi thao tac trong data/ (dataRoot()). clean/adopt mac dinh dry-run. Moi lenh ghi vet vao data/audit/date=D/type=data-access/data-cli.jsonl.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,7 +16,7 @@ import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, class
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
-const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | archive <ws> [--yes] (ws mo coi -> _archive/workspaces/, dry-run) | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes] | prune [--yes] | sizes  (--json --raw --timeout-s N)';
+const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | archive <ws> [--yes] (ws mo coi -> _archive/workspaces/, dry-run) | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes]  (--json --raw --timeout-s N)';
 
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 /** Registry hop nhat do loader chung o core (registry.json + config/data/workspaces/*.json, mode Q5 qua HARNESS_DATA_ENFORCE). */
@@ -472,11 +472,7 @@ export async function run(argv = process.argv.slice(2)) {
         return { code: 0, ...emit({ summary: `${x.dryRun ? 'dry-run: se xoa' : 'da xoa'} ${x.removed.length} muc cu hon ${x.days} ngay (${fmtB(x.bytes)})${x.dryRun ? ' - them --yes' : ''}\n${x.removed.join('\n')}`, data: x }, o) };
       }
     }
-    if (cmd === 'prune' || cmd === 'sizes') {
-      logAccess(cmd, r);
-      const res = spawnSync(process.execPath, [path.join(HERE, '..', 'views', 'data.mjs'), cmd, ...r], { stdio: 'inherit', timeout: 60000 });
-      return { code: res.status ?? 1 };
-    }
+    if (cmd === 'prune' || cmd === 'sizes') { console.error(`data ${cmd} da chuyen: dung \`harness observe ${cmd === 'prune' ? 'data-prune' : 'sizes'}\``); return { code: 2 }; }
   } catch (e) { console.error(`data ${cmd}: ${e.message}`); return { code: /abort:/.test(e.message) ? 2 : 1 }; }
   console.error(USAGE);
   return { code: 2 };
