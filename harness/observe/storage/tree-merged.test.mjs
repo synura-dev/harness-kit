@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { treeCmd, TREE_START } from './register.mjs';
+import { treeCmd, TREE_START } from './tree.mjs';
 
 function mk() {
   const hub = fs.mkdtempSync(path.join(os.tmpdir(), 'treem-'));
