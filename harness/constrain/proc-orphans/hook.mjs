@@ -34,6 +34,7 @@ export const DEFAULTS = {
   watchNames: ['bash.exe', 'sh.exe', 'python.exe', 'python3.exe', 'node.exe', 'bun.exe', 'duckdb.exe', 'ping.exe', 'powershell.exe'],
   rootNames: ['claude.exe', 'agy.exe', 'agy'],
   ignoreNames: ['conhost.exe', 'openconsole.exe'], // luon bo qua (console host), ghi de qua config
+  shellNames: ['cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'sh.exe'], // shell cua chinh phien: con truc tiep cua root, khong co con nang -> bo
   dedupeSec: 21600, // cung chu ky (root pid + tap pid) trong 6h -> khong canh bao lai; 0 = tat
   throttleSec: 900, // chu ky khac (pid churn): toi da 1 canh bao / root pid / 15 phut; 0 = tat
   liveAgentTtlSec: 7200, // subagent co SubagentStart ma chua SubagentStop: coi la con chay toi da 2h (agent bi giet khong co Stop)
@@ -50,7 +51,11 @@ export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   const by = new Map(procs.map((p) => [p.pid, p]));
   const lc = (s) => String(s || '').toLowerCase();
   const shield = new Set();
-  const ign = (cfg.ignoreNames || DEFAULTS.ignoreNames).map(lc);
+  const ign = [...new Set([...DEFAULTS.ignoreNames, ...(cfg.ignoreNames || [])].map(lc))]; // console host luon bo, config chi them
+  const shells = new Set([...DEFAULTS.shellNames, ...(cfg.shellNames || [])].map(lc));
+  const kids = new Map();
+  for (const p of procs) (kids.get(p.ppid) || kids.set(p.ppid, []).get(p.ppid)).push(p);
+  const heavy = (pid, d = 0) => d < 8 && (kids.get(pid) || []).some((k) => (!ign.includes(lc(k.name)) && !shells.has(lc(k.name))) || heavy(k.pid, d + 1));
   let root = null;
   for (let p = by.get(selfPid), n = 0; p && n < 64; p = by.get(p.ppid), n++) {
     shield.add(p.pid);
@@ -59,7 +64,9 @@ export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   if (!root) return { rootPid: null, children: [] };
   const children = [];
   for (const p of procs) {
-    if (shield.has(p.pid) || ign.includes(lc(p.name)) || !cfg.watchNames.includes(lc(p.name))) continue;
+    if (shield.has(p.pid) || ign.includes(lc(p.name))) continue;
+    if (!cfg.watchNames.includes(lc(p.name))) continue;
+    if (shells.has(lc(p.name)) && p.ppid === root.pid && !heavy(p.pid)) continue; // shell cua phien (Bash/PowerShell tool giu song)
     let q = by.get(p.ppid), n = 0, under = false;
     for (; q && n < 64; q = by.get(q.ppid), n++) if (q.pid === root.pid) { under = true; break; }
     if (!under) continue;

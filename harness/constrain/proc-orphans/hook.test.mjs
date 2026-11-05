@@ -125,3 +125,15 @@ test('agent co SubagentStart ma khong co SubagentStop: het liveAgentTtlSec thi h
   expect(warned(await h('Stop', {}, kids(5)))).toBe(false);
   expect(warned(await h('Stop', {}, kids(5), { now: Date.now() + (DEFAULTS.liveAgentTtlSec + 1) * 1000 }))).toBe(true);
 }));
+
+test('shell/console cua phien (conhost, cmd/powershell con truc tiep root, khong con nang) bi bo; ignoreNames config khong tat conhost', () => {
+  const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
+  const ps = [R(1, 0, 'claude.exe'), R(2, 1, 'conhost.exe'), R(3, 1, 'cmd.exe'), R(4, 1, 'powershell.exe'), R(9, 1, 'Node.exe'), R(99, 1, 'hook.exe')];
+  const cfg = { ...DEFAULTS, ignoreNames: [], watchNames: [...DEFAULTS.watchNames, 'conhost.exe', 'cmd.exe'] };
+  expect(findChildren(ps, 99, cfg, NOW).children.map((c) => c.pid)).toEqual([9]);
+});
+test('shell co con nang (bun) van bao con that', () => {
+  const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
+  const ps = [R(1, 0, 'claude.exe'), R(3, 1, 'cmd.exe'), R(5, 3, 'bun.exe'), R(99, 1, 'hook.exe')];
+  expect(findChildren(ps, 99, DEFAULTS, NOW).children.map((c) => c.pid)).toEqual([5]);
+});
