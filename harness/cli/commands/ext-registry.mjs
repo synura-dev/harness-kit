@@ -82,6 +82,21 @@ export async function approve(id, opts = {}) {
   return { code: 0, text: `ext approve: ${id} hash=${hash8(t.hash)}` };
 }
 
+/** remove <id> [--yes]: go dang ky (giam quyen => KHONG can TTY). Mac dinh dry-run; --yes (opts.yes) moi ghi. */
+export function remove(id, opts = {}) {
+  const ws = path.resolve(opts.workspace || process.cwd());
+  const { base } = registryWorkspace(ws);
+  let all; try { all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext remove: ${e.message}` }; }
+  const k = findKey(all, base);
+  const e = k && (all.extensions[k] || []).find((x) => x && x.id === id);
+  if (!id || !e) return { code: 2, text: `ext remove: ${id || '(thieu id)'} chua dang ky` };
+  if (!opts.yes) return { code: 0, text: `ext remove: dry-run, se go ${id} (${e.root}); them --yes de go` };
+  all.extensions[k] = all.extensions[k].filter((x) => x && x.id !== id);
+  writeAll({ ...opts, base }, all);
+  audit(id, 'remove', e.root, e.hash);
+  return { code: 0, text: `ext remove: da go ${id} (${e.root})` };
+}
+
 export function list(opts = {}) {
   let entries; try { ({ entries } = readEntries(opts)); } catch (e) { return { code: 2, text: `ext list: ${e.message}` }; }
   const lines = entries.map((e) => { const s = extensionStatus(e.id, opts); return `${e.id}\t${e.root}\t${hash8(e.hash)}\t${s.status}`; });

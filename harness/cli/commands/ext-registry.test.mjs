@@ -144,3 +144,19 @@ test('local.json hong JSON => fail-closed: khong ghi de, register/approve/list/v
 test('audit chi ghi id/root tuong doi/hash8 (khong lo duong dan tuyet doi)', () => {
   expect(R.hash8('a'.repeat(64))).toHaveLength(8);
 });
+
+test('remove: dry-run khong ghi, --yes go, khong can TTY; verify/list khong con bao ext da go', async () => {
+  const { root, opts } = setup();
+  expect((await R.register('ext/demo', opts)).code).toBe(0);
+  const noTty = { ...opts, confirm: undefined, isTTY: false };
+  const dry = R.remove('demo', noTty);
+  expect(dry.code).toBe(0); expect(dry.text).toContain('dry-run');
+  expect(R.list(opts).text).toContain('demo');
+  fs.writeFileSync(path.join(root, 'main.mjs'), 'export const main = () => 9;'); // lech hash: verify se bao loi truoc khi go
+  expect(R.verify(opts).code).toBe(1);
+  expect(R.remove('demo', { ...noTty, yes: true }).text).toContain('da go');
+  expect(R.verify(opts).code).toBe(0);
+  expect(R.list(opts).text).not.toContain('demo');
+  expect(R.remove('demo', { ...noTty, yes: true }).code).toBe(2);
+  expect((await main(['remove', 'demo', '--yes'], opts)).code).toBe(2);
+});

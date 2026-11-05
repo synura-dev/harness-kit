@@ -1,4 +1,4 @@
-// harness ext <register <path> | approve <id> | list | verify>. register/approve can TTY (bac ask); verify lech => exit 1.
+// harness ext <register <path> | approve <id> | remove <id> [--yes] | list | verify>. register/approve can TTY (bac ask); verify lech => exit 1.
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot } from '../../core/io/paths.mjs';
@@ -13,9 +13,10 @@ export async function main(argv, opts = {}) {
     }
     return cmd === 'register' ? R.register(arg, o) : R.approve(arg, o);
   }
+  if (cmd === 'remove') return R.remove(arg, { ...o, yes: o.yes ?? argv.includes('--yes') });
   if (cmd === 'list') return R.list(o);
   if (cmd === 'verify') return R.verify(o);
-  return { code: 2, text: 'dung: ext register <path> | approve <id> | list | verify' };
+  return { code: 2, text: 'dung: ext register <path> | approve <id> | remove <id> [--yes] | list | verify' };
 }
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
