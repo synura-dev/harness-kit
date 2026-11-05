@@ -16,7 +16,7 @@ const countLines = (dir) => {
     for (const e of fs.existsSync(p) ? fs.readdirSync(p, { withFileTypes: true }) : []) {
       const f = path.join(p, e.name);
       if (e.isDirectory()) walk(f);
-      else if (f.endsWith('.jsonl')) n += fs.readFileSync(f, 'utf8').split('\n').filter(Boolean).length;
+      else if (f.endsWith('.jsonl')) n += fs.readFileSync(f, 'utf8').split('\n').filter((l) => l && !l.includes('"event":"HookRun"')).length; // HookRun (se/0029) la dong do tre, khong tinh
     }
   };
   walk(dir);
