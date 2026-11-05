@@ -65,9 +65,26 @@ const fold = (text) => {
   }
   return [...m.values()];
 };
-export const readLedger = (f) => { try { return fold(fs.readFileSync(f, 'utf8')); } catch { return []; } };
-/** Them 1 dong vao so (O_APPEND, khong khoa). Loi tam thoi (EPERM/EBUSY) thu lai; van loi -> false. */
-function appendLedger(f, rec) {
+/** So cu proc-ledger.json (mang muc): doc gop mot lan roi doi ten .bak (lan sau bo qua). Fail-open. */
+function legacyEntries(f) {
+  const old = f.replace(/\.jsonl$/, '.json');
+  if (old === f) return [];
+  try {
+    const arr = JSON.parse(fs.readFileSync(old, 'utf8'));
+    try { fs.renameSync(old, old + '.bak'); } catch { /* bo qua */ }
+    return Array.isArray(arr) ? arr.filter((e) => e && e.pid != null) : [];
+  } catch { return []; }
+}
+export const readLedger = (f) => {
+  const legacy = legacyEntries(f).map((e) => JSON.stringify({ op: 'add', ...e })).join('\n');
+  try { return fold(legacy + '\n' + fs.readFileSync(f, 'utf8')); } catch { return legacy ? fold(legacy) : []; }
+};
+/** Them 1 dong vao so, cung khoa voi compact (retry ngan); khong lay duoc khoa -> van ghi noi (hiem). Loi tam thoi (EPERM/EBUSY) thu lai; van loi -> false. */
+function appendLedger(f, rec, held = false) {
+  if (!held) {
+    const r = withLock(f, () => appendLedger(f, rec, true), { retries: 10, waitMs: 20 });
+    if (r.ok) return r.value;
+  }
   for (let i = 0; i < 20; i++) {
     try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.appendFileSync(f, JSON.stringify(rec) + '\n'); return true; } catch { try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); } catch { /* bo qua */ } }
   }
@@ -137,7 +154,7 @@ export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = kil
       if (now - e.deadline >= staleAfterMs) { removed++; gone.push(e.pid); continue; } // khong xac minh duoc: chi bo muc, khong kill
       keep.push(e);
     }
-    for (const pid of gone) appendLedger(f, { op: 'done', pid, key: null });
+    for (const pid of gone) appendLedger(f, { op: 'done', pid, key: null }, true);
     compactLedger(f);
     return true;
   }, { staleMs: 15000, retries: 120, waitMs: 25 });
