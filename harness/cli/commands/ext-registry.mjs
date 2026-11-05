@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { manifestDomains } from '../../core/ext/manifest-domains.mjs';
-import { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted, readAll, writeAll, findKey, readEntries, extensionStatus } from '../../core/ext/ext-trust.mjs';
+import { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted, guardDecl, readAll, writeAll, findKey, readEntries, extensionStatus } from '../../core/ext/ext-trust.mjs';
 
 export { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted };
 
@@ -20,7 +20,13 @@ function scanManifest(rootAbs, coreDomains = new Set()) {
   if (!fs.existsSync(entry)) return { error: `entry khong ton tai: ${m.entry}` };
   const dup = domains.filter((d) => coreDomains.has(d));
   if (dup.length) return { error: `domain trung core: ${dup.join(',')}` };
-  return { id: m.id, domains };
+  let guard = null;
+  if (m.guard !== undefined) {
+    const g = guardDecl(m);
+    if (!g) return { error: 'guard khai bao sai (can event=PreToolUse, matcher regex hop le, args mang string)' };
+    guard = { ...g, domain: domains[0] };
+  }
+  return { id: m.id, domains, guard };
 }
 
 function audit(id, event, rel, hash) {
@@ -54,7 +60,7 @@ export async function register(p, opts = {}) {
   let all; try { all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext register: ${e.message}` }; }
   const k = findKey(all, base) || path.resolve(base);
   const list = (Array.isArray(all.extensions[k]) ? all.extensions[k] : []).filter((x) => x && x.id !== sc.id);
-  list.push({ id: sc.id, root: rel, hash: t.hash, approvedAt: new Date().toISOString() });
+  list.push({ id: sc.id, root: rel, hash: t.hash, approvedAt: new Date().toISOString(), ...(sc.guard ? { guard: sc.guard } : {}) });
   all.extensions[k] = list; writeAll({ ...opts, base }, all);
   audit(sc.id, 'register', rel, t.hash);
   return { code: 0, text: `ext register: ${sc.id} ${rel} hash=${hash8(t.hash)}` };
@@ -72,11 +78,17 @@ export async function approve(id, opts = {}) {
   if (!fs.existsSync(abs)) return { code: 2, text: `ext approve: thieu ${e.root}` };
   const t = hashTree(abs, opts.limits);
   if (t.truncated) return { code: 2, text: `ext approve: ${t.rejected ? `tu choi (${t.rejected})` : 'cay code qua lon (truncated)'}` };
-  if (t.hash === e.hash) return { code: 0, text: `ext approve: ${id} khong doi (${hash8(t.hash)})` };
+  // Khai bao guard ghim cung luc voi hash. Manifest co guard hop le => ghi (ext cu chua co truong guard: approve lai se ghi). Manifest bo guard KHONG xoa guard da ghim (chi `ext remove`).
+  const sc = scanManifest(abs, opts.coreDomains || new Set());
+  if (sc.error && /^guard /.test(sc.error)) return { code: 2, text: `ext approve: ${sc.error}` };
+  const newGuard = !sc.error && sc.guard ? sc.guard : null;
+  const guardChanged = !!newGuard && JSON.stringify(newGuard) !== JSON.stringify(e.guard);
+  if (t.hash === e.hash && !guardChanged) return { code: 0, text: `ext approve: ${id} khong doi (${hash8(t.hash)})` };
   const ok = await confirmTty(`Duyet code moi cua ${id}: hash ${hash8(e.hash)} -> ${hash8(t.hash)}. Dong y?`, opts);
   if (ok === null) return { code: 2, text: 'ext approve: can TTY de xac nhan (agent khong tu duyet)' };
   if (!ok) return { code: 1, text: 'ext approve: tu choi' };
   e.hash = t.hash; e.approvedAt = new Date().toISOString();
+  if (newGuard) e.guard = newGuard;
   writeAll({ ...opts, base }, all);
   audit(id, 'approve', e.root, t.hash);
   return { code: 0, text: `ext approve: ${id} hash=${hash8(t.hash)}` };

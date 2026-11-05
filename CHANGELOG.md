@@ -3,7 +3,7 @@
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
 ## 0.3.4
-- observe usage dem err dung (PostToolUseFailure); ext khai bao guard (PreToolUse, exit 2 chan, fail-open) qua hook ext-guard.
+- observe usage dem err dung (PostToolUseFailure); ext khai bao guard (PreToolUse, exit 2 chan, fail-open) qua hook ext-guard (fail-closed cho tool khop matcher; khai bao ghim trong registry luc ext register/approve). Timeout PreToolUse hooks.json 3s -> 8s: du cho node boot + guard loi + spawn ext (~1.2s cold Windows) + audit; budget dispatcher 2500ms (+3000ms rieng cho ext-guard chi khi khop matcher), khong khop thi nhanh nhu cu.
 
 ## 0.3.3
 - observe usage (dem lenh/ext/hook + loi); repeated-pattern bo lenh don va chuoi Edit/Write; observe ledger close; ext remove.

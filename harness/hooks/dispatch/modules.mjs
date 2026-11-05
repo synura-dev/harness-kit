@@ -25,14 +25,15 @@ const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/work
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
 const LEDGER_WARN = { id: 'ledger-warn', load: () => import('../../observe/ledger/hook.mjs') };
 const AGY_HEAL = { id: 'agy-heal', load: () => import('../../build/agy-heal/hook.mjs') };
-const EXT_GUARD = { id: 'ext-guard', gate: true, load: () => import('../../build/ext-guard/hook.mjs') };
+// ownBudgetMs: budget rieng cho ext-guard (khong bi guard loi an); chi dung khi module that su chay (khop matcher), khong khop thi tra ngay.
+const EXT_GUARD = { id: 'ext-guard', gate: true, ownBudgetMs: 3000, load: () => import('../../build/ext-guard/hook.mjs') };
 const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
 export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn', 'agy-heal']);
 
 export const ORDER = Object.freeze({
-  PreToolUse: [EXT_GUARD, GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, AUDIT],
+  PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, EXT_GUARD, AUDIT],
   PostToolUse: [AUDIT, DATA_CHECK],
   PostToolUseFailure: [AUDIT],
   PermissionRequest: [AUDIT],
@@ -58,7 +59,7 @@ export async function loadModules(event, { only = '', validate, order = ORDER, m
     try {
       const mod = (await e.load()).default;
       const errs = typeof validate === 'function' ? validate(mod) : [];
-      out.push(errs.length ? { id: e.id, gate: !!e.gate, error: 'bad-module' } : { id: e.id, gate: !!e.gate, mod });
+      out.push(errs.length ? { id: e.id, gate: !!e.gate, error: 'bad-module' } : { id: e.id, gate: !!e.gate, own: e.ownBudgetMs, mod });
     } catch { out.push({ id: e.id, gate: !!e.gate, error: 'load-failed' }); }
   }
   return out;

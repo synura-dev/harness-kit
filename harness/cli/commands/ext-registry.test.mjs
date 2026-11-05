@@ -160,3 +160,22 @@ test('remove: dry-run khong ghi, --yes go, khong can TTY; verify/list khong con 
   expect(R.remove('demo', { ...noTty, yes: true }).code).toBe(2);
   expect((await main(['remove', 'demo', '--yes'], opts)).code).toBe(2);
 });
+
+test('guard: register ghim khai bao vao registry; manifest doi/xoa khoa guard khong anh huong; approve lai ghi cho ext cu', async () => {
+  const { ws, mf, root, opts } = setup();
+  const mfst = path.join(root, 'manifest.json');
+  const G = { event: 'PreToolUse', matcher: 'mcp__x__.*', args: ['guard'] };
+  fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: G }));
+  expect((await R.register('ext/demo', opts)).code).toBe(0);
+  const g = R.listRegistered(opts).find((e) => e.id === 'demo').guard;
+  expect(g).toEqual({ ...G, domain: 'demo' });
+  fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'] })); // xoa khoa guard tren dia
+  expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard).toEqual(g);
+  expect((await R.approve('demo', opts)).code).toBe(0); // manifest khong co guard: registry giu guard
+  expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard).toEqual(g);
+  fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: { ...G, matcher: 'Write' } }));
+  expect((await R.approve('demo', opts)).code).toBe(0); // khai bao doi: approve ghi lai
+  expect(R.listRegistered(opts).find((e) => e.id === 'demo').guard.matcher).toBe('Write');
+  fs.writeFileSync(mfst, JSON.stringify({ id: 'demo', entry: 'main.mjs', domains: ['demo'], guard: { event: 'PreToolUse', matcher: '(', args: [] } }));
+  expect((await R.register('ext/demo', opts)).code).toBe(2); // guard sai bi tu choi
+});

@@ -104,7 +104,7 @@ export function readEntries(opts = {}) {
 /** Diem noi cho ext-runner/ext-host: [{id, root(abs trong workspace hien tai), hash, approvedAt}] (hash da ghim, chua kiem). */
 export function listRegistered(opts = {}) {
   const { ws, entries } = readEntries(opts);
-  return entries.map((e) => ({ id: e.id, root: path.resolve(ws, e.root), hash: e.hash, approvedAt: e.approvedAt }));
+  return entries.map((e) => ({ id: e.id, root: path.resolve(ws, e.root), hash: e.hash, approvedAt: e.approvedAt, guard: e.guard }));
 }
 
 /** -> {status:'ok'|'drift'|'missing'|'unregistered', id, pinned, current} (hash tinh tren cay workspace hien tai) */
@@ -122,3 +122,11 @@ export function extensionStatus(id, opts = {}) {
 }
 /** Hash lech/thieu/chua dang ky => false (CHAN). Khong nem. */
 export function isExtensionTrusted(id, opts = {}) { try { return extensionStatus(id, opts).status === 'ok'; } catch { return false; } }
+
+/** Khai bao guard hop le trong manifest => {event, matcher, args} | null (sai/thieu => null). Ghim vao registry luc register/approve. */
+export function guardDecl(m) {
+  const g = m && m.guard;
+  if (!g || typeof g !== 'object' || Array.isArray(g) || g.event !== 'PreToolUse' || typeof g.matcher !== 'string' || !Array.isArray(g.args) || !g.args.every((a) => typeof a === 'string')) return null;
+  try { new RegExp(g.matcher); } catch { return null; }
+  return { event: g.event, matcher: g.matcher, args: g.args };
+}

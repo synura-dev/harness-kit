@@ -4,13 +4,13 @@ import { DEFAULTS, parseGuard, handle, defaultRun } from './hook.mjs';
 import mod from './hook.mjs';
 import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
-const GUARD = { domain: 'alpha-dom', guard: { event: 'PreToolUse', matcher: 'mcp__.*|Write', args: ['guard'] } };
+const GUARD = { event: 'PreToolUse', matcher: 'mcp__.*|Write', args: ['guard'], domain: 'alpha-dom' };
 const mk = (over = {}) => {
   const calls = [];
   const ctx = {
     cfg: DEFAULTS, env: { CLAUDE_PROJECT_DIR: path.resolve('/proj') },
-    list: () => [{ id: 'alpha', root: '/x/alpha', hash: 'h1' }],
-    readManifest: () => GUARD, hashOf: () => 'h1', core: () => new Set(['tasks', 'ext']),
+    list: () => [{ id: 'alpha', root: '/x/alpha', hash: 'h1', guard: GUARD }],
+    hashOf: () => 'h1',
     run: async (domain, args, o) => { calls.push({ domain, args, o }); return { code: 0, stderr: '' }; },
     ...over,
   };
@@ -20,9 +20,10 @@ const EV = (tool) => ({ tool_name: tool, tool_input: { a: 1 }, cwd: path.resolve
 
 test('parseGuard: hop le / sai', () => {
   expect(parseGuard(GUARD).args).toEqual(['guard']);
-  expect(parseGuard({ guard: { event: 'PostToolUse', matcher: 'x', args: [] } })).toBeNull();
-  expect(parseGuard({ guard: { event: 'PreToolUse', matcher: '(', args: [] } })).toBeNull();
-  expect(parseGuard({})).toBeNull();
+  expect(parseGuard({ ...GUARD, event: 'PostToolUse' })).toBeNull();
+  expect(parseGuard({ ...GUARD, matcher: '(' })).toBeNull();
+  expect(parseGuard({ ...GUARD, domain: '' })).toBeNull();
+  expect(parseGuard(undefined)).toBeNull();
 });
 test('hop dong module hop le', () => { expect(validateHookModule(mod)).toEqual([]); });
 test('khop matcher: chay harness <domain> args voi JSON su kien tren stdin; exit 0 = qua', async () => {
@@ -67,14 +68,14 @@ test('cfg.enabled=false khong tat guard; ext khong khai guard khong anh huong; m
   const { ctx } = mk({ cfg: { ...DEFAULTS, enabled: false }, run: async () => ({ code: 2, stderr: 'no' }) });
   expect((await handle('PreToolUse', EV('Write'), ctx)).decision).toBe('deny');
   expect(ctx.guardMatched).toBe(true);
-  const n = mk({ readManifest: () => ({ domain: 'alpha-dom' }) });
+  const n = mk({ list: () => [{ id: 'alpha', root: '/x/alpha', hash: 'h1' }] });
   expect(await handle('PreToolUse', EV('Write'), n.ctx)).toEqual({});
   expect(n.ctx.guardMatched).toBeUndefined();
 });
 test('module: khong tat duoc (OPTIONAL), failClosedOnMatch', async () => {
   const { OPTIONAL, ORDER } = await import('../../hooks/dispatch/modules.mjs');
   expect(OPTIONAL).not.toContain('ext-guard');
-  expect(ORDER.PreToolUse[0].id).toBe('ext-guard');
+  expect(ORDER.PreToolUse.map((x) => x.id).slice(-2)).toEqual(['ext-guard', 'audit']);
   expect(mod.failClosedOnMatch).toBe(true);
 });
 test('defaultRun that: timeout giet tien trinh -> {error: timeout}', async () => {
@@ -89,4 +90,21 @@ test('dispatcher: ext-guard het timeout/loi sau khi khop matcher => deny; chua k
   expect((await run(mkMod(true, hang))).stdout).toContain('"deny"');
   expect((await run(mkMod(true, () => { throw new Error('x'); }))).stdout).toContain('"deny"');
   expect((await run(mkMod(false, hang))).stdout).not.toContain('"deny"');
+});
+test('guard doc tu registry: manifest tren dia khong duoc doc (xoa/doi khoa guard khong anh huong)', async () => {
+  const fs = await import('node:fs'); const os = await import('node:os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'eg-'));
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ id: 'alpha', domain: 'alpha-dom', guard: { event: 'PreToolUse', matcher: 'Nothing', args: ['x'] } }));
+  const { ctx } = mk({ list: () => [{ id: 'alpha', root, hash: 'h1', guard: GUARD }], run: async () => ({ code: 2, stderr: 'chan' }) });
+  expect((await handle('PreToolUse', EV('Write'), ctx)).decision).toBe('deny');
+  fs.rmSync(path.join(root, 'manifest.json'));
+  expect((await handle('PreToolUse', EV('Write'), ctx)).decision).toBe('deny');
+  expect(await handle('PreToolUse', EV('Nothing'), ctx)).toEqual({});
+  fs.rmSync(root, { recursive: true, force: true });
+});
+test('registry khong doc duoc: fail-open co ban ghi audit', async () => {
+  const { ctx } = mk({ list: () => { throw new Error('hong'); } });
+  const r = await handle('PreToolUse', EV('Write'), ctx);
+  expect(r.decision).toBeUndefined();
+  expect(r.records[0].data.rule).toBe('registry-unreadable');
 });

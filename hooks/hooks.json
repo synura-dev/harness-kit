@@ -41,7 +41,7 @@
               "${CLAUDE_PLUGIN_ROOT}/hooks/run.mjs",
               "PreToolUse"
             ],
-            "timeout": 3
+            "timeout": 8
           }
         ]
       }

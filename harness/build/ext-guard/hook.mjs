@@ -1,4 +1,4 @@
-// Hook ext-guard: guard tong quat tu extension. Manifest extension khai
+// Hook ext-guard: guard tong quat tu extension. Manifest extension khai (ghim vao REGISTRY luc ext register/approve; luc chay doc TU REGISTRY, khong doc manifest tren dia)
 //   "guard": { "event": "PreToolUse", "matcher": "<regex tool_name>", "args": ["guard"] }
 // PreToolUse: voi moi ext da dang ky VA hash ok (drift/chua duyet => chan) co matcher khop tool_name, chay
 //   `harness <domain> <args>` (khong shell) voi JSON su kien tren stdin, timeout < budget PreToolUse (2500ms).
@@ -7,21 +7,19 @@ import path from 'node:path';
 import { spawn } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
-import { REPO_DIR, readJson, isObj } from '../../core/io/paths.mjs';
+import { REPO_DIR, isObj } from '../../core/io/paths.mjs';
 import { listRegistered, hashTree } from '../../core/ext/ext-trust.mjs';
-import { manifestDomains } from '../../core/ext/manifest-domains.mjs';
-import { coreDomains, killTree } from '../ext-inject/hook.mjs';
+import { killTree } from '../ext-inject/hook.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const DEFAULTS = { enabled: true, timeoutMs: 1900, maxReason: 500 };
+export const DEFAULTS = { timeoutMs: 2500, maxReason: 500 };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
-export const load = (files = configFiles()) => loadHookConfig('ext-guard', { defaults: DEFAULTS, files, env: { HOOK_EXT_GUARD_ENABLED: 'enabled' } });
+export const load = (files = configFiles()) => loadHookConfig('ext-guard', { defaults: DEFAULTS, files });
 
-/** Thuan: khai bao guard hop le => {matcher: RegExp, args} | null (regex hong/khac PreToolUse => null). */
-export function parseGuard(m) {
-  const g = m && m.guard;
-  if (!isObj(g) || g.event !== 'PreToolUse' || typeof g.matcher !== 'string' || !Array.isArray(g.args) || !g.args.every((a) => typeof a === 'string')) return null;
-  try { return { matcher: new RegExp(`^(?:${g.matcher})$`), args: g.args }; } catch { return null; }
+/** Thuan: khai bao guard trong registry {event, matcher, args, domain} => {matcher: RegExp, args, domain} | null. */
+export function parseGuard(g) {
+  if (!isObj(g) || g.event !== 'PreToolUse' || typeof g.matcher !== 'string' || typeof g.domain !== 'string' || !g.domain || !Array.isArray(g.args) || !g.args.every((a) => typeof a === 'string')) return null;
+  try { return { matcher: new RegExp(`^(?:${g.matcher})$`), args: g.args, domain: g.domain }; } catch { return null; }
 }
 
 /** Chay that: spawn harness <domain> <args>, stdin = JSON su kien, het timeout => kill. -> Promise<{code, stderr} | {error}>. Khong reject. */
@@ -44,7 +42,7 @@ export function defaultRun(domain, args, { cwd, timeoutMs, env, stdin, bin }) {
 
 const rec = (rule, reason, decision = 'allow') => ({ sink: 'gate', data: { kind: 'gate', decision, hook: 'ext-guard', rule, reason } });
 
-/** Hop dong HOOK_MODULE. ctx (test): {cfg, env, list(ws), hashOf(root), readManifest(root), core(), run(domain,args,opts)}. */
+/** Hop dong HOOK_MODULE. ctx (test): {cfg, env, list(ws), hashOf(root), run(domain,args,opts)}. Khong doc manifest tren dia. */
 export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;
@@ -54,25 +52,21 @@ export async function handle(event, input, ctx = {}) {
     if (!tool) return {};
     const env = ctx.env || process.env;
     const ws = path.resolve(typeof env.CLAUDE_PROJECT_DIR === 'string' && env.CLAUDE_PROJECT_DIR.trim() ? env.CLAUDE_PROJECT_DIR.trim() : (typeof inp.cwd === 'string' && inp.cwd ? inp.cwd : process.cwd()));
-    const list = ctx.list ? ctx.list(ws) : listRegistered({ workspace: ws, gitTimeoutMs: 1000 });
-    const readManifest = ctx.readManifest || ((root) => readJson(path.join(root, 'manifest.json')));
+    let list;
+    // Khong doc duoc registry => khong biet matcher => fail-open CO ghi audit (khong the chan mu moi tool).
+    try { list = ctx.list ? ctx.list(ws) : listRegistered({ workspace: ws, gitTimeoutMs: 1000 }); } catch { return { records: [rec('registry-unreadable', 'ext-guard: khong doc duoc registry, bo qua (fail-open)')] }; }
     const hashOf = ctx.hashOf || ((root) => { const h = hashTree(root); return h.truncated ? null : h.hash; });
     const run = ctx.run || defaultRun;
-    let core;
     const records = [], denies = [];
     const stdin = JSON.stringify(inp);
     const deny = (id, rule, why) => { denies.push(`ext-guard[${id}]: ${why}`); records.push(rec(rule, why, 'deny')); };
     for (const e of list) {
       try {
-        const m = readManifest(e.root);
-        const g = parseGuard(m);
+        const g = parseGuard(e.guard);
         if (!g || !g.matcher.test(tool)) continue;
         ctx.guardMatched = true; // dispatcher: het budget/loi truoc khi tra loi => CHAN (fail-closed)
         if (hashOf(e.root) !== e.hash) { deny(e.id, 'hash-drift', `guard ${e.id} chua duyet: harness ext approve ${e.id}`); continue; }
-        core = core === undefined ? (ctx.core ? ctx.core() : coreDomains()) : core;
-        const domain = core && manifestDomains(m).find((d) => !core.has(d));
-        if (!domain) { deny(e.id, 'no-domain', `guard ${e.id}: khong dinh tuyen duoc domain`); continue; }
-        const r = await Promise.resolve(run(domain, g.args, { cwd: ws, timeoutMs: cfg.timeoutMs, env, stdin })).catch(() => ({ error: 'run' }));
+        const r = await Promise.resolve(run(g.domain, g.args, { cwd: ws, timeoutMs: cfg.timeoutMs, env, stdin })).catch(() => ({ error: 'run' }));
         if (r && r.code === 0) continue;
         if (r && r.code === 2) {
           const why = String(r.stderr || '').replace(/\s+/g, ' ').trim().slice(0, cfg.maxReason || 500) || 'blocked';
@@ -88,5 +82,5 @@ export async function handle(event, input, ctx = {}) {
   } catch { return {}; }
 }
 
-const META = { id: 'ext-guard', events: ['PreToolUse'], timeoutMs: 2200, onError: 'open', failClosedOnMatch: true };
+const META = { id: 'ext-guard', events: ['PreToolUse'], timeoutMs: 2800, onError: 'open', failClosedOnMatch: true };
 export default Object.freeze({ ...META, handle: async (event, input, ctx) => handle(event, input, ctx) });

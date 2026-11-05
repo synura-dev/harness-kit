@@ -113,7 +113,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       if (m.error) { trace(m.id, m.error); if (m.gate) gw(m.id, m.error); continue; }
       if (!applies(m.mod, ev, state.input)) continue;
       if (m.gate && state.denied) continue; // deny cat chuoi gate; audit van chay
-      const left = budget - (Date.now() - startedAt);
+      const left = m.own ? m.own : budget - (Date.now() - startedAt);
       if (left < 50) { trace(m.id, 'budget'); if (m.gate && m.mod.onError !== 'closed') gw(m.id, 'budget'); continue; }
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
@@ -141,10 +141,11 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
 
   let timedOut = false;
   try {
-    const left = Math.max(50, budget - (Date.now() - startedAt));
+    const extra = Math.max(0, ...(profile.order[ev] || []).map((x) => Number(x.ownBudgetMs) || 0));
+    const left = Math.max(50, budget + extra - (Date.now() - startedAt));
     const w = await Promise.race([work().then(() => null), new Promise((res) => { const t = setTimeout(() => res(TIMEOUT), left); t.unref(); })]);
     if (w === TIMEOUT) timedOut = true;
-  } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
+  } catch { for (const [id, f] of state.fc) if (f.ctx?.guardMatched) state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: dispatch-error (fail-closed)` } }); state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
   if (timedOut) for (const [id, f] of state.fc) if (!f.done && f.ctx?.guardMatched) { state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: budget-timeout (fail-closed)` } }); state.traces.push(traceRec('module-error', `${id}: budget-timeout fail-closed`)); }
   if (timedOut) { state.traces.push(traceRec('module-error', 'dispatch: budget-timeout')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'budget-timeout')); }
   const merged = mergeResults(state.items);
