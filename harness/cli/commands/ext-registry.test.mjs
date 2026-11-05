@@ -18,6 +18,14 @@ function setup() {
   return { ws, mf, root, opts: { workspace: ws, machineFile: mf, confirm: () => true, coreDomains: new Set(['data', 'audit']) } };
 }
 
+test('confirmTty: ngoai test runner bo qua opts.confirm (khong TTY => code 2)', async () => {
+  const { opts } = setup();
+  const old = process.env.NODE_ENV; const oldB = process.env.BUN_TEST;
+  process.env.NODE_ENV = 'production'; delete process.env.BUN_TEST; Object.defineProperty(process.stdin, 'isTTY', { value: false, configurable: true });
+  try { const r = await R.register('ext/demo', { ...opts, confirm: () => true, isTTY: true }); expect(r.code === 2 || r.code === 1).toBe(true); expect(R.list(opts).text).not.toContain('demo'); }
+  finally { process.env.NODE_ENV = old; if (oldB !== undefined) process.env.BUN_TEST = oldB; }
+});
+
 test('hashTree bo .git nhung hash node_modules (doi node_modules => doi hash), doi noi dung thi doi hash', () => {
   const { root } = setup();
   fs.mkdirSync(path.join(root, '.git')); fs.writeFileSync(path.join(root, '.git', 'HEAD'), 'a');

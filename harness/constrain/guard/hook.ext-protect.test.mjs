@@ -98,3 +98,15 @@ test('van ban tro nhac lenh ext (commit message, echo) duoc qua; lenh that va bi
   assert.equal(stripInertText('git commit -m "a b" -- f'), 'git commit -m "" -- f');
   assert.equal(stripInertText('node -e "x"'), 'node -e "x"');
 });
+
+import { evaluate as evalExt } from './hook.mjs';
+test('chan lenh node/bun/deno nap ext-registry/ext-trust (import/require/-e), bat ke ten ham; test bun van duoc', () => {
+  const cfg = {};
+  for (const c of [
+    "node -e \"import('./harness/cli/commands/ext-registry.mjs').then(m=>m.writeAll({},{}))\"",
+    "bun -e \"require('./harness/core/ext/ext-trust.mjs').writeAll(1,2)\"",
+    "deno eval \"await import('file:///x/ext-trust.mjs')\"",
+    "node --eval \"import('x/ext-registry')\"",
+  ]) expect(evalExt(c, cfg)?.id).toBe('ext-config-protect');
+  expect(evalExt('bun test harness/cli/commands/ext-registry.test.mjs', cfg)).toBeNull();
+});

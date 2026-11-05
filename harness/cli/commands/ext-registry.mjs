@@ -42,9 +42,11 @@ function audit(id, event, rel, hash) {
   import('../../core/ext/ctx.mjs').then((m) => m.auditExt(id, { ok: true, event, status: 'ext-ok', data: { root: rel, hash8: hash8(hash) } })).catch(() => {});
 }
 
+// Seam test: opts.confirm/opts.isTTY CHI duoc tin khi chay duoi test runner (NODE_ENV=test hoac BUN_TEST). Ngoai test luon doi TTY that + doc phim.
+const underTest = () => process.env.NODE_ENV === 'test' || !!process.env.BUN_TEST;
 function confirmTty(msg, opts) {
-  if (opts.confirm) return Promise.resolve(!!opts.confirm(msg));
-  const tty = opts.isTTY ?? (process.stdin.isTTY && process.stdout.isTTY);
+  if (opts.confirm && underTest()) return Promise.resolve(!!opts.confirm(msg));
+  const tty = (underTest() ? opts.isTTY : undefined) ?? (process.stdin.isTTY && process.stdout.isTTY);
   if (!tty) return Promise.resolve(null);
   return import('node:readline').then((rl) => new Promise((res) => {
     const i = rl.createInterface({ input: process.stdin, output: process.stdout });

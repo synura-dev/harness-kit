@@ -36,7 +36,7 @@ const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b/i;
 // Chi chan lenh GHI/CHAY: `harness ext register|approve`; ext-cmd/ext-registry cung dong voi register|approve; chay ext-cmd bang node/bun/deno;
 // ghi/xoa/di chuyen file ext-cmd/ext-registry (LAUNCHER_VERB, redirect). Lenh chi doc (git diff/log/show, cat, rg, grep...) duoc qua (isReadOnlyCmd).
 const EXT_FILE = String.raw`ext-(?:cmd|registry)(?:\.mjs)?(?![\w.-])`;
-const EXT_CMD_RE = new RegExp(String.raw`\bharness(?:\.mjs)?["']?\s+ext\s+(?:register|approve)\b|\bext-(?:cmd|registry)\b[^\n]*\b(?:register|approve)\b|\b(?:node|bun|deno|npx|tsx)\b[^\n;|&]*\bext-cmd(?:\.mjs)?(?![\w.-])|${LAUNCHER_VERB}[^\n;|&]*?\b${EXT_FILE}|>>?\s*["']?[^\s"']*${EXT_FILE}`, 'i');
+const EXT_CMD_RE = new RegExp(String.raw`\bharness(?:\.mjs)?["']?\s+ext\s+(?:register|approve)\b|\bext-(?:cmd|registry)\b[^\n]*\b(?:register|approve)\b|\b(?:node|bun|deno|npx|tsx)\b[^\n]*\bext-(?:cmd|registry|trust)(?:\.mjs)?(?![\w.-])|${LAUNCHER_VERB}[^\n;|&]*?\b${EXT_FILE}|>>?\s*["']?[^\s"']*${EXT_FILE}`, 'i');
 const READ_SEG_RE = /^\s*(?:git\s+(?:-c\s+\S+\s+)*(?:diff|log|show|blame|grep|status)|cat|rg|grep|egrep|fgrep|head|tail|less|more|type|Get-Content|gc|wc|ls|Select-String|sls|sort|uniq|nl)\b/i;
 /** Lenh chi doc: khong co ; & < > backtick $( ; moi doan pipe deu la lenh doc. */
 const isReadOnlyCmd = (cmd) => !/[;&<>`\n]|\$\(/.test(cmd) && cmd.split('|').every((s) => READ_SEG_RE.test(s));
