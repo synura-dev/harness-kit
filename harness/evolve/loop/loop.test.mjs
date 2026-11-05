@@ -337,18 +337,32 @@ test('E2E du an sach (khong harness/): CLI candidates -> propose -> check (SKIPP
     expect(ck.stdout).toContain('SKIPPED');
     expect(ck.stdout).not.toContain('PASS');
     expect(ck.stdout).toContain('oracle: skipped (khong co dich config de eval)');
-    const ap = js(run('apply', p.id, '--approve'));
-    expect(ap.ok).toBe(true);
     const abs = path.join(data, ...p.change.target.split('/'));
+    // CLI khong TTY: --approve khong duoc lach cong duyet
+    const noTty = run('apply', p.id, '--approve');
+    expect(noTty.status).toBe(2);
+    expect(fs.existsSync(abs)).toBe(false);
+    const saved = { ...process.env };
+    Object.assign(process.env, env);
+    let ap;
+    try { ap = apply(p.id, { approve: true }); } finally { for (const k of Object.keys(env)) { if (k in saved) process.env[k] = saved[k]; else delete process.env[k]; } }
+    expect(ap.ok).toBe(true);
     expect(fs.readFileSync(abs, 'utf8')).toContain(cid);
     for (const d of ['.claude', '.agents', 'harness', 'skills']) expect(fs.existsSync(path.join(proj, d))).toBe(false);
-    expect(js(run('rollback', ap.ver, '--approve')).ok).toBe(true);
+    expect(run('rollback', ap.ver, '--approve').status).toBe(2);
+    expect(fs.existsSync(abs)).toBe(true);
+    Object.assign(process.env, env);
+    let rb;
+    try { rb = rollback(ap.ver, { approve: true }); } finally { for (const k of Object.keys(env)) { if (k in saved) process.env[k] = saved[k]; else delete process.env[k]; } }
+    expect(rb.ok).toBe(true);
     expect(fs.existsSync(abs)).toBe(false);
     // dich ngoai allowlist / .. qua CLI -> blocked, apply tu choi
     for (const t of ['../../x.md', '.claude/skills/x/SKILL.md', 'harness/skills/x/SKILL.md']) {
       const q = js(run('propose', cid, '--target', t));
       expect(q.status).toBe('blocked');
-      expect(run('apply', q.id, '--approve').status).toBe(3);
+      expect(run('apply', q.id, '--approve').status).toBe(2); // khong TTY: cong duyet chan truoc
+      Object.assign(process.env, env);
+      try { expect(apply(q.id, { approve: true }).code).toBe(3); } finally { for (const k of Object.keys(env)) { if (k in saved) process.env[k] = saved[k]; else delete process.env[k]; } }
     }
   } finally { fs.rmSync(proj, { recursive: true, force: true }); }
 });
@@ -359,4 +373,14 @@ test('candidates --source loc theo nguon ext:<id>; mac dinh khong loc', async ()
   expect((await findCandidates(o)).items.map((x) => x.fp)).toContain('gggggggggg');
   expect((await findCandidates({ ...o, source: 'ext:demo' })).items.map((x) => x.fp)).toEqual(['gggggggggg']);
   expect((await findCandidates({ ...o, source: 'ext:other' })).items.length).toBe(0);
+});
+
+test('policy: file rule/inject bat buoc tien to evolve- va khong trung luat mac dinh ledger', () => {
+  const bad = classifyTarget('evolve/rules/main-self-verify.json', 'rule', o);
+  expect(bad.ok).toBe(false);
+  expect(bad.reason).toContain('evolve-');
+  expect(classifyTarget('evolve/rules/x.json', 'rule', o).ok).toBe(false);
+  expect(classifyTarget('evolve/inject/x.md', 'inject', o).ok).toBe(false);
+  expect(classifyTarget('evolve/rules/evolve-ok.json', 'rule', o).ok).toBe(true);
+  expect(classifyTarget('evolve/inject/evolve-ok.md', 'inject', o).ok).toBe(true);
 });

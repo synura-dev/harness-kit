@@ -11,6 +11,16 @@ export function safeText(s, n = SAFE_MAX) {
   return String(t).replace(/[\u0000-\u001f\u007f-\u009f]/g, ' ').replace(/[`<>{}]/g, '').replace(/\s+/g, ' ').trim().slice(0, Math.min(n, SAFE_MAX));
 }
 
+export const MESSAGE_MAX = 200; // oracle (autopilot.oracleRule) doi message <= 200
+/** Cat sample truoc, roi hint, de message luon <= MESSAGE_MAX. */
+function buildMessage(sample, fix) {
+  const mk = (sm, fx) => `[${OBSERVED_FRAME}] loi lap {count} lan: ${sm} -> fix_command: ${fx}`;
+  let m = mk(sample, fix);
+  if (m.length > MESSAGE_MAX) { sample = sample.slice(0, Math.max(10, sample.length - (m.length - MESSAGE_MAX))); m = mk(sample, fix); }
+  if (m.length > MESSAGE_MAX) { fix = fix.slice(0, Math.max(0, fix.length - (m.length - MESSAGE_MAX))); m = mk(sample, fix); }
+  return m.slice(0, MESSAGE_MAX);
+}
+
 /** Dinh nghia luat canh bao cho 1 candidate: khop dung fp, canh bao + goi y fix. */
 export function ruleDef(cand) {
   const fix = safeText(cand.hint) || 'harness evolve candidates';
@@ -18,7 +28,7 @@ export function ruleDef(cand) {
     desc: `evolve: canh bao loi lap ${safeText(cand.tool, 30)} (${safeText(cand.fp || cand.id, 40)})`,
     source: 'candidates', days: 7, filter: { fp: cand.fp }, metric: 'count', threshold: 1,
     action: 'warn', cooldown_hours: 24,
-    message: `[${OBSERVED_FRAME}] loi lap {count} lan: ${safeText(cand.sample)} -> fix_command: ${fix}`.slice(0, 240),
+    message: buildMessage(safeText(cand.sample), fix),
   };
 }
 

@@ -6,7 +6,7 @@ import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findPatterns } from './patterns.mjs';
-import { runAutopilot, queueOp } from './autopilot.mjs';
+import { runAutopilot, queueOp, confirmTty } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
 const USAGE = 'evolve prune-candidates [--days N] [--record] | patterns [--days N] [--limit N] [--threshold N] [--sessions K] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | eval run|list|baseline|compare|bench';
@@ -57,7 +57,7 @@ export async function render(o) {
   }
   if (o.cmd === 'queue') {
     const r = await queueOp({ approve: o.approve ? o.arg : null, reject: o.reject ? o.arg : null });
-    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.map((q) => `${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`)], 40).join('\n'), data: r };
+    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.flatMap((q) => [`${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`, ...(q.sha ? [`  sha256=${q.sha}`] : []), ...(q.after_preview ? q.after_preview.split('\n').map((l) => `  | ${l}`) : []), ...(q.after_truncated ? ['  | ... (cat 40 dong)'] : [])])], 200).join('\n'), data: r };
     return { code: r.code, summary: r.code === 0 ? `queue ${r.id}: ${r.status}${r.ver ? ` (ver ${r.ver})` : r.manual ? ' (sua tay: khong co duong ap tu dong)' : ''}` : `queue tu choi: ${r.reason}`, data: r };
   }
   if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);
@@ -83,11 +83,18 @@ export async function render(o) {
     return { code: ck.ok ? 0 : 1, summary: s, data: p };
   }
   if (o.cmd === 'apply') {
+    // Cong duyet: --approve qua CLI phai co nguoi xac nhan TTY (nhu queue --approve). Chi autopilot noi bo (goi ham) tu duyet muc 1.
+    const gate = o.approve ? await confirmTty(`Ap dung ${need()} (evolve apply)?`, o) : true;
+    if (gate === null) return { code: 2, summary: 'apply: can TTY de xac nhan (agent khong tu duyet)', data: { ok: false, code: 2, reason: 'can TTY (agent khong tu duyet)' } };
+    if (gate === false) return { code: 1, summary: 'apply: khong dong y', data: { ok: false, code: 1, reason: 'khong dong y' } };
     const r = apply(need(), o);
     const s = r.ok ? `da ap ${o.arg} -> ${r.target} (ver ${r.ver}); hoan tac: evolve rollback ${r.ver}` : `apply tu choi: ${r.reason}${r.manual ? `\n${r.manual}` : ''}`;
     return { code: r.code, summary: s, data: r };
   }
   if (o.cmd === 'rollback') {
+    const gate = o.approve ? await confirmTty(`Khoi phuc ${need()} (evolve rollback)?`, o) : true;
+    if (gate === null) return { code: 2, summary: 'rollback: can TTY de xac nhan (agent khong tu duyet)', data: { ok: false, code: 2, reason: 'can TTY (agent khong tu duyet)' } };
+    if (gate === false) return { code: 1, summary: 'rollback: khong dong y', data: { ok: false, code: 1, reason: 'khong dong y' } };
     const r = rollback(need(), o);
     return { code: r.code, summary: r.ok ? `da khoi phuc ${r.target} (ver ${r.ver})` : `rollback tu choi: ${r.reason}`, data: r };
   }

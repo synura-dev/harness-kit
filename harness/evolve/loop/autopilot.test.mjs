@@ -169,6 +169,46 @@ test('tu rollback sau 7 ngay: count fp khong giam -> khoi phuc + ghi ledger; gia
   expect(led.evolve.status).toBe('rolled_back');
 });
 
+test('queue: hien noi dung+sha, approve tinh lai sha, lech -> tu choi', async () => {
+  await runAutopilot({ ...o, ledgerEntries: [entry(FP, { evolve_kind: 'skill' })] });
+  const q = readQueue(o)[0];
+  expect(q.after_sha).toMatch(/^[0-9a-f]{64}$/);
+  const li = (await queueOp(o)).items[0];
+  expect(li.sha).toBe(q.after_sha);
+  expect(li.after_preview).toContain('name: evolve-');
+  expect(li.after_preview.split('\n').length).toBeLessThanOrEqual(40);
+  let shown = '';
+  const pf = path.join(o.dataRoot, 'proposals', `${q.pid}.json`);
+  const orig = fs.readFileSync(pf, 'utf8');
+  const p = JSON.parse(orig); p.change.after += 'THEM LENH LA\n'; fs.writeFileSync(pf, JSON.stringify(p));
+  const bad = await queueOp({ ...o, approve: q.id, confirm: (m) => { shown = m; return true; } });
+  expect(bad.code).toBe(4); expect(shown).toBe('');
+  expect(readQueue(o)[0].status).toBe('pending');
+  fs.writeFileSync(pf, orig);
+  const ok = await queueOp({ ...o, approve: q.id, confirm: (m) => { shown = m; return true; } });
+  expect(ok.code).toBe(0); expect(shown).toContain(q.after_sha);
+});
+
+test('apply that bai giua chung: moc applying ghi truoc; lan sau hoan tat co kiem hoac bo', async () => {
+  const r = await runAutopilot({ ...o, ledgerEntries: [entry(FP)] });
+  const st = readState(o); const a = st.applied[0];
+  expect(a.status).toBe('applied'); expect(a.ver).toBe(r.applied[0].ver); expect(a.count_before).toBe(3);
+  // gia lap crash sau khi ghi file nhung truoc khi luu 'applied': moc con 'applying'
+  a.status = 'applying'; a.ver = null;
+  fs.writeFileSync(path.join(apDir(o), 'state.json'), JSON.stringify(st));
+  const r2 = await runAutopilot({ ...o, ledgerEntries: [], force: true });
+  expect(r2.errors.join(' ')).toContain('hoan tat co kiem');
+  const s2 = readState(o).applied[0];
+  expect(s2.status).toBe('applied'); expect(s2.ver).toBe(a.ver ?? r.applied[0].ver);
+  // moc mo coi ma dich khong phai after -> bo
+  const target = path.join(o.dataBase, ...r.applied[0].target.split('/'));
+  const st3 = readState(o); st3.applied[0].status = 'applying'; st3.applied[0].ver = null;
+  fs.writeFileSync(path.join(apDir(o), 'state.json'), JSON.stringify(st3));
+  fs.writeFileSync(target, 'khac');
+  await runAutopilot({ ...o, ledgerEntries: [], force: true, nowMs: NOW + 2 * DAY });
+  expect(readState(o).applied[0].status).toBe('abandoned');
+});
+
 test('giu khi fp giam (khong con lap)', async () => {
   const r = await runAutopilot({ ...o, ledgerEntries: [entry(FP)] });
   const target = path.join(o.dataBase, ...r.applied[0].target.split('/'));

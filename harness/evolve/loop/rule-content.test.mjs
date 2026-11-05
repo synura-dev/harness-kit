@@ -14,9 +14,17 @@ test('ruleDef/injectText: khong chua nguyen van, co khung du lieu quan sat', () 
   expect(r).toContain(OBSERVED_FRAME);
   expect(r).not.toContain('<system>');
   expect(r).not.toContain('```');
-  expect(ruleDef(evil).message.length).toBeLessThanOrEqual(240);
+  expect(ruleDef(evil).message.length).toBeLessThanOrEqual(200);
   const t = injectText(evil);
   expect(t).toContain(`[${OBSERVED_FRAME}]`);
   expect(/[`<>]/.test(t)).toBe(false);
   expect(t).not.toContain('A'.repeat(100));
+});
+
+test('message luon <= 200 ky tu (oracle), du sample/hint dai', () => {
+  const c = { id: 'c1', fp: 'fp1', tool: 'Bash', count: 5, sample: 'S'.repeat(300), hint: 'H'.repeat(300) };
+  const m = ruleDef(c).message;
+  expect(m.length).toBeLessThanOrEqual(200);
+  expect(m).toContain(OBSERVED_FRAME);
+  expect(ruleDef({ ...c, sample: 'ngan', hint: 'fix' }).message).toContain('fix_command: fix');
 });
