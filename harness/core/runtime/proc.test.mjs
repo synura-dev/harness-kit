@@ -5,7 +5,6 @@ import path from 'node:path';
 import cp from 'node:child_process';
 import { spawnSync, spawn, spawnBackground, sweepLedger, ledgerPath, isRunning, ledgerDone, isAlive, killTree, matchEntry, sweepBackground, SWEEP } from './proc.mjs';
 import { withLock, acquireLock } from './lockfile.mjs';
-import { checkProcDirect, scanProcDirect, PROC_EXCEPTIONS } from '../checks/proc-check.mjs';
 
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'proc-t-'));
 const read = (d) => JSON.parse(fs.readFileSync(ledgerPath(d), 'utf8')).entries;
@@ -78,24 +77,6 @@ test('sweepLedger: kill chay SAU khi nha khoa so (khoa khong bi giu trong luc ta
   expect(seen).toEqual([{ p: 2, locked: false, keys: ['fresh'] }]);
 });
 
-test('check proc-direct bat goi thang child_process, bo qua test/ngoai le', () => {
-  const v = checkProcDirect([
-    { path: 'harness/a.mjs', text: "import { spawn } from 'node:child_process';" },
-    { path: 'harness/b.mjs', text: "const { x } = await import('node:child_process');" },
-    { path: 'harness/c.mjs', text: "const c = require('child_process');" },
-    { path: 'harness/d.mjs', text: "Bun.spawnSync(['git']);" },
-    { path: 'harness/ok.mjs', text: "import { spawn } from '../core/runtime/proc.mjs';\n// child_process chi la comment" },
-    { path: 'harness/a.test.mjs', text: "import cp from 'node:child_process';" },
-    { path: 'harness/core/runtime/proc.mjs', text: "import cp from 'node:child_process';" },
-  ]);
-  expect(v.map((x) => x.file)).toEqual(['harness/a.mjs', 'harness/b.mjs', 'harness/c.mjs', 'harness/d.mjs']);
-});
-
-test('cay repo hien tai khong con goi thang child_process', () => {
-  const root = path.resolve(import.meta.dir, '..', '..', '..');
-  expect(scanProcDirect(root)).toEqual([]);
-  expect(Object.keys(PROC_EXCEPTIONS).length).toBeLessThanOrEqual(6);
-});
 
 test('matchEntry: can ca duong dan script day du va thoi diem tao khop; lenh rong -> null', () => {
   const e = { needle: 'C:/x/job.mjs', startedAt: 1000000 };

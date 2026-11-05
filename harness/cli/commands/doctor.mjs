@@ -8,30 +8,8 @@ import { ver } from '../../core/runtime/proc-list.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks, isPluginMode, workspaceMarker } from '../../core/io/paths.mjs';
 
-if (process.argv.includes('--adapters')) {
-  const { buildReport, formatAdaptersTable } = await import('../../core/agy/adapters-report.mjs');
-  const rep = buildReport(HUB_ROOT);
-  const c = parseCommon(process.argv.slice(2));
-  if (c.json || c.raw || c.maxBytes) emit({ summary: formatAdaptersTable(rep.rows) + '\n' + rep.warnings.map((w) => '[warn] ' + w).join('\n'), data: rep }, c);
-  else { console.log(formatAdaptersTable(rep.rows)); rep.warnings.forEach((w) => console.log('[warn]', w)); }
-  process.exit(0);
-}
 const t = setTimeout(() => { console.error('timeout'); process.exit(2); }, 20000);
 const groupWarn = {};
-// Ham trung ten NHUNG khac nghia (moi module/CLI mot ban rieng, khong chia se duoc) -> khong tinh la dup. Bo sung cho contract DUP_ALLOW; moi muc kem files de dup moi van bi bat.
-const DOCTOR_DUP_ALLOW = [
-  { name: 'parseArgs', files: ['harness/build/skills/cli.mjs', 'harness/evolve/eval/bench/hook-latency.mjs', 'harness/evolve/eval/cli.mjs', 'harness/evolve/loop/cli.mjs', 'harness/observe/evidence/cli.mjs'], reason: 'moi CLI co bo co rieng' },
-  { name: 'render', files: ['harness/evolve/loop/cli.mjs', 'harness/hooks/dispatch/merge.mjs', 'harness/observe/cost/cli.mjs', 'harness/observe/evidence/cli.mjs'], reason: 'moi CLI dinh dang output rieng; dispatch/merge ghep ket qua hook (khac nghia)' },
-  { name: 'prune', files: ['harness/build/skills/skills.mjs', 'harness/observe/views/prune.mjs'], reason: 'API cung ten cua hai domain khac nhau (skills/views)' },
-  { name: 'check', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs'], reason: 'API cung ten cua hai domain khac nhau (skills/loop)' },
-  { name: 'ctx', files: ['harness/build/skills/skills.mjs', 'harness/evolve/loop/loop.mjs', 'harness/observe/cost/cost.mjs'], reason: 'ngu canh rieng moi module (truong khac nhau)' },
-  { name: 'summary', files: ['harness/observe/cost/cost.mjs', 'harness/observe/evidence/evidence.mjs'], reason: 'tong hop so lieu cost khac evidence' },
-  { name: 'redact', files: ['harness/evolve/loop/loop.mjs', 'harness/observe/audit/redact.mjs'], reason: 'loop.redact che mot chuoi mau bang maskSecrets; audit.redact ap danh sach regex cau hinh (khac chu ky)' },
-  { name: 'syncSkills', files: ['harness/tools/adapters/claude.mjs', 'harness/tools/sync.mjs'], reason: 'adapter claude dong bo .agents->.claude; sync.mjs goi build/skills CLI' },
-  { name: 'toOutput', files: ['harness/constrain/approval/hook.mjs', 'harness/constrain/guard/hook.mjs'], reason: 'moi hook doc lap (cam import hook khac), dinh dang output rieng' },
-  { name: 'toClaudeOutput', files: ['harness/constrain/bash-guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs'], reason: 'moi hook doc lap (cam import hook khac), dinh dang output rieng' },
-  { name: 'readStdin', files: ['harness/constrain/approval/hook.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs', 'harness/constrain/verify-gate/hook.mjs', 'harness/hooks/dispatch/run.mjs'], reason: 'moi hook/dispatcher tu doc stdin voi gioi han rieng; doc lap, fail-open (mo rong rule contract them dispatch/run.mjs)' },
-];
 const warn = (group, ...m) => { groupWarn[group] = (groupWarn[group] || 0) + 1; console.log('[warn]', ...m); };
 const line = (ok, label, extra = '') => { if (ok === false) process.exitCode = 1; console.log(`${ok === true ? '[OK]  ' : ok === false ? '[MISS]' : '[--]  '} ${label}${extra ? ' - ' + extra : ''}`); };
 
@@ -52,7 +30,7 @@ console.log(`[info] hubDir = ${hub.hubDir} (nguon: ${hub.source})`);
 if (BARE) console.log('[skip] hubDir/arch/adapter manifest: du an thuong (khong dau hieu hub), bo kiem gia dinh hub');
 else if (!isInside(REPO_DIR, hub.hubDir)) console.log(`[warn] repo (${REPO_DIR}) nam ngoai hubDir; kiem tra HUB_DIR/config/paths.local.json`);
 for (const b of findBadLinks(path.join(HUB_ROOT, '.claude', 'skills'), HUB_ROOT)) {
-  line(false, `link .claude/skills/${b.name} ${b.problem === 'hong' ? 'hong' : 'tro ngoai hubDir'}`, `${b.target}; chay: node harness/tools/sync.mjs`);
+  line(false, `link .claude/skills/${b.name} ${b.problem === 'hong' ? 'hong' : 'tro ngoai hubDir'}`, `${b.target}`);
 }
 try {
   const hj = JSON.parse(fs.readFileSync(path.join(HUB_ROOT, '.agents', 'hooks.json'), 'utf8'));
@@ -182,51 +160,8 @@ else try {
   console.log('\nHoac cho project scope (hub la project), khong co duong dan tuyet doi:');
   console.log(build((ev) => `node "$CLAUDE_PROJECT_DIR/harness/hooks/dispatch/run.mjs" ${ev}`));
 } catch (e) { process.exitCode = 1; console.log('[LOI] khong tao duoc khoi hooks (import hook_events tu harness/observe/audit/defaults.mjs):', e.message); }
-// adapter lech nguon (.agents/ -> .claude/, rule agy) + validate cau truc
-// co dieu kien: workspace khong co adapter nguon (.agents/) thi khong co gi de lech -> bo qua, khong bao MISS adapter
-if (!fs.existsSync(path.join(HUB_ROOT, '.agents'))) console.log('[skip] adapter: workspace khong co .agents/ (khong co nguon adapter)');
-else try {
-  const { syncAll } = await import(new URL('../../tools/sync.mjs', import.meta.url).href);
-  const res = await syncAll({ root: HUB_ROOT, check: true });
-  for (const r of res) {
-    // bang [dk] trong README suy ra tu hook trong settings; plugin mode khong co hook settings -> lech do thiet ke, chi canh bao
-    if (r.tool === 'adapters-readme' && pluginSeen && r.changes.length && !r.problems.length) { warn('adapters', 'README bang adapter lech [dk] vi hook den tu plugin (khong trong settings); bo qua'); continue; }
-    for (const c of r.changes) line(false, `adapter ${r.tool} lech nguon`, c);
-    // skill chua build (vd worktree moi, .agents/skills khong tracked) = chua sinh, khong phai hong: chi canh bao kem lenh build
-    const soft = r.tool === 'skills' ? r.problems.filter((p) => /^unbuilt:/.test(p)) : [];
-    if (soft.length) warn('adapters', `adapter skills chua build (${soft.length} muc, vd ${soft[0].replace(/ \(chay:.*$/, '')}) -> chay: node harness/build/skills/cli.mjs build --apply`);
-    // workspace mode: adapter la code loi cua plugin, workspace khong chua harness/tools/adapters -> khong phai loi
-    const noAdapter = WS_MODE ? r.problems.filter((p) => /^thieu adapter /.test(p)) : [];
-    if (noAdapter.length) { console.log(`[skip] adapter ${r.tool}: workspace mode, adapter nam o plugin (khong trong workspace)`); if (!r.changes.length && r.problems.length === noAdapter.length) continue; }
-    const hard = r.problems.filter((p) => !soft.includes(p) && !noAdapter.includes(p));
-    for (const p of hard) line(false, `adapter ${r.tool}`, p);
-    if (!r.changes.length && !hard.length && !soft.length) line(true, `adapter ${r.tool} khop nguon .agents/`);
-    else if (r.changes.length || hard.length) console.log('       -> chay: node harness/tools/sync.mjs');
-  }
-} catch (e) { process.exitCode = 1; console.log('[LOI] khong chay duoc harness/tools/sync.mjs --check:', e.message); }
-// manifest: CHI CANH BAO, khong lam doctor fail
-try {
-  const { checkManifest } = await import(new URL('../../core/checks/manifest-check.mjs', import.meta.url).href);
-  for (const m of checkManifest(HUB_ROOT)) warn('manifest', m);
-} catch (e) { console.log('[warn] manifest check loi:', e.message); }
-try {
-  const { buildReport } = await import('../../core/agy/adapters-report.mjs');
-  if (!BARE) for (const m of buildReport(HUB_ROOT).warnings) warn('adapters', m);
-} catch (e) { console.log('[warn] adapters check loi:', e.message); }
-try {
-  const { checkRegistry } = await import(new URL('../../core/checks/manifest-check.mjs', import.meta.url).href);
-  for (const m of checkRegistry(HUB_ROOT)) warn('registry', m);
-} catch (e) { console.log('[warn] registry check loi:', e.message); }
 try {
 } catch (e) { console.log('[warn] legacy-write check loi:', e.message); }
-if (!BARE) try {
-  const { syncArchitecture } = await import(new URL('../../core/registry/plugin-registry.mjs', import.meta.url).href);
-  const ar = syncArchitecture(HUB_ROOT, false);
-  // workspace mode: khoi generated thuoc ARCHITECTURE cua plugin; workspace khong bat buoc co marker
-  if (ar.problem && WS_MODE && /thieu marker/.test(ar.problem)) console.log('[skip] arch: workspace mode, docs/ARCHITECTURE.md khong can marker generated');
-  else if (ar.problem) warn('arch', ar.problem);
-  else if (ar.changed) { warn('arch', 'docs/ARCHITECTURE.md (khoi generated) lech registry; chay: node harness/cli/harness.mjs adapters --write-arch'); if (process.argv.includes('--strict')) { process.exitCode = 1; console.log('[LOI] architecture lech registry (strict)'); } }
-} catch (e) { console.log('[warn] architecture check loi:', e.message); }
 // module hook khong co tac dung: CHI CANH BAO (khong tu go). Nguon: gate `module-acted` (run.mjs) + gate `hook:<id>` san co. Chi khi audit da chay du retention_days voi tinh nang nay (tranh bao nham sau khi nang cap).
 try {
   const { ORDER } = await import(new URL('../../hooks/dispatch/modules.mjs', import.meta.url).href);
@@ -264,76 +199,30 @@ try {
   else if (firstActed > dayStr(days - SLACK)) console.log(`[skip] unused-modules: module-acted dau tien ${firstActed}; bat dau xet tu ${new Date(Date.parse(firstActed) + (days - SLACK) * 86400000).toISOString().slice(0, 10)} (tranh bao nham sau nang cap)`);
   else for (const [id, evs] of cand) if (!seen.has(id)) console.log(`[info] ${id} (${[...evs].join(', ')}) khong co tac dung trong ${days} ngay o audit nay; neu moi du an deu vay, can nhac bo khoi plugin`);
 } catch (e) { console.log('[warn] unused-modules check loi:', e.message); }
-// ba check dai han (ref/import/clutter): mac dinh chi canh bao (D6); --strict exit 1 neu co muc error
+// runtime: config guard hop le + du lieu (data scan: retention/dang ky/stray). Check phat trien nam o dev/.
 try {
-  const { buildScanInput, collectStray } = await import(new URL('../../core/checks/scan-input.mjs', import.meta.url).href);
-  const { checkRefs, makeCoreOwned } = await import(new URL('../../core/checks/ref-check.mjs', import.meta.url).href);
-  const { scanTree } = await import(new URL('../../core/checks/import-check.mjs', import.meta.url).href);
-  const { checkClutter, checkStray, countSources, countFlat, scanCode } = await import(new URL('../../core/checks/clutter-check.mjs', import.meta.url).href);
-  const si = buildScanInput(HUB_ROOT);
   const rows = [];
-  try { const { scanProcDirect } = await import(new URL('../../core/checks/proc-check.mjs', import.meta.url).href); const pd = scanProcDirect(HUB_ROOT); pd.slice(0, 10).forEach((v) => console.log(`[error] proc-direct ${v.file}:${v.line}: dung harness/core/runtime/proc.mjs thay child_process truc tiep`)); rows.push({ name: 'proc-direct', total: pd.length, errors: pd.length, truncated: false }); } catch { /* fail-open */ }
   const cap = (arr, n = 15) => { arr.slice(0, n).forEach((s) => console.log('[warn]', s)); if (arr.length > n) console.log(`[warn] ... con ${arr.length - n} muc nua`); };
-  // workspace mode: harness/<loi>/... thuoc plugin, docs lich su la anh chup -> khong phai loi ref cua workspace
-  const coreOwned = WS_MODE ? makeCoreOwned({
-    coreDirs: (() => { try { return fs.readdirSync(path.join(REPO_DIR, 'harness'), { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; } })(),
-    existsInPlugin: (p) => fs.existsSync(path.join(REPO_DIR, p)),
-  }) : null;
-  const ref = checkRefs({ files: si.files, exists: si.exists, coreOwned, skipHistorical: WS_MODE });
-  cap(ref.errors.map((e) => `ref ${e.file}:${e.line} tro toi khong ton tai: ${e.ref}`));
-  rows.push({ name: 'ref', total: ref.errors.length, errors: ref.errors.length, truncated: ref.truncated });
-  const imp = scanTree(HUB_ROOT);
-  cap([...imp.violations.map((v) => `import ${v.file}:${v.line} ${v.from} -> ${v.to} (${v.rule})`), ...imp.missing.map((m) => `import ${m.file}:${m.line} thieu file: ${m.spec}`)]);
-  rows.push({ name: 'import', total: imp.violations.length + imp.missing.length, errors: imp.violations.length + imp.missing.length, truncated: imp.truncated });
-  const clu = checkClutter(si.files, si.registry);
-  cap(clu.findings.map((f) => `clutter [${f.severity}] ${f.rule} ${f.path}: ${f.message}`));
-  rows.push({ name: 'clutter', total: clu.findings.length, errors: clu.findings.filter((f) => f.severity === 'error').length, truncated: clu.truncated ? (clu.reason || true) : false });
   const { guardConfigHealth } = await import('../../core/config/guard-health.mjs');
   const gh = guardConfigHealth({ hubRoot: HUB_ROOT });
-  gh.forEach((b) => console.log(`[ERROR] config guard hong, protectedPaths mat hieu luc: ${b.file} (${b.problem})`));
+  gh.forEach((x) => console.log(`[ERROR] config guard hong, protectedPaths mat hieu luc: ${x.file} (${x.problem})`));
   rows.push({ name: 'guard-config', total: gh.length, errors: gh.length, truncated: false });
-  const src = countSources(si.files);
-  console.log('[sources] ' + src.map((s) => `${s.dir}=${s.count}`).join(' '));
-  const { LONG_FILE_SOFT, DUP_ALLOW } = await import(new URL('../../core/config/constants.mjs', import.meta.url).href);
-  si.files.filter((f) => /^harness\/.+\.mjs$/.test(String(f.path).replace(/\\/g, '/')) && !/\.test\./.test(f.path) && f.lines > LONG_FILE_SOFT).forEach((f) => warn('long', `${f.path}: ${f.lines} dong > ${LONG_FILE_SOFT} (canh bao mem)`));
-  const flatTop = countFlat(si.files)[0];
-  if (flatTop) console.log(`[flat] max ${flatTop.count}/${flatTop.max} (${flatTop.dir})`);
-  const sc = scanCode(si.files, { dupAllow: [...DUP_ALLOW, ...DOCTOR_DUP_ALLOW] });
-  cap(sc.unused.map((u) => `dead ${u.file}: export ${u.name} khong ai dung`), 10);
-  cap(sc.dup.map((d) => `dup ham ${d.name}: ${d.files.join(', ')}`), 10);
-  console.log(`[dead] ${sc.unused.length} (chi test dung: ${sc.testOnly.length})`);
-  console.log(`[dup] ${sc.dup.length}`);
-  console.log(`[todo] ${sc.todo.length}`);
-  const stray = checkStray(collectStray(HUB_ROOT).entries);
-  cap(stray.map((s) => `stray ${s.path}: ${s.message}`), 10);
-  console.log(`[stray] ${stray.length}`);
-  rows.push({ name: 'stray', total: stray.length, errors: stray.length, truncated: false });
   try {
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../harness.mjs', import.meta.url)), 'data', 'scan', '--json'], { encoding: 'utf8', timeout: 15000 });
     const dw = JSON.parse(r.stdout).warnings || [];
-    for (const [name, rules] of [['data-unregistered', ['unregistered']], ['data-fields', ['missing-field']], ['data-caps', ['over-caps']], ['data-retention', ['retention', 'stray']], ['repo-clutter', ['clutter']], ['data-orphan-ws', ['orphan-ws']]]) {
+    for (const [name, rules] of [['data-unregistered', ['unregistered']], ['data-fields', ['missing-field']], ['data-caps', ['over-caps']], ['data-retention', ['retention', 'stray']], ['data-orphan-ws', ['orphan-ws']]]) {
       const ws = dw.filter((w) => rules.includes(w.rule));
       cap(ws.map((w) => `${name} rule=${w.rule} ${w.path}: ${w.detail} -> ${w.fix}`), 10);
       rows.push({ name, total: ws.length, errors: 0, truncated: false });
     }
   } catch { /* fail-open */ }
-  try {
-    const { loadNodeHook } = await import(new URL('../../core/io/node-hook.mjs', import.meta.url).href);
-    const { unsafeWorkspaceNodes } = await import(new URL('../../observe/storage/workspaces.mjs', import.meta.url).href);
-    const nh = loadNodeHook({ root: HUB_ROOT });
-    const bad = nh.mod && typeof nh.mod.listNodes === 'function' ? unsafeWorkspaceNodes(nh.mod.listNodes()) : [];
-    cap(bad.map((n) => `data-ws-unsafe node ${n.id}: workspace "${n.workspace}" khong an toan (dung node id) -> sua workspace trong INDEX cua nut`), 10);
-    rows.push({ name: 'data-ws-unsafe', total: bad.length, errors: 0, truncated: false });
-  } catch { /* fail-open */ }
-  rows.push({ name: 'dead', total: sc.unused.length, errors: sc.unused.length, truncated: false });
-  if (si.truncated) console.log('[warn] scan-input truncated: ' + si.truncated);
-  for (const r of rows) console.log(`[check] ${r.name}: ${r.total} finding (${r.errors} error)${r.truncated ? ' truncated: ' + r.truncated : ''}`);
-  const gTotal = Object.values(groupWarn).reduce((a, b) => a + b, 0);
+  for (const r of rows) console.log(`[check] ${r.name}: ${r.total} finding (${r.errors} error)`);
+  const gTotal = Object.values(groupWarn).reduce((x, y) => x + y, 0);
   if (gTotal) console.log(`[check] khac: ${gTotal} warn (${Object.entries(groupWarn).map(([k, v]) => k + '=' + v).join(' ')})`);
   const total = rows.reduce((s, r) => s + r.total, 0) + gTotal;
   const errors = rows.reduce((s, r) => s + r.errors, 0);
   console.log(`[checks] warnings=${total} errors=${errors}${process.argv.includes('--strict') ? ' strict' : ''}`);
   if (process.argv.includes('--strict') && errors > 0) process.exitCode = 1;
-} catch (e) { console.log('[warn] ref/import/clutter check loi:', e.message); }
+} catch (e) { console.log('[warn] data/config check loi:', e.message); }
 
 clearTimeout(t);
