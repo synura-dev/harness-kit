@@ -87,7 +87,7 @@ test('shim cli: chay cong CLI plugin khong PATH; khong plugin -> HKERR HK-AGY-00
   const env = { ...process.env, CLAUDE_PROJECT_DIR: d, PATH: path.dirname(process.execPath) };
   const ok = spawnSync(process.execPath, [shim, 'cli', 'agy'], { cwd: d, env, encoding: 'utf8', timeout: 30000 });
   expect(ok.status).toBe(0);
-  expect(ok.stdout).toContain('hook agy qua plugin');
+  expect(ok.stdout).toContain('agy: hook + rule allow');
   fs.rmSync(path.join(d, '.agents', LOCAL));
   const env2 = { ...env, HARNESS_KIT_PLUGIN_DIR: PLUGIN };
   expect(spawnSync(process.execPath, [shim, 'cli', 'agy'], { cwd: d, env: env2, encoding: 'utf8', timeout: 30000 }).status).toBe(0);

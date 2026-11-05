@@ -44,7 +44,7 @@ test('eval bat duoc loi: doi ky vong gia (push -> none) -> ca truot, exit 1', ()
   const bad = j.cases.find((c) => c.id === 'fake-push-none');
   expect(bad.ok).toBe(false);
   expect(bad.got.decision).toBe('none');
-  expect(bad.got.miss.join(' ')).toContain('decision ask != none');
+  expect(bad.got.miss.join(' ')).toContain('decision none != deny');
 }, 60000);
 
 test('baseline -> compare: ca moi truot bao newFail + exit 1; khong doi -> exit 0; chua co baseline -> exit 2', () => {

@@ -2,13 +2,13 @@
 
 <p align="center"><img src="assets/icon.svg" width="64" alt="harness-kit"></p>
 
-A Claude Code plugin that adds a deterministic constraint layer around AI agents: guard, approval, data zones, audit, a hook dispatcher and a CLI gateway.
+A Claude Code plugin that adds a deterministic constraint layer around AI agents: guard, data zones, audit, a hook dispatcher and a CLI gateway. The core runs a full loop out of the box: collect, normalize, query, warn, incident ledger, weekly report, approved proposals, flag unused.
 
 ## Goals
 
 - Enforce rules with code, not agent judgment: checks a machine can run are automated and warn on their own.
-- Constrain agents safely: guards and approvals for risky commands, with hooks that fail open.
-- Keep data organized and observable: a zoned data tree with audit logs, cost and usage views.
+- Constrain agents safely: guards for protected paths and harness data, with hooks that fail open; hard blocks (push, deploy, ssh) belong to Claude Code native permission rules.
+- Keep data organized and observable: a zoned data tree with audit logs and usage reports.
 - Single entry point: one `harness` CLI to read data, run doctor checks and extend the system.
 - Zero dependencies; requires only Node.js.
 
@@ -42,14 +42,13 @@ commands/         slash commands (doctor)
 config/           default and workspace configuration
 docs/             plans and source history
 harness/          core implementation
-  build/          install, skills, user shim
+  build/          install, user shim
   cli/            CLI gateway and commands
-  constrain/      guard, approval, bash-guard, data-gate, verify-gate, worktree
+  constrain/      guard, bash-guard, model-policy, proc-orphans, worktree
   core/           audit, config, registry, runtime, agy, io, checks, ext
-  evolve/         eval and loop tooling
   hooks/          hook dispatcher
-  observe/        audit, cost, data-check, evidence, storage, views
-  tools/          adapters, sync, play
+  observe/        audit, storage, views
+  tools/          adapters
 hooks/            plugin hook entry points (hooks.json, run.mjs)
 skills/           bundled skills
 ```

@@ -5,9 +5,9 @@ import { fileURLToPath } from 'node:url';
 
 const reg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'registry.json'), 'utf8'));
 
-test('entry play thuoc loi (harness/tools/play), giu path/class/retention', () => {
+test('entry play thuoc loi (ext-out/hub-verify/play), giu path/class/retention', () => {
   const p = reg.entries.play;
-  expect(p.owner).toBe('harness/tools/play');
+  expect(p.owner).toBe('ext-out/hub-verify/play');
   expect(p).toMatchObject({ zone: 'system', class: 'log', retentionDays: 14, path: 'system/play', target: 'system/play' });
 });
 
