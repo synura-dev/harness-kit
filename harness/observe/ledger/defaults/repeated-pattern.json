@@ -1,0 +1,34 @@
+{
+  "desc": "quy trinh lap (lenh/chuoi thao tac/info_fetch/prompt) tu audit -> muc bao cao de de xuat tu dong hoa (khong warn)",
+  "source": "candidates",
+  "days": 7,
+  "filter": {
+    "kind": "pattern"
+  },
+  "metric": "count",
+  "threshold": 10,
+  "min_sessions": 3,
+  "action": "report",
+  "cooldown_hours": 168,
+  "message": "{sample}: lap {count} lan/{sessions} phien -> can nhac tu dong hoa (harness evolve patterns)",
+  "ignore": [
+    "^Read(:|$)",
+    "^Glob$",
+    "^Grep$",
+    "^TodoWrite$",
+    "update_plan$",
+    "^mcp__ccd_turn__wrap_up$",
+    "^Bash:git (status|log|diff)$",
+    "^Bash:ls$",
+    "^Bash:node( |$)",
+    "^Bash:bun$",
+    "^WebFetch$",
+    "^WebSearch$",
+    "^Bash:(grep|rg|sed|awk|cat|head|tail|echo|printf|wc|sort|uniq|cd|pwd|for|while|until|if|case|true|test|sleep|find|jq|tr|cut|xargs|mkdir|rm|cp|mv|touch|which|export|set)$"
+  ],
+  "info": [
+    "^Bash:harness projects (resolve|brief)\\b",
+    "^Bash:harness tasks\\b",
+    "^Bash:harness route show\\b"
+  ]
+}

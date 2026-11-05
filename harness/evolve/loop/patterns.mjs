@@ -1,6 +1,8 @@
 // evolve patterns: do quy trinh lap (khong phai loi) tu audit. Chay theo lo, khong trong hook.
 // Hop dong dau ra: {id, kind:'pattern', subkind, fp, count, sessions, first_ts, last_ts, sample, cost_ms} (cost_ms = trung binh/lan).
 import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
 import { normalizeMessage } from '../../core/audit/normalize-message.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
@@ -10,18 +12,12 @@ export const PATTERN_DEFAULTS = Object.freeze({
   days: 7, limit: 20, minCount: 10, minSessions: 3, seqMin: 3, seqMax: 5,
   maxOps: 200000, infoHead: 6, infoBeforeAgent: 3,
 });
-// Thao tac nen: bo khoi luong (hang ghi de duoc qua o.ignore).
-export const DEFAULT_IGNORE = Object.freeze([
-  /^Read(:|$)/, /^Glob$/, /^Grep$/, /^TodoWrite$/, /update_plan$/, /^mcp__ccd_turn__wrap_up$/,
-  /^Bash:git status$/, /^Bash:ls$/,
-  // tien ich van ban/cu phap shell: khong phai quy trinh
-  /^Bash:(grep|rg|sed|awk|cat|head|tail|echo|printf|wc|sort|uniq|cd|pwd|for|while|until|if|case|true|test|sleep|find|jq|tr|cut|xargs|mkdir|rm|cp|mv|touch|which|export|set)$/,
-]);
-// Lenh chi doc lay thong tin (info_fetch).
-export const DEFAULT_INFO = Object.freeze([
-  /^Bash:harness projects (resolve|brief)\b/, /^Bash:harness tasks\b/, /^Bash:harness route show\b/,
-  /^Bash:git (status|log)\b/, /^Bash:ls$/,
-]);
+// Danh sach bo qua/info la DU LIEU: luat repeated-pattern.json (ignore, info: chuoi regex). Ghi de bang <project>/.harness/rules/repeated-pattern.json.
+export const compileRegexList = (a) => (Array.isArray(a) ? a : []).flatMap((s) => { try { return [new RegExp(String(s))]; } catch { return []; } });
+const RULE_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'observe', 'ledger', 'defaults', 'repeated-pattern.json');
+let RULE = {}; try { RULE = JSON.parse(fs.readFileSync(RULE_FILE, 'utf8')); } catch { /* fail-open: khong ignore gi */ }
+export const DEFAULT_IGNORE = Object.freeze(compileRegexList(RULE.ignore));
+export const DEFAULT_INFO = Object.freeze(compileRegexList(RULE.info));
 
 const MULTI = { harness: 3, git: 2, bun: 2, npm: 2, node: 2, gh: 2, docker: 2, pnpm: 2, yarn: 2, npx: 2, bunx: 2 };
 const SCRIPT_RUNNERS = new Set(['node', 'python', 'python3', 'bash', 'sh', 'powershell', 'pwsh']);

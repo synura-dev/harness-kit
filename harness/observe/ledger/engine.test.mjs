@@ -13,7 +13,7 @@ const ev = (o) => ({ ts: '2026-11-05T10:00:00Z', sid: 'claude-a', actor: 'main',
 test('defaults nap duoc, hop le', () => {
   const r = loadDefinitions();
   assert.deepEqual(r.errors, []);
-  assert.deepEqual(r.defs.map((d) => d.id).sort(), ['main-self-edit', 'main-self-verify', 'repeated-error', 'warn-ignored']);
+  assert.deepEqual(r.defs.map((d) => d.id).sort(), ['cap', 'deprecate', 'main-self-edit', 'main-self-verify', 'repeated-error', 'repeated-pattern', 'warn-ignored']);
 });
 
 test('loc audit theo actor/scope; nhom theo project; nguong', () => {

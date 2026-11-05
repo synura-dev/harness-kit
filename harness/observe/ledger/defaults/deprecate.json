@@ -1,0 +1,13 @@
+{
+  "desc": "thanh phan 0 lan dung >= 14 ngay (propose_remove) -> muc bao cao, di vao lo xin xoa",
+  "source": "candidates",
+  "days": 7,
+  "filter": {
+    "kind": "deprecate",
+    "status": "propose_remove"
+  },
+  "metric": "count",
+  "threshold": 0,
+  "action": "report",
+  "message": "{sample}: de xuat bo (xin xoa theo lo)"
+}

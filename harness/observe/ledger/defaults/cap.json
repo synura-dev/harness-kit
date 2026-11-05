@@ -1,0 +1,13 @@
+{
+  "desc": "so thanh phan vuot tran (command/hook/skill/agent/rule) -> canh bao 1 lan, cooldown 7 ngay",
+  "source": "candidates",
+  "days": 7,
+  "filter": {
+    "kind": "cap"
+  },
+  "metric": "count",
+  "threshold": 1,
+  "action": "warn",
+  "cooldown_hours": 168,
+  "message": "vuot tran: {sample} -> gop/bo bot (harness evolve prune-candidates)"
+}
