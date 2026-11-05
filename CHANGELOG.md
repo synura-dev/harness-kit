@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.1
+- proc-orphans: no warning while another subagent of the same session is still running (SubagentStart/SubagentStop track live agents); the pid-set dedupe is now actually applied, keyed per recipient (main or subagent), and changing pid sets are throttled to one warning per 15 minutes (throttleSec). Stops the repeated Stop-hook nudges during long background subagents.
+
 ## 0.3.0
 - Slimmer core: runtime reduced from 17,959 to about 11,300 lines. Removed approval, verify-gate, diff-review, evidence, contract and storage mv; dev tooling moved into dev/.
 - Hard blocks now rely on native permissions (PowerShell included) instead of custom guard logic; medium security findings fixed in 8 fix(security) commits.
