@@ -31,6 +31,8 @@ export const DEFAULTS = {
   minAgeSec: 5,
   watchNames: ['bash.exe', 'sh.exe', 'python.exe', 'python3.exe', 'node.exe', 'bun.exe', 'duckdb.exe', 'ping.exe', 'powershell.exe'],
   rootNames: ['claude.exe', 'agy.exe', 'agy'],
+  ignoreNames: ['conhost.exe', 'openconsole.exe'], // luon bo qua (console host), ghi de qua config
+  dedupeSec: 21600, // cung chu ky (root pid + tap pid) trong 6h -> khong canh bao lai; 0 = tat
   protectCmd: ['telegram', 'server.ts', 'mcp', 'native-host', 'claude-code'],
   timeoutMs: 3000,
   maxListed: 20,
@@ -44,6 +46,7 @@ export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   const by = new Map(procs.map((p) => [p.pid, p]));
   const lc = (s) => String(s || '').toLowerCase();
   const shield = new Set();
+  const ign = (cfg.ignoreNames || DEFAULTS.ignoreNames).map(lc);
   let root = null;
   for (let p = by.get(selfPid), n = 0; p && n < 64; p = by.get(p.ppid), n++) {
     shield.add(p.pid);
@@ -52,7 +55,7 @@ export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   if (!root) return { rootPid: null, children: [] };
   const children = [];
   for (const p of procs) {
-    if (shield.has(p.pid) || !cfg.watchNames.includes(lc(p.name))) continue;
+    if (shield.has(p.pid) || ign.includes(lc(p.name)) || !cfg.watchNames.includes(lc(p.name))) continue;
     let q = by.get(p.ppid), n = 0, under = false;
     for (; q && n < 64; q = by.get(q.ppid), n++) if (q.pid === root.pid) { under = true; break; }
     if (!under) continue;
@@ -106,6 +109,36 @@ export async function scanChildren(cfg, ctx = {}) {
  * Audit type=proc (ProcOrphans) khi co con chau song: tra qua records [{sink:'audit', data, opts}], chi tu ghi khi ctx.write !== false.
  * Khong ghi stdout/exit. Loi/stdin rac -> {} (fail-open). ctx (tuy chon): {cfg, write, env}; thieu cfg thi nap mac dinh.
  */
+/** Chu ky canh bao: root pid + tap pid da sort. */
+export const signatureOf = (rootPid, children) => JSON.stringify([rootPid, children.map((c) => c.pid).sort((a, b) => a - b)]);
+
+/** Chong lap: true = chu ky nay da canh bao trong ttl giay. Cap nhat state (atomic, khoa) tru khi write===false. Fail-open: loi -> false. */
+export async function seenRecently(sig, rootPid, cfg, ctx = {}) {
+  const ttl = Number.isFinite(cfg.dedupeSec) ? cfg.dedupeSec : 21600;
+  if (ttl <= 0) return false;
+  try {
+    const { dataPathFor } = await import('../../core/io/storage.mjs');
+    const { withLock } = await import('../../core/runtime/lockfile.mjs');
+    const file = dataPathFor('proc-orphans', 'warned.json', ctx.env ? { env: ctx.env } : {});
+    let st = {};
+    try { st = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
+    const now = Date.now();
+    const prev = st[String(rootPid)];
+    if (prev && prev.sig === sig && now - prev.ts < ttl * 1000 && prev.ts <= now + 1000) return true;
+    if (ctx.write === false) return false;
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    withLock(file, () => {
+      let cur = {}; try { cur = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
+      for (const k of Object.keys(cur)) if (!cur[k] || now - cur[k].ts > ttl * 1000) delete cur[k];
+      cur[String(rootPid)] = { sig, ts: now };
+      const tmp = file + '.' + process.pid + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify(cur));
+      fs.renameSync(tmp, file);
+    });
+    return false;
+  } catch { return false; }
+}
+
 export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;

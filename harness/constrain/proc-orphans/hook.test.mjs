@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { DEFAULTS, findChildren, load, handle, MODULE } from './hook.mjs';
+import { DEFAULTS, findChildren, load, handle, MODULE, seenRecently, signatureOf } from './hook.mjs';
 import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
 
 const script = path.join(import.meta.dir, 'hook.mjs');
@@ -50,3 +50,27 @@ test('handle(): Stop that -> khong decision, ket qua hop le voi validateHookResu
     fs.rmSync(dir, { recursive: true, force: true });
   }
 }, 30000);
+
+test('conhost/OpenConsole bi bo qua (ke ca khi nam trong watchNames); nen that van canh bao', () => {
+  const cfg = { ...DEFAULTS, watchNames: [...DEFAULTS.watchNames, 'conhost.exe', 'openconsole.exe'] };
+  const ps = [P(1, 0, 'claude.exe', 999), P(2, 1, 'bash.exe', 100), P(3, 2, 'node.exe', 1),
+    P(20, 1, 'conhost.exe', 500), P(21, 1, 'OpenConsole.exe', 500), P(22, 1, 'ping.exe', 60)];
+  expect(findChildren(ps, 3, cfg, NOW).children.map((c) => c.pid)).toEqual([22]);
+});
+test('chuoi to tien cua hook bi bo qua, bao gom shell boc', () => {
+  const ps = [P(1, 0, 'claude.exe', 999), P(2, 1, 'bash.exe', 100), P(4, 2, 'bash.exe', 50), P(3, 4, 'node.exe', 1)];
+  expect(findChildren(ps, 3, DEFAULTS, NOW).children).toEqual([]);
+});
+test('chong lap: cung chu ky khong canh bao lan 2, chu ky moi thi canh bao, write:false khong ghi', async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-d-'));
+  const env = { ...process.env, HUB_DATA_DIR: dir };
+  try {
+    const a = signatureOf(9, [{ pid: 5 }, { pid: 3 }]);
+    expect(a).toBe(signatureOf(9, [{ pid: 3 }, { pid: 5 }]));
+    expect(await seenRecently(a, 9, DEFAULTS, { env, write: false })).toBe(false);
+    expect(await seenRecently(a, 9, DEFAULTS, { env, write: false })).toBe(false);
+    expect(await seenRecently(a, 9, DEFAULTS, { env })).toBe(false);
+    expect(await seenRecently(a, 9, DEFAULTS, { env })).toBe(true);
+    expect(await seenRecently(signatureOf(9, [{ pid: 3 }, { pid: 5 }, { pid: 6 }]), 9, DEFAULTS, { env })).toBe(false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
