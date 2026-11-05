@@ -4,7 +4,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt } from '../../core/io/out.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
-import { buildReport, saveBaseline, putObsidian, markRun, REPORT } from './run.mjs';
+import { buildReport, saveBaseline, putObsidian, markRun, writeReportFile, REPORT } from './run.mjs';
 
 const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--json] [--raw] [--timeout-s N]';
 
@@ -34,11 +34,15 @@ export async function main(argv = process.argv.slice(2)) {
     const notes = [];
     if (o.baseline) { const b = saveBaseline(res, { dryRun: o.dryRun }); notes.push(o.dryRun ? `baseline (dry-run, khong ghi): ${b.baseline.date}` : b.ok ? `baseline da chot: ${b.baseline.date}` : 'baseline: khong ghi duoc'); }
     let md = res.markdown;
+    // Luon ghi file .md (theo tuan) vao thu muc du lieu harness = nguon that; Obsidian chi day them, loi day khong lam hong bao cao.
+    const file = o.dryRun ? null : writeReportFile(res.markdown, { nowMs: res.nowMs });
+    if (!o.dryRun) notes.push(file ? 'bao cao: ' + file : 'khong ghi duoc file bao cao');
     if (o.out === 'obsidian' && !o.dryRun) {
       const p = putObsidian(md);
-      if (p.ok) { if (o.weekly) markRun(); notes.push('da put vao Obsidian'); md = null; }
-      else notes.push(`khong put duoc (${p.reason}) - in stdout de hub tu put`);
-    } else if (o.weekly && !o.dryRun) markRun();
+      if (p.ok) { notes.push('da put them vao Obsidian'); md = null; }
+      else notes.push(`khong day them Obsidian (${p.reason})${file ? '' : ' - in stdout de hub tu put'}`);
+    }
+    if (o.weekly && !o.dryRun && file) markRun();
     const summary = [md, notes.length && `ghi chu: ${notes.join('; ')}`].filter(Boolean).join('\n');
     emit({ summary, data: { markdown: res.markdown, notes, truncated: res.truncated, errors: res.errors }, truncated: res.truncated, raw: md ?? '' }, { json: o.json, raw: o.raw, maxBytes: o.maxBytes });
     return 0;
