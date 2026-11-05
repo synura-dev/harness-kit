@@ -4,11 +4,11 @@
   "layer": "ext",
   "entry": "observe.mjs",
   "domain": "observe",
-  "desc": "cong doc audit/du lieu: view|why|map|query|digest|prune|runs|sizes|data-prune|cost|evidence (chi doc, prune mac dinh dry-run)",
-  "cmds": "view [YYYY-MM-DD] | why | map | query --report R | digest D | prune | runs list|show | sizes | data-prune | cost | evidence",
+  "desc": "cong doc audit/du lieu: view|why|map|query|digest|prune|runs|sizes|data-prune|ledger|cost|evidence (chi doc, prune mac dinh dry-run)",
+  "cmds": "view [YYYY-MM-DD] | why | map | query --report R | digest D | prune | runs list|show | sizes | data-prune | ledger [list] | cost | evidence",
   "default": "index",
   "domains": {
-    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (gop audit, audit-query, runs)", "cmds": "view [YYYY-MM-DD] | why | map | query --report R | digest D | prune | runs list|show | sizes | data-prune | cost | evidence", "default": "index", "aliases": ["audit", "audit-query", "runs", "cost", "evidence"] }
+    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (gop audit, audit-query, runs)", "cmds": "view [YYYY-MM-DD] | why | map | query --report R | digest D | prune | runs list|show | sizes | data-prune | ledger [list] | cost | evidence", "default": "index", "aliases": ["audit", "audit-query", "runs", "cost", "evidence"] }
   },
   "aliasMap": {
     "audit": { "pass": ["view", "query", "digest", "prune", "why", "map"], "fallback": ["view"] },
