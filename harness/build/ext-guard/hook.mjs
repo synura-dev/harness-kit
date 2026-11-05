@@ -28,7 +28,7 @@ export function defaultRun(domain, args, { cwd, timeoutMs, env, stdin, bin }) {
     let err = '', done = false, child, timer;
     const fin = (v) => { if (done) return; done = true; clearTimeout(timer); resolve(v); };
     try {
-      child = spawn(process.execPath, [bin || path.join(REPO_DIR, 'bin', 'harness'), domain, ...args], { cwd, env: { ...(env || process.env), CLAUDE_PROJECT_DIR: cwd }, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
+      child = spawn(process.execPath, [bin || path.join(REPO_DIR, 'bin', 'harness'), domain, ...args], { cwd, env: { ...(env || process.env), CLAUDE_PROJECT_DIR: cwd, HARNESS_STDIN_FORWARD: '1' }, windowsHide: true, stdio: ['pipe', 'ignore', 'pipe'] });
     } catch { return fin({ error: 'spawn' }); }
     timer = setTimeout(() => { killTree(child); fin({ error: 'timeout' }); }, timeoutMs);
     child.stderr.setEncoding('utf8');

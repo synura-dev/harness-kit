@@ -133,3 +133,23 @@ test('tich hop: hooks/run.mjs PreToolUse that + registry tam co guard (hash lech
   expect(run('Glob').stdout).not.toContain('deny');
   fs.rmSync(d, { recursive: true, force: true });
 });
+test('tich hop THAT: ext-guard -> bin/harness -> ext tam doc stdin: tool cho phep exit 0, tool cam exit 2 => allow/deny dung', async () => {
+  const fs = await import('node:fs'); const os = await import('node:os');
+  const R = await import('../../cli/commands/ext-registry.mjs');
+  const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'eg-real-')));
+  const ws = path.join(d, 'ws'); const root = path.join(ws, 'ext', 'gx'); fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(path.join(root, 'main.mjs'), "export async function main(ctx, argv) { let t = ''; for await (const c of process.stdin) t += c; let j; try { j = JSON.parse(t); } catch { process.stderr.write('JSON stdin hong'); return 2; } if (j.tool_name === 'mcp__t__bad') { process.stderr.write('cam ' + j.tool_name); return 2; } return 0; }\n");
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ id: 'gx', entry: 'main.mjs', domains: ['gx'], guard: { event: 'PreToolUse', matcher: '^mcp__t__', args: ['guard'] } }));
+  const mf = path.join(d, 'config', 'ext', 'local.json');
+  const ro = { workspace: ws, machineFile: mf, confirm: () => true, coreDomains: new Set(['data']) };
+  expect((await R.register('ext/gx', ro)).code).toBe(0);
+  const env = { ...process.env, CLAUDE_PLUGIN_DATA: d, CLAUDE_PROJECT_DIR: ws, HUB_DATA_DIR: path.join(d, 'hd'), CLAUDE_AUDIT_DIR: path.join(d, 'audit') };
+  fs.mkdirSync(env.CLAUDE_AUDIT_DIR, { recursive: true });
+  const ctx = { cfg: { ...DEFAULTS, timeoutMs: 15000 }, env, list: () => R.listRegistered(ro) };
+  const ev = (tool) => ({ hook_event_name: 'PreToolUse', tool_name: tool, tool_input: {}, cwd: ws });
+  expect(await handle('PreToolUse', ev('mcp__t__ok'), ctx)).toEqual({});
+  const deny = await handle('PreToolUse', ev('mcp__t__bad'), ctx);
+  expect(deny.decision).toBe('deny'); expect(deny.reason).toContain('cam mcp__t__bad');
+  expect(await handle('PreToolUse', ev('Glob'), ctx)).toEqual({});
+  fs.rmSync(d, { recursive: true, force: true });
+}, 60000);

@@ -114,7 +114,10 @@ export function runExternal(ext, domain, argv = [], opts = {}) {
     // Qua ext-supervisor: no tu timeout/tran output va giet CA CAY (taskkill /T tren win32, process group tren posix).
     // spawnSync timeout/maxBuffer chi con la luoi du phong (giet supervisor).
     const sup = path.join(HERE, 'ext-supervisor.mjs');
-    const r = spawnSync(process.execPath, [sup, String(timeoutS * 1000), String(maxBytes), ...args], { encoding: 'utf8', timeout: timeoutS * 1000 + 15000, maxBuffer: maxBytes + 65536, killSignal: 'SIGKILL', windowsHide: true, env: { ...process.env, HARNESS_EXT: ext.id } });
+    // Hop dong stdin: chi khi env HARNESS_STDIN_FORWARD=1 (ext-guard dat) moi doc stdin cua CLI (toi da 1MB) va chuyen cho ext qua supervisor -> runner. Mac dinh stdin ext = rong (khong treo khi stdin mo).
+    let fwd;
+    if (process.env.HARNESS_STDIN_FORWARD === '1') { try { fwd = fs.readFileSync(0).subarray(0, 1048576); } catch { fwd = ''; } }
+    const r = spawnSync(process.execPath, [sup, String(timeoutS * 1000), String(maxBytes), ...args], { ...(fwd !== undefined ? { input: fwd } : {}), encoding: 'utf8', timeout: timeoutS * 1000 + 15000, maxBuffer: maxBytes + 65536, killSignal: 'SIGKILL', windowsHide: true, env: { ...process.env, HARNESS_EXT: ext.id } });
     const supMark = (why) => String(r.stderr || '').includes(`[ext-supervisor] ${why}`);
     if (r.status === 124 && supMark('timeout')) return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
     if (r.status === 125 && supMark('overflow')) return fail(EXIT.OVERFLOW, 'output-overflow', `output > ${maxBytes} byte`);

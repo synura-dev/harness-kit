@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.6
+- Sua loi ext-guard: stdin khong toi ext (ext-host spawnSync khong co input, ext-supervisor dat stdin 'ignore') nen ext guard nhan JSON rong va exit 2 cho moi tool. Hop dong: `harness <ext> ...` voi env HARNESS_STDIN_FORWARD=1 (ext-guard dat) chuyen NGUYEN stdin (toi da 1MB) toi ext qua ext-host -> ext-supervisor -> ext-runner; ext doc process.stdin. Khong co env thi stdin ext rong nhu cu (khong treo). Test tich hop ext-guard -> bin/harness -> ext tam.
+
 ## 0.3.5
 - Sua loi ext-guard: matcher bi ep neo `^(?:...)$` nen `^mcp__obsidian__` khong khop tool that (mcp__obsidian__vault_delete) va bi cho qua. Nay dung tim kiem (new RegExp(matcher)) nhu matcher hook Claude Code; them test voi ten tool that + test tich hop qua hooks/run.mjs.
 

@@ -3,6 +3,7 @@
 // Ly do: spawnSync timeout chi giet con truc tiep, chau mo coi (nhat la Windows). Event loop o day ranh (code ext chay o tien trinh con).
 // argv: <timeoutMs> <maxBytes> <args cho node...>
 import { spawn, spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 
 export const MARK = '[ext-supervisor]';
 const win = process.platform === 'win32';
@@ -17,7 +18,10 @@ export function killTree(pid) {
 function main() {
   const [tms, maxB, ...cmd] = process.argv.slice(2);
   const timeoutMs = Math.max(1, Number(tms) || 30000), maxBytes = Math.max(1, Number(maxB) || 262144);
-  const child = spawn(process.execPath, cmd, { stdio: ['ignore', 'pipe', 'pipe'], detached: !win, windowsHide: true, env: process.env });
+  const fwd = process.env.HARNESS_STDIN_FORWARD === '1';
+  let inp = ''; if (fwd) { try { inp = fs.readFileSync(0); } catch { inp = ''; } }
+  const child = spawn(process.execPath, cmd, { stdio: [fwd ? 'pipe' : 'ignore', 'pipe', 'pipe'], detached: !win, windowsHide: true, env: process.env });
+  if (fwd) { child.stdin.on('error', () => {}); child.stdin.end(inp); }
   let bytes = 0, ended = false;
   const stop = (code, why) => {
     if (ended) return; ended = true; clearTimeout(timer);
