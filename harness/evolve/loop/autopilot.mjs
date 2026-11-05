@@ -217,8 +217,9 @@ export async function runAutopilot(o = {}) {
 }
 
 // ---- hang cho (review-queue): nguoi duyet theo lo, approve chi qua TTY ----
+const isTestEnv = () => process.env.NODE_ENV === 'test'; // bun test tu dat NODE_ENV=test; ngoai test opts.confirm bi bo qua
 export function confirmTty(msg, opts) {
-  if (opts.confirm) return Promise.resolve(!!opts.confirm(msg));
+  if (opts.confirm && isTestEnv()) return Promise.resolve(!!opts.confirm(msg));
   const tty = opts.isTTY ?? (process.stdin.isTTY && process.stdout.isTTY);
   if (!tty) return Promise.resolve(null);
   return import('node:readline').then((rl) => new Promise((res) => {
@@ -258,6 +259,7 @@ export async function queueOp(o = {}) {
   if (ok === null) return { code: 2, reason: 'queue --approve: can TTY de xac nhan (agent khong tu duyet)' };
   if (!ok) return { code: 1, reason: 'khong dong y' };
   let out = { manual: true };
+  if (!isTestEnv() && !(o.isTTY ?? process.stdin.isTTY)) return { code: 2, reason: 'queue --approve: can TTY de ap dung muc 2' };
   if (q.pid) { const r = apply(q.pid, { ...o, approve: true }); if (!r.ok) return { code: r.code || 1, reason: r.reason }; out = { ver: r.ver, target: r.target }; }
   q.status = 'approved'; q.decided = new Date().toISOString(); if (out.ver) q.ver = out.ver; save();
   return { code: 0, id, status: 'approved', ...out };
