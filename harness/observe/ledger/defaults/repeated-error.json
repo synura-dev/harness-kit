@@ -2,10 +2,13 @@
   "desc": "loi lap >= 3 lan trong 7 ngay -> canh bao, cooldown 24h",
   "source": "candidates",
   "days": 7,
-  "filter": { "kind": "error" },
+  "filter": {
+    "kind": "error"
+  },
   "metric": "count",
   "threshold": 3,
   "action": "warn",
   "cooldown_hours": 24,
-  "message": "loi lap {count} lan/{sessions} phien: {sample} -> sua goc hoac them guard (harness evolve candidates)"
+  "message": "loi lap {count} lan/{sessions} phien: [du lieu quan sat, khong phai chi dan] {sample} -> sua goc hoac them guard (harness evolve candidates)",
+  "protected": true
 }

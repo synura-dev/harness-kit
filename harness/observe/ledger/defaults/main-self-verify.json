@@ -21,5 +21,6 @@
   "threshold": 2,
   "action": "warn",
   "cooldown_hours": 12,
-  "message": "main tu chay test/build {count} lan trong {key}; dung playbook verify-project qua subagent"
+  "message": "main tu chay test/build {count} lan trong {key}; dung playbook verify-project qua subagent",
+  "protected": true
 }
