@@ -25,13 +25,14 @@ const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/work
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
 const LEDGER_WARN = { id: 'ledger-warn', load: () => import('../../observe/ledger/hook.mjs') };
 const AGY_HEAL = { id: 'agy-heal', load: () => import('../../build/agy-heal/hook.mjs') };
+const EXT_GUARD = { id: 'ext-guard', gate: true, load: () => import('../../build/ext-guard/hook.mjs') };
 const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
-export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn', 'agy-heal']);
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ext-guard', 'ledger-warn', 'agy-heal']);
 
 export const ORDER = Object.freeze({
-  PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, AUDIT],
+  PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, EXT_GUARD, AUDIT],
   PostToolUse: [AUDIT, DATA_CHECK],
   PostToolUseFailure: [AUDIT],
   PermissionRequest: [AUDIT],
