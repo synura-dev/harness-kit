@@ -1,43 +1,9 @@
 # constrain
 
-Nhóm Ràng buộc: chặn hành vi xấu và kiểm tất định. Module hiện có: guard, approval, bash-guard, model-policy, verify-gate, proc-orphans, worktree. (`untrusted` chưa có, còn là thiết kế.) Thiết kế: `docs/HARNESS-DESIGN.md` mục 4.
+Nhóm Ràng buộc: chặn hành vi xấu và kiểm tất định. Module hiện có: guard (protectedPaths, dữ liệu harness), bash-guard (timeout), model-policy, proc-orphans, worktree. Chặn cứng (git push, reset --hard, migrate, deploy, ssh, force push, xóa đệ quy) giao lớp quyền native `ask`/`deny` của Claude Code, core không tự parse shell. Thiết kế: `docs/HARNESS-DESIGN.md` mục 4.
 Mỗi extension ở `constrain/<tên>/manifest.json`. Đăng ký domain cổng: `kind: "cli"` + `domain` (bắt buộc); có `domains` thì đăng ký từng mục (bỏ qua `domain`). Hook dùng `kind: "hook"`, không thành domain.
 Import: chỉ `core` và chính nhóm con của mình (`constrain:self`).
 Mọi module được gọi qua dispatcher `harness/hooks/dispatch/` (bảng `modules.mjs`); không còn đăng ký trực tiếp từ settings.
-
-## approval (PreToolUse, Bash|PowerShell)
-
-Duyet theo bac cho lenh shell. Chi xet TEXT lenh (best-effort, co the bi lach bang bien/script sinh lenh); hook la lop dau, khong thay review.
-
-| Bac | Hanh vi | Luat (id) |
-|---|---|---|
-| `deny` | chan cung (`permissionDecision: deny`) | `git-force-push` (tai dung tu guard), `recursive-delete` (rm -r/-rf/--recursive, Remove-Item -Recurse/-r, rmdir/rd/del /s, rimraf, git rm -r), `mass-delete` (dem duoc >= `delete.threshold`=10 file), `git-clean` (git clean khong -n), `find-delete` (find -delete / -exec rm), `pipe-delete` (xargs rm, `... \| Remove-Item`) |
-| `ask` | hoi nguoi (`permissionDecision: ask`) | `git-push` (tru --dry-run/-n), `deploy-script`, `deploy-cli`, `deploy-file`, `migrate`, `ssh-restart` (ssh ... reload/restart), `delete-unknown-count`, `encoded-command` (pwsh -EncodedCommand/-enc/-e/-ec; giai ma duoc thi chay du luat tren lenh giai ma -> co the thanh deny), `pipe-shell` (`... \| bash`/`sh -s`/`pwsh -`), `rmdir-multi` (bash `rmdir -p`/`--parents` (moi tien to) hoac nhieu/glob thu muc; rmdir chi xoa thu muc RONG nen 1 thu muc = vo hai, khong can thiep) |
-| none | `{}` khong can thiep | moi lenh khac |
-
-Nhieu luat khop: bac cao nhat thang (deny > ask). Moi quyet dinh ask/deny (va `fail-open`, `config-warning`) ghi qua `core/audit/gate-event.mjs` `recordGate` -> `<audit>/date=D/type=gate/<sid>.jsonl`, `data.gate = {kind:"approval", decision, tier, rule, reason, tool, target}`. KHONG ghi noi dung lenh: `target` = `sha256:<16 hex> len=N`.
-
-### Dem file xoa (tat dinh)
-- Tach lenh bang bo tach tuyen tinh (quote '/", escape `\` cho bash, backtick + `,` cho PowerShell; `;` `&&` `||` `|` `&` xuong dong `(` `)` `` ` `` la ranh gioi). `$(...)` va `` `...` `` NAM TRONG nhay kep van duoc tach va quet (shell van thuc thi; PowerShell `"$(...)"` cung vay); nhay don khong thuc thi -> khong quet.
-- Bo qua wrapper (`sudo -u X`, `env -i X=1`, `timeout DUR`, `nohup`, `time`, `nice`, `npx`...; co nhan gia tri duoc bo dung), de quy vao `eval`/`iex`/`Invoke-Expression`, `env -S`, `npx -c`, `xargs [opts] sh -c`, `find -exec sh -c`, `sh/bash -c` (ca co gop `-lc/-ec/-xc`), `pwsh/powershell` (`-c/-com/-Command[:x]`, `/Command`, KHONG co -Command -> doi so vi tri sau cac co `-NoProfile -ExecutionPolicy X ...` la lenh; `-File` = script, bo qua), `cmd /s /c` (`/S/C`, `/k`), `wsl [-d X] [-e] <lenh>`, `ssh host <lenh>` (sau <= `delete.maxDepth`).
-- Dem = so doi so + mo rong glob 1 cap theo `cwd` cua payload (doc thu muc <= `maxDirEntries`). Bien (`$X`, `$(...)`), brace `{..}`, glob nhieu cap, `-Include/-Exclude/-Filter`, `-EncodedCommand` -> khong xac dinh -> `delete.unknownCount` (mac dinh `ask`).
-- Xoa de quy / thu muc: khong dem duoc -> luon `deny` (gom `rm --r/--rec/...` moi tien to cua `--recursive`). `rmdir dir` (1 thu muc, khong /s), `git rm --cached` khong can thiep.
-
-### Ranh gioi guard vs approval
-- `harness/constrain/guard`: chan doc/thao tac DB, cat tu xa, chay script tu xa, lenh qua dai, va `git-force-push` (luat loi, so huu regex). Approval KHONG chep regex nay: nap `denyPatterns[id=git-force-push]` tu `harness/constrain/guard/hook.config.json` qua `reuseRules` (du lieu). Thieu/hong file guard -> canh bao `reuse-missing`, force push roi ve `ask` (git-push) - guard van chan doc lap vi hai hook cung dang ky.
-- Approval chi them: bac `ask` (push thuong, deploy, migrate, ssh reload/restart) va `deny` cho xoa hang loat - guard chua co.
-- Lenh > `maxCommandChars`: approval bo qua (guard chan `command-too-long`).
-- `harness/constrain/bash-guard`: chi gan timeout + chan python stdin/heredoc dai; khong co luat push/deploy/xoa -> khong trung.
-
-### Cau hinh (du lieu)
-`approval.config.json` < `config/approval/{default,local}.json` (goc hub) < env `HARNESS_APPROVAL_<KEY>` (core `loadHookConfig`). Khoa: `mode` (`enforce`|`audit`: audit chi ghi `would-<tier>`, khong output), `logAllow`, `askRules[{id,regex,unless?,reason,disable?}]`, `reuseRules[{file,ids,tier}]`, `delete{threshold,unknownCount,maxDirEntries,maxDepth,posix,ps,cmd,dirOnly,alwaysRecursive,wrappers,shells}`. Them luat = 1 muc JSON + 1 dong trong ASK/DENY/NONE cua test.
-
-### Van hanh
-- Fail-open: stdin hong/qua lon/timeout `hardTimeoutMs` 2.5s, loi noi bo, watchdog 4s -> `{}` exit 0 (ghi `fail-open`).
-- Regex bounded (`{0,N}`, khong `\s*\s*` long nhau); test doi khang < 250ms/chuoi, tong < 2s.
-- Test: `timeout 120 node --test harness/constrain/approval/hook.test.mjs`
-- Gioi han da biet: nhac lenh trong `echo`/`-m "..."` co the bi ask/deny nham (uu tien khong bo lot); khong bat bien shell chua co (`F=-rf; rm $F x` -> ask), script/alias sinh lenh; agy (`run_command`) chua ho tro.
-- Dang ky: module `approval` trong `harness/hooks/dispatch/modules.mjs` (gate, su kien PreToolUse, tool `Bash|PowerShell`). KHONG dang ky rieng trong `.claude/settings.json`; settings chi tro vao `dispatch/run.mjs PreToolUse`.
 
 ## bash-guard
 
@@ -105,27 +71,7 @@ Them vao `.claude/settings.json` (PreToolUse, matcher `Agent`, timeout ngan):
 `{"matcher":"Agent","hooks":[{"type":"command","command":"node \"$CLAUDE_PROJECT_DIR/harness/constrain/model-policy/hook.mjs\"","timeout":3}]}`
 
 Test dung config tam (`HARNESS_CONFIG_DIR`/`configDir`) cho bang role; co 1 test doc config hub that.
-Test: `bun test harness/constrain/model-policy`; eval: `node harness/cli/harness.mjs eval run`.
-
-## verify-gate
-
-Hook `Stop` và `SubagentStop`: chặn đóng 1 lần khi đã sửa code mà chưa có bằng chứng khách quan.
-
-- **Phạm vi**: `Stop` = sự kiện của main (không `agent_id`) sau `UserPromptSubmit` cuối (không có thì cả phiên đọc được); `SubagentStop` = sự kiện có đúng `agent_id`.
-- **Sửa code**: `PostToolUse` Edit/Write/MultiEdit/NotebookEdit vào file có đuôi trong `codeExts` (`.md`, `.json`... không tính); hoặc lệnh Bash/PowerShell (`PostToolUse` lẫn `PostToolUseFailure`) ghi file mã: redirect `>`/`>>`/`&>`, `tee`, `sed -i`, `perl -i`, `cat > f <<EOF`, `Set-Content`/`Add-Content`/`Out-File`/`New-Item`, `cp`/`mv`/`Copy-Item`/`Move-Item` (đích). Tất định từ lệnh trong audit; `target` bị cắt (160 ký tự) thì xét cả `target` và `cmd_line` (dòng đầu) — phần sau điểm cắt không thấy được. Không bắt: ghi qua interpreter (`node -e`, `python -c`), `git apply`/`patch`.
-- **Bằng chứng code**: Bash/PowerShell có loại ∈ test|tsc|build|lint với kết quả pass, **sau** lần sửa cuối. Loại: tin `data.verify_kind` của audit (kể cả `null`); thiếu khóa (PowerShell, audit cũ) thì `verifyKind` (`core/audit/fingerprint.mjs`) trên `target`/`cmd_line`. Lệnh có cờ help/version/list/no-run/dry-run (`tsc --version`, `jest --listTests`, `cargo test --no-run`, `go test -run ^$`...) không phải bằng chứng. Kết quả: `data.verifier_outcome` nếu có; thiếu (PowerShell, hash/health) thì suy từ `PostToolUse ok=true`, không chạy nền, exit 0; `PostToolUseFailure` = fail.
-- **Phạm vi bằng chứng**: thư mục chạy = `cwd` của sự kiện (thiếu -> `cwd` phiên) + chuỗi `cd/pushd/Set-Location X &&` đầu lệnh. Mỗi file mã đã sửa phải có bằng chứng pass sau lần sửa cuối mà thư mục chạy là tổ tiên của file hoặc cùng git root (thư mục chứa `.git`, worktree là dự án riêng). Không xác định được (`cd $VAR`, `~`, lệnh bị cắt, file thiếu đường dẫn tuyệt đối và không có cwd) -> coi như cùng cwd phiên, ghi `cwd_assumed=N` vào vết. Hạn chế: `files_touched` của file ngoài cwd chỉ còn tên file; gate ưu tiên `target` tuyệt đối.
-- **Deploy** theo lệnh thực thi (`deployPatterns`, neo `^`, thử trên từng đoạn `&&`/`||`/`;`/`|` đã bỏ `sudo`/`env`/`FOO=bar`/`timeout`/`&`): `npm|bun|pnpm|yarn run deploy`, `./deploy.sh`, `bash|pwsh ... deploy*.sh|ps1`, `pm2 reload`, `systemctl restart`, `kubectl apply`, `docker compose up`, `vercel --prod`, `fly|netlify|firebase deploy`...; `ssh ...` xét thêm lệnh từ xa. Chữ "deploy" trong đường dẫn/đối số (`cat docs/deploy-x.log`, `ls deploy/`) không tính. Cần cả `hash` và `health` pass sau lệnh deploy cuối.
-- **Chỉ đọc/tra cứu**: cho qua.
-- **Chặn tối đa 1 lần/lượt**: `stop_hook_active=true` hoặc đã có dấu `type=gate decision=block` trong phạm vi -> cho qua + ghi vết.
-- **Fail-open + ghi vết**: thiếu `session_id`/`agent_id`, tỉ lệ dòng audit hỏng > `maxBadRatio` (0.2; dòng hỏng lẻ bị bỏ qua và ghi `bad=N`, dòng cuối chưa ghi xong không tính), đọc quá trần (`maxFileBytes`, `maxTotalBytes`), timeout (`timeoutMs`), lỗi nội bộ.
-- **Ghi vết**: qua API chung `core/audit/gate-event.mjs` `recordGate`: audit `type=gate`, `event=Gate`, `data.gate={kind:gate, decision, hook:verify-gate, rule:<mã>, reason}` (không ghi nội dung lệnh/file).
-- **route-check** (`SubagentStop`, key `routeFields`: `warn` mặc định | `block` | `off`): báo cáo cuối (`last_assistant_message`, thiếu thì transcript) có dòng `status:` thì phải có `serves:`, `assumptions:`, `adopted:` không rỗng và `counter:` không phải "không có/none/N/A/-" và có dẫn chứng. Thiếu: `warn` = `systemMessage` (qua dispatcher, merge.mjs) không chặn; `block` = `{decision:"block"}` + lý do, chỉ 1 lần/lượt (`stop_hook_active` -> hạ xuống warn). `status:` kích hoạt khi là dòng đầu hoặc giá trị PASS|FAIL|BLOCKED|PARTIAL; dẫn chứng counter = path:dòng, URL, hoặc số có đơn vị/%. Ghi audit gate `rule=route-check` (`missing=...`/`ok`). Không có `status:` thì bỏ qua.
-- Kết luận chỉ từ dữ liệu audit/exit code. Phụ thuộc hook audit chạy `PostToolUse`/`PostToolUseFailure`/`UserPromptSubmit`.
-
-Cấu hình: `hook.config.json` (+ `config/verify-gate/local.json`), tắt nhanh bằng env `HOOK_VERIFY_GATE_ENABLED=false`.
-Adapter: claude native. agy: chưa có (không có sự kiện Stop có quyền chặn tương đương đã kiểm chứng) — `adapters.agy = none`.
-Test: `bun test harness/constrain/verify-gate`.
+Test: `bun test harness/constrain/model-policy`.
 
 ## worktree
 
@@ -157,14 +103,6 @@ Danh sach tien trinh duoc cache 60s (`scanCacheTtlSec`, 0 = tat) o `data/system/
 ### Test
 `bun test harness/constrain/proc-orphans`
 
-Don dep that: `node harness/cli/commands/proc-watch.mjs` (mac dinh chi log; log o data/system/watchdog/date=YYYY-MM-DD/proc-watch.jsonl).
-`--kill` chi kill con chau cua claude/agy (ke ca cay mo coi tu shell tool Bash), ten trong allowlist, tuoi >= `--kill-age-min` (30), khong khop protect (claude, cmd, chrome, telegram, server.ts, mcp...). Nen kem `--only-pid N` khi thu.
-
-### Chay dinh ky (DE XUAT, CHUA TAO - can hoi human truoc)
-Chi che do log, moi 15 phut. Windows Task Scheduler (khong tao khi chua duoc dong y):
-`schtasks /Create /SC MINUTE /MO 15 /TN HubProcWatch /TR "node \"<HUB>\harness\cli\commands\proc-watch.mjs\" --timeout-ms 15000"`
-Hoac trong phien Claude: skill `loop` (`/loop 15m node harness/cli/commands/proc-watch.mjs`). Khong them `--kill` vao lich cho den khi xem log vai ngay va xac nhan khong co false positive.
-Kiem run treo cua dispatch: `node harness/cli/harness.mjs dispatch-worker --status`.
 
 Khong co adapters/: claude native (hook.mjs); agy = `none` trong manifest (ap dung duoc nhung chua lam).
 

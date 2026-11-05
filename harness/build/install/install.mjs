@@ -1,6 +1,6 @@
-// harness install: kiem Node/bun, build skill (harness/skills -> .claude/.agents, --adopt), doctor rut gon, in huong dan dang ky hook.
-// Mac dinh GHI (apply); --dry-run chi bao. Idempotent (skills build bo qua khi hash khop). KHONG sua .claude/settings.json hay hooks.json.
-// Khong import build/skills (IMPORT_RULES build:self = cung nhom con): goi CLI `skills` qua tien trinh con (--json). Doctor cung chay qua tien trinh con co timeout.
+// harness install: kiem Node/bun, doctor rut gon, in huong dan dang ky hook.
+// Mac dinh GHI (apply); --dry-run chi bao. KHONG sua .claude/settings.json hay hooks.json.
+// Doctor chay qua tien trinh con co timeout.
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from '../../core/runtime/proc.mjs';
@@ -35,12 +35,12 @@ export function runDoctor(root, { timeoutMs = DOCTOR_TIMEOUT_MS } = {}) {
 const HOOK_GUIDE = [
   'Dang ky hook (lam tay, install KHONG sua settings):',
   '  1. node harness/cli/commands/doctor.mjs      -> in khoi hooks cho MAY NAY',
-  '  2. Dan vao .claude/settings.json (Claude) va .agents/hooks.json (agy), roi: node harness/tools/sync.mjs --check',
+  '  2. Dan vao .claude/settings.json (Claude) va .agents/hooks.json (agy)',
 ];
 
 /**
  * install({root, apply, skipDoctor, runtime, doctor}) -> {apply, steps:[{step, ok, lines[]}], ok}
- * runtime/doctor: ham tiem vao (test). Khong ghi gi ngoai skills build khi apply.
+ * runtime/doctor: ham tiem vao (test). Khong ghi gi khi apply.
  */
 export function install({ root, apply = true, skipDoctor = false, timeoutS = 60, runtime = checkRuntime, doctor = runDoctor } = {}) {
   const steps = [];
