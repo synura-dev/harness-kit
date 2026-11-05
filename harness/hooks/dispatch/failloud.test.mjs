@@ -13,7 +13,15 @@ const cfg = { maxInputBytes: 1000000, budgetsMs: { PreToolUse: 1500 } };
 const run = (p, stdin = input) => dispatch({ event: 'PreToolUse', stdin, cfg, profile: p });
 const hk = (source) => ({ code: 'HK-GATE-001', severity: 'warn', cause: 'gate hook loi, bo qua (fail-open)', fix_command: 'harness doctor', next_step: 'chay harness doctor', safe: true, source });
 const HK = (m, kind) => `HKERR ${JSON.stringify(hk(`${m}:${kind}`))}\n`;
-const allow = (r) => { expect(r.code).toBe(0); expect(r.stdout).toBe('{}'); };
+const allow = (r) => { expect(r.code).toBe(0); expect(r.stdout).not.toContain('deny'); };
+
+test('gate loi -> additionalContext canh bao lop bao ve khong chay + trace audit', async () => {
+  const boom = mod('gwarn', { handle: async () => { throw new Error('x'); } });
+  const r = await run(profile(entry(boom, true)));
+  allow(r);
+  expect(r.stdout).toContain('lop bao ve gwarn khong chay');
+  expect(r.records.some((x) => JSON.stringify(x).includes('gwarn'))).toBe(true);
+});
 
 test('gate onError open loi/timeout -> allow + 1 dong HKERR; khong lo noi dung', async () => {
   const boom = mod('gboom', { handle: async () => { throw new Error('SECRETINPUT'); } });

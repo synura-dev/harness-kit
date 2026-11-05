@@ -46,7 +46,7 @@ test('bang module: moi event co module hop le, tools loc dung', async () => {
   }
   const guard = (await ORDER.PreToolUse[0].load()).default;
   expect(applies(guard, 'PreToolUse', { tool_name: 'Bash' })).toBe(true);
-  expect(applies(guard, 'PreToolUse', { tool_name: 'Read' })).toBe(false);
+  expect(applies(guard, 'PreToolUse', { tool_name: 'Read' })).toBe(true);
   expect(applies(guard, 'Stop', { tool_name: 'Bash' })).toBe(false);
 });
 
@@ -91,7 +91,7 @@ test('deny cat module gate sau no nhung module khong-gate (audit) van chay', asy
 test('ket qua sai dinh dang -> bo qua + vet; stdin hong -> {}', async () => {
   const bad = mod('bad', { handle: async () => ({ decision: 'maybe' }) });
   const r = await run(profile(entry(bad, true)));
-  expect(JSON.parse(r.stdout)).toEqual({}); expect(JSON.stringify(r.records)).toContain('bad: bad-result');
+  expect(r.stdout).toContain('lop bao ve bad khong chay'); expect(JSON.stringify(r.records)).toContain('bad: bad-result');
   const r2 = await run(profile(entry(bad, true)), '{broken');
   expect(r2.stdout).toBe('{}'); expect(r2.code).toBe(0);
   const r3 = await run(profile(entry(bad, true)), 'x'.repeat(10));

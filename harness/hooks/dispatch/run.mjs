@@ -105,15 +105,16 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
   const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [] };
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
+  const gw = (id, kind) => { state.warns.push(gateWarn(id, kind)); state.items.push({ id: 'dispatch', result: { additionalContext: `lop bao ve ${clean(id, /[^\w.-]/g)} khong chay (fail-open)` } }); };
 
   const work = async () => {
     const mods = await loadModules(ev, { only, validate: validateHookModule, order: profile.order, modules: cfg.modules });
     for (const m of mods) {
-      if (m.error) { trace(m.id, m.error); if (m.gate) state.warns.push(gateWarn(m.id, m.error)); continue; }
+      if (m.error) { trace(m.id, m.error); if (m.gate) gw(m.id, m.error); continue; }
       if (!applies(m.mod, ev, state.input)) continue;
       if (m.gate && state.denied) continue; // deny cat chuoi gate; audit van chay
       const left = budget - (Date.now() - startedAt);
-      if (left < 50) { trace(m.id, 'budget'); if (m.gate && m.mod.onError !== 'closed') state.warns.push(gateWarn(m.id, 'budget')); continue; }
+      if (left < 50) { trace(m.id, 'budget'); if (m.gate && m.mod.onError !== 'closed') gw(m.id, 'budget'); continue; }
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
       try {
@@ -124,7 +125,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       state.timings.push({ id: m.id, ms: Date.now() - t0, ...(kind ? { err: kind } : {}) });
       if (kind) {
         trace(m.id, kind);
-        if (m.gate && m.mod.onError !== 'closed') state.warns.push(gateWarn(m.id, kind));
+        if (m.gate && m.mod.onError !== 'closed') gw(m.id, kind);
         if (m.mod.onError === 'closed') { state.items.push({ id: m.id, result: { decision: 'deny', reason: `dispatch[${m.id}]: ${kind} (closed)` } }); if (m.gate) state.denied = true; }
         continue;
       }
