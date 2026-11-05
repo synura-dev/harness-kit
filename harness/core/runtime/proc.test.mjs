@@ -67,6 +67,17 @@ test('sweepLedger: PID chet -> xoa; qua han + con song -> kill; con han -> giu; 
   expect(read(d).map((e) => e.key)).toEqual(['fresh']);
 });
 
+test('sweepLedger: kill chay SAU khi nha khoa so (khoa khong bi giu trong luc taskkill) va muc da bo khoi so', () => {
+  const d = tmp();
+  const f = ledgerPath(d);
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  const now = 1e12;
+  fs.writeFileSync(f, JSON.stringify({ entries: [{ pid: 2, key: 'over', cmd: 'b', deadline: now - 1 }, { pid: 3, key: 'fresh', cmd: 'c', deadline: now + 1e6 }] }));
+  const seen = [];
+  sweepLedger({ dir: d, now, alive: () => true, kill: (p) => seen.push({ p, locked: fs.existsSync(`${f}.lock`), keys: read(d).map((e) => e.key) }), matches: () => true });
+  expect(seen).toEqual([{ p: 2, locked: false, keys: ['fresh'] }]);
+});
+
 test('check proc-direct bat goi thang child_process, bo qua test/ngoai le', () => {
   const v = checkProcDirect([
     { path: 'harness/a.mjs', text: "import { spawn } from 'node:child_process';" },

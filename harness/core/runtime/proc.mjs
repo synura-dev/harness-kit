@@ -100,20 +100,22 @@ export function matchEntry(e, live, tol = SWEEP.startToleranceMs) {
  */
 export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = killTree, matches = () => null, staleAfterMs = SWEEP.staleAfterMs } = {}) {
   const f = ledgerPath(dir);
-  let removed = 0, killed = 0;
-  updateProcLedger(f, (es) => {
-    const keep = []; removed = 0; killed = 0;
+  let removed = 0, killed = 0; let toKill = [];
+  // Trong khoa chi doc + quyet dinh + ghi so; kill (taskkill dong bo, co the toi 10s/PID) lam SAU khi nha khoa (khoa stale 15s).
+  const ok = updateProcLedger(f, (es) => {
+    const keep = []; removed = 0; killed = 0; toKill = [];
     for (const e of es) {
       if (!alive(e.pid)) { removed++; continue; }
       if (e.deadline > now) { keep.push(e); continue; }
       let m = null; try { m = matches(e.pid, e.cmd, e); } catch { m = null; }
-      if (m === true) { kill(e.pid); killed++; removed++; continue; }
+      if (m === true) { toKill.push(e.pid); killed++; removed++; continue; }
       if (m === false) { removed++; continue; }
       if (now - e.deadline >= staleAfterMs) { removed++; continue; } // khong xac minh duoc: chi bo muc, khong kill
       keep.push(e);
     }
     return removed ? keep : null;
   });
+  if (ok) for (const pid of toKill) { try { kill(pid); } catch { /* da chet */ } }
   return { removed, killed };
 }
 
