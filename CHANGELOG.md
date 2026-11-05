@@ -2,6 +2,11 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.0
+- Slimmer core: runtime reduced from 17,959 to about 11,300 lines. Removed approval, verify-gate, diff-review, evidence, contract and storage mv; dev tooling moved into dev/.
+- Hard blocks now rely on native permissions (PowerShell included) instead of custom guard logic; medium security findings fixed in 8 fix(security) commits.
+- PID ledger is append-only; proc-orphans no longer reports the same process repeatedly.
+
 ## 0.2.3
 - Release of the changes previously listed under Unreleased (ledger, evolve patterns, guard protectedPaths, knowledge module removal).
 - BREAKING: removed the knowledge module. `harness knowledge ...` (vault gateway: put/get/links/query/context/map/index/check/prune/migrate) and the `knowledge-inject` hook (UserPromptSubmit/SessionStart/SubagentStart context injection) are gone; the dispatcher keeps only `audit` on UserPromptSubmit/SubagentStart. The harness is a mechanism layer and no longer holds knowledge content; read/write notes via your own tool (e.g. `harness obsidian`).
