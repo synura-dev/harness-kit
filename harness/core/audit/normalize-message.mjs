@@ -2,16 +2,17 @@
 import { createHash } from 'node:crypto';
 
 const QUOTED_PATH = /(["'`])(?:[^"'`\r\n]*[\\/])[^"'`\r\n]*\1/g;
-// Duong dan Windows co dau cach/[]/-: toi cuoi chuoi (chi khi chay den het) hoac qua cac doan co dau phan cach roi 1 doan cuoi.
-const WIN_TAIL = /[A-Za-z]:[\\/][^"'<>|*?:,;\r\n]*?(?=\s*$)/g;
+// Duong dan Windows: dau cach chi nam trong cac doan co dau phan cach theo sau; doan cuoi khong co dau cach (giu "is locked", ma loi...).
+const WIN_TAIL = /[A-Za-z]:[\\/](?:[^\s"'<>|*?:,;\\/]+(?: [^\s"'<>|*?:,;\\/]+)*[\\/])*[^\s"'<>|*?:,;\\/]*(?: (?!E[A-Z]+\b)[A-Z0-9[][^\s"'<>|*?:,;\\/]*)*/g;
 const WIN_SEGS = /[A-Za-z]:[\\/](?:[^\\/"'<>|*?:,;\r\n]+[\\/])+[\w.@~+[\]-]*/g;
 const WIN_ABS =/[A-Za-z]:[\\/][^\r\n"'<>|*?]*?\.[A-Za-z0-9]{1,6}(?![\w])|[A-Za-z]:[\\/][^\s"'<>|*?,;)]*/g;
 const REL_DOT = /(?<![\w.])\.{1,2}[\\/][^\s"'<>|*?,;)]*/g;
 const WIN_SEG = /(?<![\w<])[\w.@~+-]+(?:\\[\w.@~+-]+)+/g;
 const UNIX_ABS = /(?<![\w.:<])\/(?:[\w.@~+-]+\/)*[\w.@~+-]+/g;
-// POSIX co dau cach giua chuoi: tu sau dau cach phai bat dau bang chu HOA/so/[/- (tranh nuot "and", "not found"...).
-const UNIX_SEG = String.raw`[\w.@~+[\]-]+(?: [A-Z0-9[-][\w.@~+[\]-]*)*`;
-const UNIX_SEGS = new RegExp(String.raw`(?<![\w.:<])\/(?:${UNIX_SEG}\/)+${UNIX_SEG}`, 'g');
+// POSIX: tuong tu, dau cach chi trong doan non-cuoi.
+const UNIX_SEG = String.raw`[\w.@~+[\]-]+(?: [\w.@~+[\]-]+)*`;
+const UNIX_LAST = String.raw`[\w.@~+[\]-]+`;
+const UNIX_SEGS = new RegExp(String.raw`(?<![\w.:<])\/(?:${UNIX_SEG}\/)+${UNIX_LAST}`, 'g');
 const UNIX_REL =/(?<![\w.:<\\])[\w.@~+-]+(?:\/[\w.@~+-]+)+/g;
 
 export const TRUNC_PREFIX_MIN = 80; // chi gop ban bi cat "..." voi ban day du khi tien to >= 80 ky tu

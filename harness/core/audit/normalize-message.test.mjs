@@ -86,3 +86,20 @@ test('HookRun khong tinh la loi tool', () => {
   const h = { type: 'hook', event: 'HookRun', ok: false, tool: 'Bash', ts: 't', data: { error: 'x' } };
   expect(repeatedFailureCandidates([h, h, h], 'n').length).toBe(0);
 });
+
+test('duoi sau duong dan giu nguyen: loi khac nghia khong gop', () => {
+  expect(fp('spawn /bin/sh ENOENT')).not.toBe(fp('spawn /bin/sh EACCES'));
+  expect(fp('File C:\\x\\y.json is locked')).not.toBe(fp('File C:\\x\\y.json not found'));
+  expect(normalizeFull('File C:\\x\\y.json is locked').text).toContain('is locked');
+});
+test('duong dan co dau cach van gop', () => {
+  expect(fp('Path does not exist: E:\\a b\\[New] c\\d')).toBe(fp('Path does not exist: E:\\q r\\[New] z\\w'));
+  expect(normalizeFull('Path does not exist: E:\\a b\\[New] c\\d').text).toBe('Path does not exist: <path>');
+});
+test('khong ReDoS tren chuoi dai', () => {
+  for (const s of ['C:\\' + 'a '.repeat(5000), '/' + 'a '.repeat(5000), 'C:\\' + 'a b\\'.repeat(2500)]) {
+    const t0 = performance.now();
+    normalizeFull(s);
+    expect(performance.now() - t0).toBeLessThan(50);
+  }
+});
