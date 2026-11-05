@@ -292,3 +292,6 @@ export function readLog(o = {}) {
     return { items: items.slice(-lim), total: items.length, truncated: st.size > max ? 'max-bytes' : null };
   } finally { fs.closeSync(fd); }
 }
+
+// Dung lai boi evolve patterns (doc audit cung cach, cung tran).
+export { ctx as auditCtx, nestedDateDirs };
