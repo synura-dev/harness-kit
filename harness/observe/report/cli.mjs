@@ -42,7 +42,7 @@ export async function main(argv = process.argv.slice(2)) {
       if (p.ok) { notes.push('da put them vao Obsidian'); md = null; }
       else notes.push(`khong day them Obsidian (${p.reason})${file ? '' : ' - in stdout de hub tu put'}`);
     }
-    if (o.weekly && !o.dryRun && file) markRun();
+    if (o.weekly && !o.dryRun) markRun(undefined, Date.now(), file ? null : 'khong ghi duoc file bao cao'); // loi van backoff 7 ngay, khong spawn lai moi 10 phut
     const summary = [md, notes.length && `ghi chu: ${notes.join('; ')}`].filter(Boolean).join('\n');
     emit({ summary, data: { markdown: res.markdown, notes, truncated: res.truncated, errors: res.errors }, truncated: res.truncated, raw: md ?? '' }, { json: o.json, raw: o.raw, maxBytes: o.maxBytes });
     return 0;
