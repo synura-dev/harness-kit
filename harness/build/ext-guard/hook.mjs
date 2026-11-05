@@ -16,10 +16,10 @@ export const DEFAULTS = { timeoutMs: 2500, maxReason: 500 };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('ext-guard', { defaults: DEFAULTS, files });
 
-/** Thuan: khai bao guard trong registry {event, matcher, args, domain} => {matcher: RegExp, args, domain} | null. */
+/** Thuan: khai bao guard trong registry {event, matcher, args, domain} => {matcher: RegExp (tim kiem nhu matcher hook Claude Code, KHONG ep neo), args, domain} | null. */
 export function parseGuard(g) {
   if (!isObj(g) || g.event !== 'PreToolUse' || typeof g.matcher !== 'string' || typeof g.domain !== 'string' || !g.domain || !Array.isArray(g.args) || !g.args.every((a) => typeof a === 'string')) return null;
-  try { return { matcher: new RegExp(`^(?:${g.matcher})$`), args: g.args, domain: g.domain }; } catch { return null; }
+  try { return { matcher: new RegExp(g.matcher), args: g.args, domain: g.domain }; } catch { return null; }
 }
 
 /** Chay that: spawn harness <domain> <args>, stdin = JSON su kien, het timeout => kill. -> Promise<{code, stderr} | {error}>. Khong reject. */

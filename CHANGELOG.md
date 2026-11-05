@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.5
+- Sua loi ext-guard: matcher bi ep neo `^(?:...)$` nen `^mcp__obsidian__` khong khop tool that (mcp__obsidian__vault_delete) va bi cho qua. Nay dung tim kiem (new RegExp(matcher)) nhu matcher hook Claude Code; them test voi ten tool that + test tich hop qua hooks/run.mjs.
+
 ## 0.3.4
 - observe usage dem err dung (PostToolUseFailure); ext khai bao guard (PreToolUse, exit 2 chan) qua hook ext-guard: fail-closed cho tool khop matcher (hash lech, exit khac 0/2, timeout, het budget => chan); fail-open co audit chi khi registry khong doc duoc. Khai bao ghim trong registry luc ext register/approve (prompt TTY in THEM/DOI/GO GUARD); ext remove cua ext co guard bat buoc TTY. AUDIT PreToolUse co budget rieng toi thieu 300ms. Timeout PreToolUse hooks.json 3s -> 8s: du cho node boot + guard loi + spawn ext (~1.2s cold Windows) + audit; budget dispatcher 2500ms (+3000ms rieng cho ext-guard chi khi khop matcher), khong khop thi nhanh nhu cu.
 

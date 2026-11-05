@@ -108,3 +108,28 @@ test('registry khong doc duoc: fail-open co ban ghi audit', async () => {
   expect(r.decision).toBeUndefined();
   expect(r.records[0].data.rule).toBe('registry-unreadable');
 });
+
+test('matcher la tim kiem (khong ep neo): ^mcp__obsidian__ khop tool that', () => {
+  const g = parseGuard({ ...GUARD, matcher: '^mcp__obsidian__' });
+  for (const t of ['mcp__obsidian__vault_delete', 'mcp__obsidian__vault_read']) expect(g.matcher.test(t)).toBe(true);
+  for (const t of ['mcp__other__x', 'Glob']) expect(g.matcher.test(t)).toBe(false);
+});
+test('tich hop: hooks/run.mjs PreToolUse that + registry tam co guard (hash lech) => deny; tool khong khop => khong deny', async () => {
+  const fs = await import('node:fs'); const os = await import('node:os'); const { spawnSync } = await import('node:child_process');
+  const R = await import('../../cli/commands/ext-registry.mjs');
+  const d = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'eg-int-')));
+  const ws = path.join(d, 'ws'); const root = path.join(ws, 'ext', 'g'); fs.mkdirSync(root, { recursive: true });
+  fs.writeFileSync(path.join(root, 'main.mjs'), 'export const main = () => 0;');
+  fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ id: 'g', entry: 'main.mjs', domains: ['gdom'], guard: { event: 'PreToolUse', matcher: '^mcp__obsidian__', args: ['guard'] } }));
+  const mf = path.join(d, 'config', 'ext', 'local.json');
+  expect((await R.register('ext/g', { workspace: ws, machineFile: mf, confirm: () => true, coreDomains: new Set(['data']) })).code).toBe(0);
+  fs.writeFileSync(path.join(root, 'main.mjs'), 'export const main = () => 1;'); // hash lech
+  const env = { ...process.env, CLAUDE_PLUGIN_DATA: d, CLAUDE_PROJECT_DIR: ws, CLAUDE_AUDIT_DIR: path.join(d, 'audit'), HUB_DATA_DIR: path.join(d, 'hd') };
+  fs.mkdirSync(env.CLAUDE_AUDIT_DIR, { recursive: true });
+  const run = (tool) => spawnSync(process.execPath, [path.join(import.meta.dir, '..', '..', '..', 'hooks', 'run.mjs'), 'PreToolUse'], { input: JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 's', cwd: ws, tool_name: tool, tool_input: {} }), env, encoding: 'utf8', timeout: 20000 });
+  const hit = run('mcp__obsidian__vault_delete');
+  expect(hit.stdout).toContain('deny'); expect(hit.stdout).toContain('guard g chua duyet');
+  expect(run('mcp__other__x').stdout).not.toContain('deny');
+  expect(run('Glob').stdout).not.toContain('deny');
+  fs.rmSync(d, { recursive: true, force: true });
+});
