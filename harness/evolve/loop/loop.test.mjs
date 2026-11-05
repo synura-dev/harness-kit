@@ -71,7 +71,7 @@ test('propose (mac dinh kind skill) co bang chung; Bearer token bi che khoi evid
   expect(p.change.target).toMatch(/^evolve\/skills\/evolve-[a-z0-9-]+\/SKILL\.md$/);
   expect(fs.existsSync(pjson(p.id))).toBe(true);
   await expect(propose('rep_khongco', o)).rejects.toThrow();
-  await expect(propose(await candId('aaaaaaaaaa'), { ...o, kind: 'rule' })).rejects.toThrow(/kind la/);
+  await expect(propose(await candId('aaaaaaaaaa'), { ...o, kind: 'bogus' })).rejects.toThrow(/kind la/);
   await expect(propose(await candId('aaaaaaaaaa'), { ...o, kind: 'hook-config' })).rejects.toThrow(/kind la/);
   const f = await propose(await candId('ffffffffff'), o);
   const raw = fs.readFileSync(pjson(f.id), 'utf8');

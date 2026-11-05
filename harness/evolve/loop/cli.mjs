@@ -6,9 +6,10 @@ import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findPatterns } from './patterns.mjs';
+import { runAutopilot, queueOp } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve prune-candidates [--days N] [--record] | patterns [--days N] [--limit N] [--threshold N] [--sessions K] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve prune-candidates [--days N] [--record] | patterns [--days N] [--limit N] [--threshold N] [--sessions K] | candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | eval run|list|baseline|compare|bench';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -22,6 +23,8 @@ export function parseArgs(argv) {
     else if (k === '--threshold') o.threshold = posInt(val());
     else if (k === '--sessions') o.sessions = posInt(val());
     else if (k === '--record') o.record = true;
+    else if (k === '--reject') o.reject = true;
+    else if (k === '--dry-run') o.dryRun = true;
     else if (k === '--limit') o.limit = posInt(val());
     else if (k === '--kind') o.kind = val();
     else if (k === '--source') o.source = val();
@@ -43,6 +46,19 @@ export async function render(o) {
     const lines = [`evolve candidates: ${r.total} loi lap >= ${r.threshold} lan / ${r.days} ngay (quet ${r.scanned} su kien)`,
       ...items.map((x) => `${x.id}  x${x.count}  phien=${x.sessions}  ${x.tool}  fp=${x.fp || '-'}  ${x.sample.slice(0, 90)}`)];
     return { code: 0, summary: capLines(lines, 40).join('\n'), data: { ...r, items }, truncated: r.truncated };
+  }
+  if (o.cmd === 'autopilot') {
+    const r = await runAutopilot({ dryRun: o.dryRun, force: o.force });
+    const L = (t, a) => a.map((x) => `  ${t}: ${x.entry || x.ver || x.id || x.fp || x} ${x.reason || x.oracle || ''}`.trimEnd());
+    const lines = [`evolve autopilot${r.dryRun ? ' (dry-run, khong ghi)' : ''}${r.skipped ? `: bo qua - ${r.skipped}` : ''}`,
+      `ap dung ${r.applied.length} | xep hang ${r.queued.length} | ke hoach ${r.planned.length} | tu choi ${r.refused.length} | rollback ${r.rolledBack.length} | giu ${r.kept.length} | loi ${r.errors.length}`,
+      ...L('ap', r.applied), ...L('hang', r.queued), ...L('ke hoach', r.planned), ...L('cam', r.refused), ...L('rollback', r.rolledBack), ...r.errors.map((e) => `  loi: ${e}`)];
+    return { code: r.errors.length ? 1 : 0, summary: capLines(lines, 40).join('\n'), data: r };
+  }
+  if (o.cmd === 'queue') {
+    const r = await queueOp({ approve: o.approve ? o.arg : null, reject: o.reject ? o.arg : null });
+    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.map((q) => `${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`)], 40).join('\n'), data: r };
+    return { code: r.code, summary: r.code === 0 ? `queue ${r.id}: ${r.status}${r.ver ? ` (ver ${r.ver})` : r.manual ? ' (sua tay: khong co duong ap tu dong)' : ''}` : `queue tu choi: ${r.reason}`, data: r };
   }
   if (o.cmd === 'prune-candidates') return (await import('./prune-cli.mjs')).runPrune(o);
   if (o.cmd === 'patterns') {

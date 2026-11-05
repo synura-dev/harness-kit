@@ -5,8 +5,8 @@
   "entry": "cli.mjs",
   "desc": "so su co + engine luat khai bao (defaults/*.json, ghi de <project>/.harness/rules/) + canh bao co cooldown (chi doc so)",
   "cmds": "[list] [--status X] [--action A] [--limit N]",
-  "files": { "helpers": ["engine.mjs", "ledger.mjs", "job.mjs", "hook.mjs", "sources.mjs"] },
-  "tests": ["engine.test.mjs", "ledger.test.mjs", "hook.test.mjs", "sources.test.mjs"],
+  "files": { "helpers": ["engine.mjs", "ledger.mjs", "job.mjs", "hook.mjs", "sources.mjs", "autopilot-kick.mjs"] },
+  "tests": ["engine.test.mjs", "ledger.test.mjs", "hook.test.mjs", "sources.test.mjs", "autopilot-kick.test.mjs"],
   "config": { "defaults": null, "schema": null },
   "data": "ledger",
   "tier": "T1"
