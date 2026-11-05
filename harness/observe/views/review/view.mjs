@@ -6,6 +6,7 @@ import { workspaceRoot, isInside } from '../../../core/io/paths.mjs';
 import { auditReadRoots } from '../../../core/audit/audit-write.mjs';
 import { isTempPath, readCapped, collectJsonlFiles } from './util.mjs';
 import { formatView } from './view-format.mjs';
+import { isHookRun } from '../../../core/audit/signals.mjs';
 
 function loadMaxTurns(hub) {
   const map = {};
@@ -77,6 +78,7 @@ export async function runAuditReview(targetDate, opts = {}) {
       let e;
       try { e = JSON.parse(line); } catch { continue; }
       if (!e || typeof e !== 'object' || Array.isArray(e)) continue;
+      if (isHookRun(e)) continue; // HookRun khong phai tool call (ok/tool/actor null)
       const sid = e.sid || e.session_id || 'unknown';
       const tool = e.tool;
       const target = e.target || '';
