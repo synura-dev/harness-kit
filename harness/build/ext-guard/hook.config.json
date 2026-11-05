@@ -1,7 +1,7 @@
 {
   "enabled": true,
   "timeoutMs": 2000,
-  "totalMs": 3000,
+  "totalMs": 1900,
   "maxLines": 12,
   "maxBytes": 1536
 }

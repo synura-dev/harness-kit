@@ -103,7 +103,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   if (cfg.enabled === false && ev !== 'WorktreeCreate') return { ...profile.noop(ev), records: [], input: original };
   if (profile.setEvent && !original.hook_event_name) original.hook_event_name = ev;
   const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
-  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [] };
+  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [], fc: new Map() };
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
   const gw = (id, kind) => { state.warns.push(gateWarn(id, kind)); state.items.push({ id: 'dispatch', result: { additionalContext: `lop bao ve ${clean(id, /[^\w.-]/g)} khong chay (fail-open)` } }); };
 
@@ -118,10 +118,12 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
       try {
-        const ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
+        const ctx = state.fc.set(m.id, { mod: m.mod, matched: false, done: false }).get(m.id).ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
+      state.fc.has(m.id) && (state.fc.get(m.id).done = true);
       if (!kind && validateHookResult(res).length) kind = 'bad-result';
+      if (kind && m.mod.failClosedOnMatch && state.fc.get(m.id)?.ctx?.guardMatched) { state.items.push({ id: m.id, result: { decision: 'deny', reason: `dispatch[${m.id}]: ${kind} (fail-closed)` } }); state.denied = true; }
       state.timings.push({ id: m.id, ms: Date.now() - t0, ...(kind ? { err: kind } : {}) });
       if (kind) {
         trace(m.id, kind);
@@ -143,6 +145,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
     const w = await Promise.race([work().then(() => null), new Promise((res) => { const t = setTimeout(() => res(TIMEOUT), left); t.unref(); })]);
     if (w === TIMEOUT) timedOut = true;
   } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
+  if (timedOut) for (const [id, f] of state.fc) if (!f.done && f.ctx?.guardMatched) { state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: budget-timeout (fail-closed)` } }); state.traces.push(traceRec('module-error', `${id}: budget-timeout fail-closed`)); }
   if (timedOut) { state.traces.push(traceRec('module-error', 'dispatch: budget-timeout')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'budget-timeout')); }
   const merged = mergeResults(state.items);
   const out = profile.render(ev, merged);

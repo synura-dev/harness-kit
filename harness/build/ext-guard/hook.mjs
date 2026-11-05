@@ -1,8 +1,8 @@
 // Hook ext-guard: guard tong quat tu extension. Manifest extension khai
 //   "guard": { "event": "PreToolUse", "matcher": "<regex tool_name>", "args": ["guard"] }
-// PreToolUse: voi moi ext da dang ky VA hash ok (drift/chua duyet => bo qua + canh bao) co matcher khop tool_name, chay
+// PreToolUse: voi moi ext da dang ky VA hash ok (drift/chua duyet => chan) co matcher khop tool_name, chay
 //   `harness <domain> <args>` (khong shell) voi JSON su kien tren stdin, timeout < budget PreToolUse (2500ms).
-//   exit 0 = qua; exit 2 = chan (deny, ly do = stderr); exit khac/timeout/loi = fail-open + ghi canh bao. Khong hard-code ten ext.
+//   exit 0 = qua; exit 2 = chan (deny, ly do = stderr); exit khac/timeout/loi/hash lech = FAIL-CLOSED (chan + audit) cho tool da khop matcher. Khong hard-code ten ext.
 import path from 'node:path';
 import { spawn } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
@@ -13,7 +13,7 @@ import { manifestDomains } from '../../core/ext/manifest-domains.mjs';
 import { coreDomains, killTree } from '../ext-inject/hook.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const DEFAULTS = { enabled: true, timeoutMs: 2300, maxReason: 500 };
+export const DEFAULTS = { enabled: true, timeoutMs: 1900, maxReason: 500 };
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('ext-guard', { defaults: DEFAULTS, files, env: { HOOK_EXT_GUARD_ENABLED: 'enabled' } });
 
@@ -48,7 +48,7 @@ const rec = (rule, reason, decision = 'allow') => ({ sink: 'gate', data: { kind:
 export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;
-    if (!cfg.enabled || event !== 'PreToolUse') return {};
+    if (event !== 'PreToolUse') return {}; // khong co cong tat: guard la cong an toan
     const inp = isObj(input) ? input : {};
     const tool = typeof inp.tool_name === 'string' ? inp.tool_name : '';
     if (!tool) return {};
@@ -61,23 +61,25 @@ export async function handle(event, input, ctx = {}) {
     let core;
     const records = [], denies = [];
     const stdin = JSON.stringify(inp);
+    const deny = (id, rule, why) => { denies.push(`ext-guard[${id}]: ${why}`); records.push(rec(rule, why, 'deny')); };
     for (const e of list) {
       try {
         const m = readManifest(e.root);
         const g = parseGuard(m);
         if (!g || !g.matcher.test(tool)) continue;
-        if (hashOf(e.root) !== e.hash) { records.push(rec('hash-drift', `ext ${e.id}: hash lech/chua duyet, bo qua guard`)); continue; }
+        ctx.guardMatched = true; // dispatcher: het budget/loi truoc khi tra loi => CHAN (fail-closed)
+        if (hashOf(e.root) !== e.hash) { deny(e.id, 'hash-drift', `guard ${e.id} chua duyet: harness ext approve ${e.id}`); continue; }
         core = core === undefined ? (ctx.core ? ctx.core() : coreDomains()) : core;
         const domain = core && manifestDomains(m).find((d) => !core.has(d));
-        if (!domain) { records.push(rec('no-domain', `ext ${e.id}: khong co domain rieng, bo qua guard`)); continue; }
+        if (!domain) { deny(e.id, 'no-domain', `guard ${e.id}: khong dinh tuyen duoc domain`); continue; }
         const r = await Promise.resolve(run(domain, g.args, { cwd: ws, timeoutMs: cfg.timeoutMs, env, stdin })).catch(() => ({ error: 'run' }));
         if (r && r.code === 0) continue;
         if (r && r.code === 2) {
           const why = String(r.stderr || '').replace(/\s+/g, ' ').trim().slice(0, cfg.maxReason || 500) || 'blocked';
           denies.push(`ext-guard[${e.id}]: ${why}`);
           records.push(rec('ext-deny', `ext ${e.id}: ${why}`, 'deny'));
-        } else records.push(rec('fail-open', `ext ${e.id}: ${(r && (r.error || `exit ${r.code}`)) || 'loi'}`));
-      } catch { records.push(rec('fail-open', `ext ${e.id}: loi guard`)); }
+        } else deny(e.id, 'fail-closed', `guard ${e.id} loi (${(r && (r.error || `exit ${r.code}`)) || 'loi'}), chan`);
+      } catch { deny(e.id, 'fail-closed', `guard ${e.id} loi, chan`); }
     }
     const out = {};
     if (denies.length) { out.decision = 'deny'; out.reason = denies.join(' | '); }
@@ -86,5 +88,5 @@ export async function handle(event, input, ctx = {}) {
   } catch { return {}; }
 }
 
-const META = { id: 'ext-guard', events: ['PreToolUse'], timeoutMs: 2400, onError: 'open' };
+const META = { id: 'ext-guard', events: ['PreToolUse'], timeoutMs: 2200, onError: 'open', failClosedOnMatch: true };
 export default Object.freeze({ ...META, handle: async (event, input, ctx) => handle(event, input, ctx) });
