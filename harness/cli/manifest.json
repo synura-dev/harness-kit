@@ -22,7 +22,6 @@
     "helpers": [
       "commands/doctor.mjs",
       "commands/worktree.mjs",
-      "commands/proc-watch.mjs",
       "commands/config.mjs",
       "commands/ext-registry.mjs",
       "ext-runner.mjs",
@@ -33,7 +32,6 @@
     "commands/doctor.test.mjs",
     "commands/adapters.test.mjs",
     "commands/worktree.test.mjs",
-    "commands/proc-watch.test.mjs",
     "commands/config.test.mjs",
     "commands/ext-registry.test.mjs",
     "commands/agy.test.mjs"
