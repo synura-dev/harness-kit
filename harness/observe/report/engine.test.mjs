@@ -118,3 +118,10 @@ test('subagent-vs-main: ms = dur_ms, token = data.usage input+output (khong cong
   const main = r.rows.find((x) => x.key === 'main'); const col = (n) => main.vals[r.cols.indexOf(n)];
   assert.equal(col('ms'), 150); assert.equal(col('token'), 25);
 });
+
+test('guard: token/phien doc data.usage (ban ghi cu khong co total_tokens)', () => {
+  const g = JSON.parse(fs.readFileSync(new URL('./defaults/guard.json', import.meta.url), 'utf8'));
+  const events = [ev({ sid: 'a', data: { usage: { input: 10, output: 5, cache_creation: 5, total_tokens: 20 } } }), ev({ sid: 'b', data: { usage: { input: 10, output: 10, cache_creation: 0 } } })];
+  const r = evaluateSection(g, { events }, { nowMs: NOW });
+  assert.equal(r.rows[0].vals[0], 20);
+});
