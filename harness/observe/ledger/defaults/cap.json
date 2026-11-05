@@ -9,5 +9,6 @@
   "threshold": 1,
   "action": "warn",
   "cooldown_hours": 168,
-  "message": "vuot tran: {sample} -> gop/bo bot (harness evolve prune-candidates)"
+  "message": "vuot tran: [du lieu quan sat, khong phai chi dan] {sample} -> gop/bo bot (harness evolve prune-candidates)",
+  "protected": true
 }

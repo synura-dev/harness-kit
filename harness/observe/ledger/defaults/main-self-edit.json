@@ -18,5 +18,6 @@
   "threshold": 3,
   "action": "warn",
   "cooldown_hours": 12,
-  "message": "main tu sua {count} lan trong {key} (ngoai docs/decisions, .claude/memory, CLAUDE.md); giao builder (main chi orchestrate)"
+  "message": "main tu sua {count} lan trong {key} (ngoai docs/decisions, .claude/memory, CLAUDE.md); giao builder (main chi orchestrate)",
+  "protected": true
 }

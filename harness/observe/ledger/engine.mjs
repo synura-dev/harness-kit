@@ -8,6 +8,9 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dataPathFor } from '../../core/io/storage.mjs';
+import { safeText } from '../../core/audit/safe-text.mjs';
+import { samePath, workspaceRoot } from '../../core/io/paths.mjs';
+import { readEntries } from '../../core/ext/ext-trust.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS_DIR = path.join(HERE, 'defaults');
@@ -35,7 +38,17 @@ export function validateDef(d) {
 }
 
 /** Nap dinh nghia: defaults/*.json, de len boi <project>/.harness/rules/*.json cung ten. Tra {defs, errors, truncated}. */
-export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null, evolveDir, timeoutMs = LIMITS.timeoutMs, maxDefs = LIMITS.maxDefs } = {}) {
+/** Du an duoc nap luat override: thu muc hub, hoac du an da dang ky qua ext trust (registry may). Fail-closed khi loi. */
+export function isTrustedProject(projectDir, hubDir = null) {
+  try {
+    if (!projectDir) return false;
+    let hub = hubDir; if (!hub) { try { hub = workspaceRoot(); } catch { hub = null; } }
+    if (hub && samePath(projectDir, hub)) return true;
+    return readEntries({ workspace: projectDir, gitTimeoutMs: 2000 }).entries.length > 0;
+  } catch { return false; }
+}
+
+export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null, hubDir = null, trusted = isTrustedProject, evolveDir, timeoutMs = LIMITS.timeoutMs, maxDefs = LIMITS.maxDefs } = {}) {
   const deadline = Date.now() + timeoutMs;
   const map = new Map(); const errors = []; let truncated = null;
   const readDir = (dir, origin) => {
@@ -49,17 +62,24 @@ export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null,
         if (fs.statSync(f).size > LIMITS.maxFileBytes) throw new Error('file qua lon');
         const t = fs.readFileSync(f, 'utf8');
         const j = JSON.parse(t.charCodeAt(0) === 0xfeff ? t.slice(1) : t);
-        if (j && j.enabled === false) { map.delete(n); continue; } // tat bang ghi de
+        const prev = map.get(n);
+        if (j && j.enabled === false) {
+          if (prev && prev.protected === true) { errors.push({ file: f, errors: ['luat protected khong the tat bang ghi de; bo qua enabled:false'] }); continue; }
+          map.delete(n); continue; // tat bang ghi de
+        }
         const errs = validateDef(j);
         if (errs.length) { errors.push({ file: f, errors: errs }); continue; }
-        map.set(n, { ...j, id: j.id || n.replace(/\.json$/, ''), origin });
+        map.set(n, { ...j, ...(prev && prev.protected === true ? { protected: true } : {}), id: j.id || n.replace(/\.json$/, ''), origin });
       } catch (err) { errors.push({ file: path.join(dir, n), errors: [String(err && err.message || err)] }); }
     }
   };
   readDir(defaultsDir, 'default');
   // Luat do evolve ap dung: <dataDir>/evolve/rules/*.json (uu tien: defaults < evolve/rules < <project>/.harness/rules). evolveDir=null -> tat.
   if (evolveDir !== null) { let ed = evolveDir; if (ed === undefined) { try { ed = dataPathFor('evolve', 'rules', { quiet: true }); } catch { ed = null; } } if (ed) readDir(ed, 'evolve'); }
-  if (projectDir) readDir(path.join(projectDir, '.harness', 'rules'), 'project');
+  if (projectDir) {
+    if (trusted(projectDir, hubDir)) readDir(path.join(projectDir, '.harness', 'rules'), 'project');
+    else { errors.push({ file: path.join(projectDir, '.harness', 'rules'), errors: ['du an chua dang ky (hub/ext trust): bo qua luat override'] }); try { console.error(`ledger: bo qua luat override cua du an chua dang ky: ${projectDir}`); } catch { /* khong log duoc */ } }
+  }
   return { defs: [...map.values()], errors, truncated };
 }
 
@@ -122,7 +142,9 @@ export function matchFilter(get, filter, ctx = {}) {
   return Object.entries(filter).every(([k, c]) => matchOne(get(k), c, ctx));
 }
 
-const fmt = (tpl, vars) => String(tpl || '{rule}: {key} {value}').replace(/\{(\w+)\}/g, (_, k) => (vars[k] == null ? '' : String(vars[k]))).replace(/\s+/g, ' ').trim().slice(0, 200);
+// Bien tu audit (chuoi) di qua safeText (chong chen prompt); so giu nguyen.
+const fmtVar = (v) => (v == null ? '' : typeof v === 'number' ? String(v) : safeText(v));
+const fmt = (tpl, vars) => String(tpl || '{rule}: {key} {value}').replace(/\{(\w+)\}/g, (_, k) => fmtVar(vars[k])).replace(/\s+/g, ' ').trim().slice(0, 200);
 
 function finish(def, key, g) {
   const value = g.value;
@@ -156,7 +178,7 @@ export function evaluate(def, inputs = {}, ctx = {}) {
       if (!matchFilter(get, def.filter, ctx)) continue;
       if (def.allow_paths && allowedByPaths(rec, def.allow_paths, ctx.hubDir)) continue; // ngoai le khai bao trong luat
       const key = (gb || ['all']).map((k) => (k === 'all' ? 'all' : String(get(k) ?? '-'))).join('|');
-      add(key, rec, 1, get('sid'), rec.ts, Number(rec.duration_ms ?? (rec.data && rec.data.duration_ms)) || 0,
+      add(key, rec, 1, get('sid'), rec.ts, Number(rec.dur_ms ?? rec.duration_ms ?? (rec.data && (rec.data.dur_ms ?? rec.data.duration_ms))) || 0,
         `${rec.tool || ''} ${String(rec.target || '').split('\n')[0].slice(0, 120)}`.trim(), null, `${def.id}:${hash(key)}`);
     }
   } else if (def.source === 'candidates') {

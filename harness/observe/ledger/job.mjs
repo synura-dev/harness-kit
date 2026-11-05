@@ -11,7 +11,7 @@ import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { loadDefinitions, evaluateAll } from './engine.mjs';
-import { readLedger, writeLedger, applyFindings, ledgerFile, writeState, JOB, jobDue } from './ledger.mjs';
+import { readLedger, updateLedger, applyFindings, ledgerFile, writeState, JOB, jobDue } from './ledger.mjs';
 export { JOB, jobDue };
 
 const DAY = 86400000;
@@ -50,7 +50,7 @@ export async function runJob(opts = {}) {
   const nowMs = opts.nowMs || Date.now();
   const hubDir = opts.hubDir || workspaceRoot();
   const t0 = Date.now();
-  const { defs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
+  const { defs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, hubDir, ...(opts.trusted ? { trusted: opts.trusted } : {}), ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
   const days = Math.max(1, ...defs.filter((d) => d.source !== 'ledger').map((d) => Number(d.days) || 7));
   const ev = opts.events ? { events: opts.events, truncated: null } : await readEvents({ days, nowMs, timeoutMs: opts.timeoutMs || JOB.timeoutS * 1000 });
   const nowIso = new Date(nowMs).toISOString();
@@ -58,13 +58,19 @@ export async function runJob(opts = {}) {
   const ctx = { hubDir, nowMs };
   for (const src of opts.candidateSources || []) { try { candidates = candidates.concat(await src(ev.events, nowIso, { ...ctx, defs, dryRun: !!opts.dryRun })); } catch {} } // pattern (repeated-pattern) + prune (deprecate|cap)
   const file = ledgerFile(opts.dataOpts);
-  let entries = readLedger(file);
   const f1 = evaluateAll(defs, { events: ev.events, candidates }, ctx, ['audit', 'candidates']);
-  entries = applyFindings(entries, f1, nowMs).entries;
-  const f2 = evaluateAll(defs, { ledger: entries }, ctx, ['ledger']); // luat tren so (vd canh bao bi bo qua)
-  entries = applyFindings(entries, f2, nowMs, undefined, { partial: true }).entries;
+  // Phan nang (doc audit) da xong; chi doc-sua-ghi so duoi khoa de khong mat warn_ts/chu thich cua hook/autopilot ghi xen.
+  let entries = []; let f2 = [];
+  const merge = (cur) => {
+    let es = applyFindings(cur, f1, nowMs).entries;
+    f2 = evaluateAll(defs, { ledger: es }, ctx, ['ledger']); // luat tren so (vd canh bao bi bo qua)
+    es = applyFindings(es, f2, nowMs, undefined, { partial: true }).entries;
+    entries = es; return es;
+  };
   const truncated = ev.truncated || dt || null;
-  if (!opts.dryRun) { writeLedger(file, entries); writeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length }); }
+  if (opts.dryRun) merge(readLedger(file));
+  else if (!updateLedger(file, merge, { lock: { retries: 200, waitMs: 25 } }).ok) { return { defs: defs.length, errors, events: ev.events.length, findings: f1.length, entries: 0, truncated: 'lock', ms: Date.now() - t0 }; }
+  if (!opts.dryRun) { writeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length }); }
   return { defs: defs.length, errors, events: ev.events.length, findings: f1.length + f2.length, entries: entries.length, truncated, ms: Date.now() - t0 };
 }
 

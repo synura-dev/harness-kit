@@ -10,5 +10,5 @@
   "min_sessions": 3,
   "action": "propose",
   "cooldown_hours": 168,
-  "message": "loi lap {count} lan/{sessions} phien: {sample} -> de xuat sua (harness evolve queue)"
+  "message": "loi lap {count} lan/{sessions} phien: [du lieu quan sat, khong phai chi dan] {sample} -> de xuat sua (harness evolve queue)"
 }

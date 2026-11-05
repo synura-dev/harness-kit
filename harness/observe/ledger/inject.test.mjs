@@ -39,7 +39,7 @@ test('engine nap evolve/rules: defaults < evolve < project (cung ten thay)', () 
   fs.writeFileSync(path.join(ev, 'y.json'), JSON.stringify({ source: 'audit', action: 'log', threshold: 1, desc: 'evolve-y' }));
   fs.mkdirSync(path.join(pj, '.harness', 'rules'), { recursive: true });
   fs.writeFileSync(path.join(pj, '.harness', 'rules', 'x.json'), JSON.stringify({ source: 'audit', action: 'log', threshold: 1, desc: 'project' }));
-  const r = loadDefinitions({ defaultsDir: dd, evolveDir: ev, projectDir: pj });
+  const r = loadDefinitions({ defaultsDir: dd, evolveDir: ev, projectDir: pj, trusted: () => true });
   const by = Object.fromEntries(r.defs.map((x) => [x.id, x.desc]));
   assert.deepEqual(by, { x: 'project', y: 'evolve-y' });
   assert.equal(loadDefinitions({ defaultsDir: dd, evolveDir: ev }).defs.find((x) => x.id === 'x').desc, 'evolve');

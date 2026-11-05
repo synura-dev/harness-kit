@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dataPathFor, guardWrite, readJson } from '../../core/io/storage.mjs';
 import { ensureDataIgnore } from '../../core/io/paths.mjs';
+import { withLock } from '../../core/runtime/lockfile.mjs';
 
 export const STATUSES = Object.freeze(['open', 'warned', 'acted', 'ignored', 'resolved']);
 export const POLICY = Object.freeze({ actedAfterHours: 24, resolveAfterHours: 168, maxEntries: 1000, maxWarnTs: 20, maxBytes: 2 * 1048576, maxWarnLines: 3 });
@@ -14,6 +15,8 @@ const H = 3600e3;
 export const ledgerDir = (opts = {}) => dataPathFor('ledger', { quiet: true, ...opts });
 export const ledgerFile = (opts) => path.join(ledgerDir(opts), 'ledger.jsonl');
 export const stateFile = (opts) => path.join(ledgerDir(opts), 'state.json');
+export const pendingFile = (opts) => path.join(ledgerDir(opts), 'warn-pending.json');
+export const pendingPathFor = (file) => path.join(path.dirname(file), 'warn-pending.json');
 
 /** Doc so (gioi han byte). Loi/thieu file -> []. */
 export function readLedger(file, { maxBytes = POLICY.maxBytes } = {}) {
@@ -33,11 +36,30 @@ function atomicWrite(file, text) {
     return true;
   } catch { return false; }
 }
+/** Tom tat nho cac muc can canh bao ({id, rule}); hook chi doc file nay. */
+export const pendingOf = (entries) => entries.filter((e) => e && e.due && e.message).map((e) => ({ id: e.id, rule: e.rule }));
+
 export function writeLedger(file, entries) {
   const keep = entries.length > POLICY.maxEntries
     ? [...entries].sort((a, b) => (a.status === 'resolved') - (b.status === 'resolved') || String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, POLICY.maxEntries)
     : entries;
-  return atomicWrite(file, keep.map((e) => JSON.stringify(e)).join('\n') + (keep.length ? '\n' : ''));
+  const ok = atomicWrite(file, keep.map((e) => JSON.stringify(e)).join('\n') + (keep.length ? '\n' : ''));
+  if (ok) atomicWrite(pendingPathFor(file), JSON.stringify({ ts: Date.now(), pending: pendingOf(keep) }) + '\n'); // nho, de hook khong phai parse ca so
+  return ok;
+}
+
+/** Doc tom tat canh bao; null neu thieu/hong (hook se doc so day du mot lan de tu lanh). */
+export function readPending(file) {
+  try { const j = JSON.parse(fs.readFileSync(pendingPathFor(file), 'utf8')); return Array.isArray(j.pending) ? j.pending : null; } catch { return null; }
+}
+
+/**
+ * Doc-sua-ghi so duoi khoa file. fn(entries) -> entries moi | null/undefined (khong ghi). Khong lay duoc khoa -> {ok:false} (fail-open: bo qua lan ghi nay).
+ * Moi nguoi ghi so (job, hook, autopilot annotate) deu di qua day (hoac withLock cung khoa trong core).
+ */
+export function updateLedger(file, fn, { lock } = {}) {
+  const r = withLock(file, () => { const next = fn(readLedger(file)); return next ? writeLedger(file, next) : false; }, lock);
+  return r.ok ? { ok: true, wrote: r.value === true } : { ok: false, wrote: false };
 }
 export const readState = (opts) => readJson(stateFile(opts), {}) || {};
 export const writeState = (opts, st) => atomicWrite(stateFile(opts), JSON.stringify(st) + '\n');

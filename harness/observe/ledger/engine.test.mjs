@@ -43,7 +43,7 @@ test('nguon candidates: kind + nguong count, message mau', () => {
   const [def] = loadDefinitions().defs.filter((d) => d.id === 'repeated-error');
   const c = (o) => ({ id: 'i', kind: 'error', fp: 'f1', count: 3, sessions: 2, first_ts: '2026-11-02T00:00:00Z', last_ts: '2026-11-05T00:00:00Z', sample: 'boom', ...o });
   const f = evaluateAll([def], { candidates: [c({}), c({ fp: 'f2', count: 2 }), c({ fp: 'f3', kind: 'pattern' }), c({ fp: 'f4', last_ts: '2026-10-01T00:00:00Z' })] }, ctx);
-  assert.equal(f.length, 1); assert.equal(f[0].fp, 'f1'); assert.match(f[0].message, /3 lan\/2 phien: boom/);
+  assert.equal(f.length, 1); assert.equal(f[0].fp, 'f1'); assert.match(f[0].message, /3 lan\/2 phien: .*boom/);
 });
 
 test('metric sessions / sum:cost_ms', () => {
@@ -73,11 +73,11 @@ test('ghi de theo thu muc du an: cung ten thay, ten moi them, enabled:false tat;
   fs.writeFileSync(path.join(dir, 'main-self-edit.json'), JSON.stringify({ enabled: false }));
   fs.writeFileSync(path.join(dir, 'custom.json'), JSON.stringify({ source: 'audit', filter: {}, threshold: 1, action: 'report' }));
   fs.writeFileSync(path.join(dir, 'bad.json'), '{ khong phai json');
-  const r = loadDefinitions({ projectDir: proj });
+  const r = loadDefinitions({ projectDir: proj, trusted: () => true });
   const by = Object.fromEntries(r.defs.map((d) => [d.id, d]));
   assert.equal(by['repeated-error'].threshold, 10); assert.equal(by['repeated-error'].origin, 'project');
-  assert.ok(!by['main-self-edit']); assert.ok(by.custom); assert.ok(by['main-self-verify']);
-  assert.equal(r.errors.length, 1);
+  assert.ok(by['main-self-edit']); assert.ok(by.custom); assert.ok(by['main-self-verify']);
+  assert.equal(r.errors.length, 2); // bad.json + enabled:false cua luat protected bi bo qua
   fs.rmSync(proj, { recursive: true, force: true });
 });
 

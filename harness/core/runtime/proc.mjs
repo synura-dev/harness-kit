@@ -4,7 +4,9 @@ import cp from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { dataPathFor } from '../io/storage.mjs';
+import { withLock } from './lockfile.mjs';
 
 const WIN = process.platform === 'win32';
 export const DEFAULT_TIMEOUT_MS = 600000;
@@ -47,6 +49,7 @@ export function spawnTimed(cmd, args, opts = {}) {
 
 // ---- Tac vu nen: so PID + khoa ----
 // So PID: state cua data harness (zone system, khoa 'proc' trong observe/storage/registry.json); chi khi khong resolve duoc moi roi ve tmpdir.
+// Muc: {pid, key, cmd, script?, needle, startedAt, deadline}. Doc-sua-ghi so luon qua khoa file (withLock).
 function procDir() {
   try { return dataPathFor('proc', { quiet: true }); } catch { return path.join(os.tmpdir(), 'harness-kit'); }
 }
@@ -55,6 +58,11 @@ const readLedger = (f) => { try { const j = JSON.parse(fs.readFileSync(f, 'utf8'
 function writeLedger(f, entries) {
   const t = `${f}.${process.pid}.tmp`;
   try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(t, JSON.stringify({ entries })); fs.renameSync(t, f); } catch { try { fs.unlinkSync(t); } catch {} }
+}
+/** Doc-sua-ghi so duoi khoa. fn(entries) -> entries moi | null (khong ghi). Khong lay duoc khoa -> bo qua (tra false). */
+function updateProcLedger(f, fn) {
+  const r = withLock(f, () => { const next = fn(readLedger(f)); if (next) writeLedger(f, next); return true; }, { staleMs: 15000, retries: 120, waitMs: 25 });
+  return r.ok;
 }
 export const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 
@@ -66,36 +74,67 @@ export function isRunning(key, { dir, now = Date.now(), alive = isAlive } = {}) 
 /** Xoa muc theo key hoac pid (tac vu goi khi xong). */
 export function ledgerDone({ key, pid } = {}, { dir } = {}) {
   const f = ledgerPath(dir);
-  writeLedger(f, readLedger(f).filter((e) => !(key != null && e.key === key) && !(pid != null && e.pid === pid)));
+  updateProcLedger(f, (es) => es.filter((e) => !(key != null && e.key === key) && !(pid != null && e.pid === pid)));
 }
 
-/** Don so PID: PID chet -> xoa; qua han + con song -> kill neu matches(pid, cmd) roi xoa. Tra {removed, killed}. */
-export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = killTree, matches = () => true } = {}) {
-  const f = ledgerPath(dir);
-  const keep = []; let removed = 0, killed = 0;
-  for (const e of readLedger(f)) {
-    if (!alive(e.pid)) { removed++; continue; }
-    if (e.deadline <= now) { if (matches(e.pid, e.cmd)) { kill(e.pid); killed++; } removed++; continue; }
-    keep.push(e);
-  }
-  if (removed) writeLedger(f, keep);
-  return { removed, killed };
+export const SWEEP = Object.freeze({ staleAfterMs: 24 * 3600e3, startToleranceMs: 30000, minIntervalMs: 3600e3 });
+const nrm = (s) => String(s || '').replace(/\\/g, '/').toLowerCase();
+
+/**
+ * Doi chieu tien trinh song voi muc so: true = dung tien trinh ta spawn; false = PID bi tai dung (khac); null = khong ro (khong doc duoc lenh).
+ * Dung khi: lenh doc duoc va chua ca duong dan script day du (needle) VA thoi diem tao tien trinh khop startedAt (+-tolerance, khong som hon).
+ */
+export function matchEntry(e, live, tol = SWEEP.startToleranceMs) {
+  if (!live || !String(live.cmd || '').trim()) return null;
+  const needle = nrm(e.needle || e.script);
+  if (!needle) return null;
+  if (!nrm(live.cmd).includes(needle)) return false;
+  if (!Number.isFinite(live.startMs) || !Number.isFinite(e.startedAt)) return null;
+  return live.startMs >= e.startedAt - tol && live.startMs <= e.startedAt + tol;
 }
 
 /**
- * Chay tac vu nen: detached + unref + stdio ignore + ha uu tien; ghi so PID; khoa theo key (dang chay thi bo qua).
+ * Don so PID: PID chet -> xoa; qua han + con song -> kill CHI khi matches(pid, cmd, entry) === true roi xoa.
+ * matches === false (PID tai dung) -> xoa muc, KHONG kill. matches null/loi (khong doc duoc lenh) -> KHONG kill, giu muc den khi qua han + staleAfterMs.
+ * Tra {removed, killed}.
+ */
+export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = killTree, matches = () => null, staleAfterMs = SWEEP.staleAfterMs } = {}) {
+  const f = ledgerPath(dir);
+  let removed = 0, killed = 0;
+  updateProcLedger(f, (es) => {
+    const keep = []; removed = 0; killed = 0;
+    for (const e of es) {
+      if (!alive(e.pid)) { removed++; continue; }
+      if (e.deadline > now) { keep.push(e); continue; }
+      let m = null; try { m = matches(e.pid, e.cmd, e); } catch { m = null; }
+      if (m === true) { kill(e.pid); killed++; removed++; continue; }
+      if (m === false) { removed++; continue; }
+      if (now - e.deadline >= staleAfterMs) { removed++; continue; } // khong xac minh duoc: chi bo muc, khong kill
+      keep.push(e);
+    }
+    return removed ? keep : null;
+  });
+  return { removed, killed };
+}
+
+const scriptOf = (args) => { for (const a of args) { const s = String(a); if (/\.(mjs|cjs|js|ts)$/i.test(s)) return path.resolve(s); } return null; };
+
+/**
+ * Chay tac vu nen: detached + unref + stdio ignore + ha uu tien; ghi so PID (kem script day du + startedAt); khoa theo key (dang chay thi bo qua).
  * Tra pid hoac null (bi khoa / loi). detached chi xuat hien o day.
  */
 export function spawnBackground({ cmd, args = [], key, deadlineMs = 10 * 60e3, dir, cwd, env, now = Date.now() }) {
   try {
     if (key && isRunning(key, { dir, now })) return null;
     const penv = { ...(env || process.env), ...(key ? { HARNESS_BG_KEY: key } : {}), ...(dir ? { HARNESS_PROC_DIR: dir } : {}) };
+    const startedAt = Date.now();
     const p = cp.spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, cwd, env: penv });
     p.on('error', () => {}); p.unref();
     if (!p.pid) return null;
     try { os.setPriority(p.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* khong dat duoc */ }
-    const f = ledgerPath(dir);
-    writeLedger(f, [...readLedger(f).filter((e) => e.pid !== p.pid), { pid: p.pid, key: key || null, cmd: [cmd, ...args].join(' ').slice(0, 300), startedAt: now, deadline: now + deadlineMs }]);
+    const script = scriptOf(args);
+    const entry = { pid: p.pid, key: key || null, cmd: [cmd, ...args].join(' ').slice(0, 300), script, needle: script || [cmd, ...args].join(' ').slice(0, 400), startedAt, deadline: now + deadlineMs };
+    updateProcLedger(ledgerPath(dir), (es) => [...es.filter((e) => e.pid !== p.pid), entry]);
     return p.pid;
   } catch { return null; }
 }
@@ -107,16 +146,27 @@ export function bgDoneOnExit() {
   process.on('exit', () => { try { ledgerDone({ pid: process.pid }, { dir }); } catch { /* fail-open */ } });
 }
 
-/** Don so PID co doi chieu lenh that (tranh giet nham PID tai dung). Dung chung cho hook proc-orphans va SessionStart. Fail-open. */
-export async function sweepBackground() {
+/** Quet dong bo (CHI chay trong tien trinh nen proc-sweep.mjs): liet ke tien trinh that, doi chieu, don so. Fail-open. */
+export async function sweepNow({ dir, listProc } = {}) {
   try {
-    const { listProcesses } = await import('./proc-list.mjs');
+    const list = listProc || (await import('./proc-list.mjs')).listProcesses;
     let byPid = null;
-    const matches = (pid, cmd) => {
-      if (!byPid) byPid = new Map(listProcesses({ timeoutMs: 5000 }).procs.map((p) => [p.pid, String(p.cmd || '')]));
-      const live = byPid.get(pid); const head = String(cmd || '').split(' ').slice(-1)[0];
-      return live != null && (!head || live.includes(head) || String(cmd).includes(live.slice(0, 60)));
+    const matches = (pid, _cmd, e) => {
+      if (!byPid) { const r = list({ timeoutMs: 5000 }); byPid = r.error ? new Map() : new Map(r.procs.map((p) => [p.pid, p])); }
+      return matchEntry(e, byPid.get(pid));
     };
-    return sweepLedger({ matches });
+    return sweepLedger({ dir, matches });
   } catch { return null; }
+}
+
+const SWEEP_SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'proc-sweep.mjs');
+/** Hook goi: KHONG quet dong bo. Kich quet nen (key proc-sweep), toi da 1 lan/gio (dau thoi gian trong file stamp). Tra {kicked}. */
+export function sweepBackground({ dir, now = Date.now(), spawn = spawnBackground } = {}) {
+  try {
+    const stamp = path.join(path.dirname(ledgerPath(dir)), 'proc-sweep.stamp');
+    try { if (now - fs.statSync(stamp).mtimeMs < SWEEP.minIntervalMs) return { kicked: false }; } catch { /* chua co stamp */ }
+    try { fs.mkdirSync(path.dirname(stamp), { recursive: true }); fs.writeFileSync(stamp, String(now)); } catch { /* khong ghi duoc */ }
+    const pid = spawn({ cmd: process.execPath, args: [SWEEP_SCRIPT], key: 'proc-sweep', deadlineMs: 2 * 60e3, dir });
+    return { kicked: !!pid };
+  } catch { return { kicked: false }; }
 }

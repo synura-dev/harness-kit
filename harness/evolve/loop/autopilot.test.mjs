@@ -127,6 +127,7 @@ test('muc 2 xep hang (khong ap); cam bi tu choi kem ly do trong ledger', async (
   expect(led.find((e) => e.id === gate.id).evolve).toMatchObject({ status: 'refused' });
   expect(led.find((e) => e.id === gate.id).evolve.reason).toMatch(/guard/);
   expect(led.find((e) => e.id === code.id).evolve.status).toBe('queued');
+  expect(fs.existsSync(o.ledgerFile + '.lock')).toBe(false); // annotate di qua khoa chung va nha khoa
 });
 
 test('autonomy 0: moi thu vao hang, khong tu ap', async () => {
