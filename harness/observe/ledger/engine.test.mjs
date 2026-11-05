@@ -11,7 +11,7 @@ const ctx = { hubDir: HUB, nowMs: NOW };
 const ev = (o) => ({ ts: '2026-11-05T10:00:00Z', sid: 'claude-a', actor: 'main', tool: 'Edit', event: 'PostToolUse', ok: true, project: 'foo', cwd: 'E:/06. Projects/foo', data: { files_touched: ['a.js'] }, ...o });
 
 test('defaults nap duoc, hop le', () => {
-  const r = loadDefinitions();
+  const r = loadDefinitions({ evolveDir: null });
   assert.deepEqual(r.errors, []);
   assert.deepEqual(r.defs.map((d) => d.id).sort(), ['cap', 'deprecate', 'main-self-edit', 'main-self-verify', 'repeated-error', 'repeated-pattern', 'warn-ignored']);
 });

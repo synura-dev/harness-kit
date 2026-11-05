@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { dataPathFor } from '../../core/io/storage.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS_DIR = path.join(HERE, 'defaults');
@@ -32,7 +33,7 @@ export function validateDef(d) {
 }
 
 /** Nap dinh nghia: defaults/*.json, de len boi <project>/.harness/rules/*.json cung ten. Tra {defs, errors, truncated}. */
-export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null, timeoutMs = LIMITS.timeoutMs, maxDefs = LIMITS.maxDefs } = {}) {
+export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null, evolveDir, timeoutMs = LIMITS.timeoutMs, maxDefs = LIMITS.maxDefs } = {}) {
   const deadline = Date.now() + timeoutMs;
   const map = new Map(); const errors = []; let truncated = null;
   const readDir = (dir, origin) => {
@@ -54,6 +55,8 @@ export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null,
     }
   };
   readDir(defaultsDir, 'default');
+  // Luat do evolve ap dung: <dataDir>/evolve/rules/*.json (uu tien: defaults < evolve/rules < <project>/.harness/rules). evolveDir=null -> tat.
+  if (evolveDir !== null) { let ed = evolveDir; if (ed === undefined) { try { ed = dataPathFor('evolve', 'rules', { quiet: true }); } catch { ed = null; } } if (ed) readDir(ed, 'evolve'); }
   if (projectDir) readDir(path.join(projectDir, '.harness', 'rules'), 'project');
   return { defs: [...map.values()], errors, truncated };
 }

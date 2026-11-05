@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnBackground, sweepBackground } from '../../core/runtime/proc.mjs';
+import { dataPathFor } from '../../core/io/storage.mjs';
 import { kickReport } from '../report/run.mjs';
 import { kickAutopilot } from './autopilot-kick.mjs';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +11,23 @@ import { REPO_DIR } from '../../core/io/paths.mjs';
 import { readLedger, writeLedger, claimDue, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
+export const INJECT_LIMITS = Object.freeze({ maxLines: 5, maxChars: 800, perLine: 400 });
+/** Doc <dataDir>/evolve/inject/*.md (do evolve ap dung) -> toi da 5 dong/800 ky tu, moi file 1 dong; lam sach lai khi doc. Fail-open. */
+export function readInject(dataOpts, lim = INJECT_LIMITS) {
+  try {
+    const dir = dataPathFor('evolve', 'inject', { quiet: true, ...(dataOpts || {}) });
+    const out = []; let used = 0;
+    for (const n of fs.readdirSync(dir).filter((x) => x.endsWith('.md')).sort()) {
+      if (out.length >= lim.maxLines) break;
+      const body = fs.readFileSync(path.join(dir, n), 'utf8').split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('#')).join(' | ');
+      const line = body.replace(/[\u0000-\u001f\u007f-\u009f`<>]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, lim.perLine);
+      if (!line || used + line.length > lim.maxChars) continue;
+      out.push(line); used += line.length;
+    }
+    return out;
+  } catch { return []; }
+}
+
 export const DEFAULTS = { enabled: true, maxLines: POLICY.maxWarnLines, kick: true };
 
 /** Spawn nen job neu qua han + khoa nhe. Tra true neu da spawn. */
@@ -40,9 +58,11 @@ export async function handle(event, input, ctx = {}) {
     const r = claimDue(readLedger(file), nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines });
     if (r.changed) writeLedger(file, r.entries);
     if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
-    if (event === 'SessionStart' && cfg.kickAutopilot !== false) kickAutopilot(dataOpts, ctx, nowMs); // evolve autopilot 1 lan/24h
+    if (event === 'SessionStart' && cfg.kickAutopilot !== false) kickAutopilot(dataOpts, { ...ctx, spawnAutopilot: ctx.spawnAutopilot || (ctx.spawnJob ? () => {} : undefined) }, nowMs); // evolve autopilot 1 lan/24h
     if (event === 'SessionStart' && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
-    return r.lines.length ? { additionalContext: r.lines.join('\n') } : {};
+    const inj = event === 'SessionStart' && cfg.inject !== false ? readInject(dataOpts) : [];
+    const all = [...r.lines, ...inj];
+    return all.length ? { additionalContext: all.join('\n') } : {};
   } catch { return {}; }
 }
 
