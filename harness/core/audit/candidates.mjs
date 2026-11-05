@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { messageFingerprint } from './normalize-message.mjs';
 import { sanitizeHintPath, normalizeErrorSignature, extractErrorDetails, buildRegexPattern } from './signature.mjs';
 
 function hashString(str) {
@@ -8,20 +9,31 @@ function hashString(str) {
 // Nhom su kien ok=false theo error_fp (hoac chu ky chuan hoa); >=2 lan -> repeated_failure.
 export function repeatedFailureCandidates(events, nowIso) {
   const failedSigCounts = new Map();
+  const parent = new Map();
+  const find = (x) => { while (parent.get(x) !== x) x = parent.get(x); return x; };
+  const pending = [];
   for (const ev of events) {
     if (ev.ok === false) {
       const d = ev.data && typeof ev.data === 'object' ? ev.data : {};
       const tool = ev.tool || d.tool || 'unknown';
       const norm = normalizeErrorSignature(tool, extractErrorDetails(ev));
-      const fp = typeof d.error_fp === 'string' && d.error_fp ? d.error_fp : null;
-      const key = fp ? `fp:${fp}` : norm.signature;
-      if (!failedSigCounts.has(key)) {
-        failedSigCounts.set(key, { count: 0, norm, fp, evs: [] });
-      }
-      const entry = failedSigCounts.get(key);
-      entry.count++;
-      entry.evs.push(ev);
+      const stored = typeof d.error_fp === 'string' && d.error_fp ? d.error_fp : null;
+      // Khoa gom: fp tinh lai tu thong diep da chuan hoa (gop id/duong dan); khong co thong diep -> fp luu san / chu ky.
+      const recomputed = messageFingerprint(extractErrorDetails(ev), tool);
+      const fp = stored || recomputed; // fp hien thi: fp luu cua su kien dau (tuong thich nguoc)
+      // Gop theo union-find: su kien chung fp luu HOAC chung fp thong diep chuan hoa thi cung nhom.
+      const nodes = [stored && `fp:${stored}`, recomputed && `mfp:${recomputed}`].filter(Boolean);
+      for (const n of nodes) { if (!parent.has(n)) parent.set(n, n); }
+      for (const n of nodes.slice(1)) parent.set(find(n), find(nodes[0]));
+      pending.push({ ev, nodes, fp, norm });
     }
+  }
+  for (const { ev, nodes, fp, norm } of pending) {
+    const key = nodes.length ? find(nodes[0]) : norm.signature;
+    if (!failedSigCounts.has(key)) failedSigCounts.set(key, { count: 0, norm, fp, evs: [] });
+    const entry = failedSigCounts.get(key);
+    entry.count++;
+    entry.evs.push(ev);
   }
   const out = [];
   for (const [sig, data] of failedSigCounts.entries()) {
