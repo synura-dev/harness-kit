@@ -29,6 +29,8 @@ export function validateDef(d) {
   if (d.metric != null && !/^(count|sessions|sum:[a-z_]+)$/.test(String(d.metric))) e.push('metric khong hop le');
   if (d.group_by != null && !Array.isArray(d.group_by)) e.push('group_by phai la mang');
   if (d.cooldown_hours != null && !(Number(d.cooldown_hours) >= 0)) e.push('cooldown_hours phai la so >= 0');
+  if (d.min_sessions != null && !(Number(d.min_sessions) >= 0)) e.push('min_sessions phai la so >= 0');
+  if (d.allow_paths != null && !(Array.isArray(d.allow_paths) && d.allow_paths.every((x) => typeof x === 'string'))) e.push('allow_paths phai la mang string (glob tuong doi goc hub)');
   return e;
 }
 
@@ -62,9 +64,19 @@ export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null,
 }
 
 // ---- truong ao cua su kien audit ----
+const absPath = (p, cwd) => (/^([a-z]:)?[\\/]/i.test(p) ? lc(p) : lc(path.posix.normalize(`${lc(cwd)}/${String(p).replace(/\\/g, '/')}`)));
+const globRe = (g) => new RegExp('^' + lc(g).replace(/[.+^$()|[\]\\]/g, '\\$&').replace(/\*\*\//g, '\u0000').replace(/\*\*/g, '\u0001').replace(/\*/g, '[^/]*').replace(/\u0000/g, '(?:.*/)?').replace(/\u0001/g, '.*') + '$');
+/** Moi file cua su kien deu khop 1 glob allow_paths (tuong doi goc hub)? Khong co file -> false (van tinh). */
+export function allowedByPaths(rec, globs, hubDir) {
+  const files = rec.data && Array.isArray(rec.data.files_touched) ? rec.data.files_touched : [];
+  const hub = lc(hubDir);
+  if (!files.length || !hub || !Array.isArray(globs) || !globs.length) return false;
+  const res = globs.map(globRe);
+  return files.every((f) => { const p = absPath(f, rec.cwd || ''); if (!(p === hub || p.startsWith(hub + '/'))) return false; const rel = p.slice(hub.length + 1); return res.some((r) => r.test(rel)); });
+}
 function resolveScope(rec, hubDir) {
   const hub = lc(hubDir);
-  const abs = (p, cwd) => (/^([a-z]:)?[\\/]/i.test(p) ? lc(p) : lc(path.posix.normalize(`${lc(cwd)}/${String(p).replace(/\\/g, '/')}`)));
+  const abs = absPath;
   const inHub = (p) => p === hub || p.startsWith(hub + '/');
   const files = rec.data && Array.isArray(rec.data.files_touched) ? rec.data.files_touched : [];
   const target = files[0] ? abs(files[0], rec.cwd || '') : lc(rec.cwd || '');
@@ -142,6 +154,7 @@ export function evaluate(def, inputs = {}, ctx = {}) {
       if (!rec || !inWin(rec.ts)) continue;
       const get = (k) => auditField(rec, k, ctx);
       if (!matchFilter(get, def.filter, ctx)) continue;
+      if (def.allow_paths && allowedByPaths(rec, def.allow_paths, ctx.hubDir)) continue; // ngoai le khai bao trong luat
       const key = (gb || ['all']).map((k) => (k === 'all' ? 'all' : String(get(k) ?? '-'))).join('|');
       add(key, rec, 1, get('sid'), rec.ts, Number(rec.duration_ms ?? (rec.data && rec.data.duration_ms)) || 0,
         `${rec.tool || ''} ${String(rec.target || '').split('\n')[0].slice(0, 120)}`.trim(), null, `${def.id}:${hash(key)}`);
@@ -170,7 +183,7 @@ export function evaluate(def, inputs = {}, ctx = {}) {
     const sessions = g.sessSum != null ? g.sessSum : g.sids.size;
     const gg = { ...g, sessions };
     const value = metricOf(def, gg);
-    if (passes(def, value)) out.push(finish(def, key, { ...gg, value }));
+    if (passes(def, value) && !(Number(def.min_sessions) > 0 && sessions < Number(def.min_sessions))) out.push(finish(def, key, { ...gg, value }));
     if (out.length >= LIMITS.maxFindings) break;
   }
   return out.sort((a, b) => b.value - a.value);

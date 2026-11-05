@@ -1,9 +1,22 @@
 {
-  "desc": "main tu chay test/build o du an khac hub thay vi giao subagent",
+  "desc": "main tu chay test/build o bat ky dau (hub hoac du an khac) thay vi giao subagent",
   "source": "audit",
   "days": 1,
-  "filter": { "actor": "main", "tool": "Bash", "kind": ["test", "build"], "event": ["PostToolUse", "PostToolUseFailure"], "scope": "other" },
-  "group_by": ["project"],
+  "filter": {
+    "actor": "main",
+    "tool": "Bash",
+    "kind": [
+      "test",
+      "build"
+    ],
+    "event": [
+      "PostToolUse",
+      "PostToolUseFailure"
+    ]
+  },
+  "group_by": [
+    "project"
+  ],
   "metric": "count",
   "threshold": 2,
   "action": "warn",
