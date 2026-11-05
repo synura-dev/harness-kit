@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.3
+- observe usage (dem lenh/ext/hook + loi); repeated-pattern bo lenh don va chuoi Edit/Write; observe ledger close; ext remove.
+
 ## 0.3.2
 - loop-fix 0049-0055 (merged from lf/int).
 
