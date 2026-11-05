@@ -22,9 +22,19 @@ export function promptTrace(prompt, maxKw = 8) {
   return { prompt_hash: sha1(String(prompt)), prompt_kw: kw };
 }
 
-const CORRECTION = /(?:^|[^a-z])(?:sai|khong phai|ko phai|k phai|lam lai|sua lai|wrong|revert|undo|incorrect|redo|not what i)(?:[^a-z]|$)/;
+// Sua loi: chi prompt ngan (<= 120 ky tu). Cum sua loi ro nghia o BAT KY dau, hoac tu khoa o DAU CAU (tranh "Sai Gon", "sai so", "khong phai lo", "sua lai README", "add an undo button", "revert feature").
+const CORRECTION_MAX = 120;
+const CORRECTION_PHRASE = /(?:^|[^a-z])(?:sai roi|lam sai|khong dung|ko dung|khong phai vay|ko phai vay|lam lai|undo that|that'?s wrong|that is wrong)(?:[^a-z]|$)/;
+const CORRECTION_START = /^(?:(?:khong|ko|k) phai (?:vay|file nay|cai nay|cai do|y toi)|undo(?: it)?\b|redo\b|wrong\b|incorrect\b|not what i)/;
 /** Prompt sua loi -> 'correction' | null. */
-export const promptSignal = (prompt) => (CORRECTION.test(strip(prompt)) ? 'correction' : null);
+export function promptSignal(prompt) {
+  const raw = String(prompt ?? '');
+  if (raw.length > CORRECTION_MAX) return null;
+  const t = strip(raw).replace(/\s+/g, ' ').trim();
+  if (!t) return null;
+  if (CORRECTION_PHRASE.test(t)) return 'correction';
+  return t.split(/[.!?;\n]+/).some((x) => CORRECTION_START.test(x.trim())) ? 'correction' : null;
+}
 
 const REVERT = /(?:^|[\s;&|(])git\s+(?:-C\s+(?:"[^"]*"|\S+)\s+)?(?:revert\b|reset\s+--hard\b|checkout\s+(?:\S+\s+)?--(?:\s|$))/;
 const TASK_STATUS = /\bharness\s+tasks\s+set\b[^\n|;&]*--status\b/;
@@ -50,7 +60,21 @@ const walk = (dir, out, max, depth = 0) => {
  * Dau phien ban luc SessionStart: { harness_kit (package/plugin version), rules_hash (sha1 12 cua ten+size+mtime), rules_files (so file) }.
  * Gom: CLAUDE.md/AGENTS.md (cwd), .claude/agents, .agents/agents, skills + hooks/hooks.json cua plugin. Tran maxFiles; chi stat.
  */
+const VS_CACHE = new Map();
+const mt = (f) => { try { return Math.floor(fs.statSync(f).mtimeMs); } catch { return 0; } };
 export function versionStamp({ cwd = '', pluginRoot = PLUGIN_ROOT, maxFiles = 400 } = {}) {
+  // Cache theo mtime thu muc (+ file goc): chi quet lai khi doi.
+  const watch = [pluginRoot, path.join(pluginRoot, 'skills'), path.join(pluginRoot, 'hooks', 'hooks.json'), path.join(pluginRoot, 'package.json')];
+  if (cwd) watch.push(cwd, path.join(cwd, 'CLAUDE.md'), path.join(cwd, 'AGENTS.md'), path.join(cwd, '.claude', 'agents'), path.join(cwd, '.agents', 'agents'));
+  const sig = watch.map(mt).join(',');
+  const ck = `${cwd}|${pluginRoot}|${maxFiles}`;
+  const hit = VS_CACHE.get(ck);
+  if (hit && hit.sig === sig) return { ...hit.out };
+  const out = versionStampScan({ cwd, pluginRoot, maxFiles });
+  VS_CACHE.set(ck, { sig, out });
+  return { ...out };
+}
+function versionStampScan({ cwd, pluginRoot, maxFiles }) {
   const out = { harness_kit: null, rules_hash: null, rules_files: 0 };
   try {
     for (const rel of [['package.json'], ['.claude-plugin', 'plugin.json']]) {
@@ -78,6 +102,9 @@ export function versionStamp({ cwd = '', pluginRoot = PLUGIN_ROOT, maxFiles = 40
   return out;
 }
 
+/** Su kien HookRun (khong phai tool call): consumer thong ke tool/loi/actor phai bo qua. Dung cho ca dong da phang (type tu ten phan vung) lan envelope. */
+export const isHookRun = (x) => !!x && (x.type === 'hook' || x.event === 'HookRun');
+
 /** Envelope 'HookRun' (type=hook): do tre/loi moi module cua mot lan dispatch. modules = [{id, ms, err?}]. null neu thieu du lieu. */
 export function hookRunEnvelope(event, input, modules, totalMs, now = new Date()) {
   try {
@@ -86,11 +113,11 @@ export function hookRunEnvelope(event, input, modules, totalMs, now = new Date()
     const sid = raw.startsWith('claude-') ? raw : `claude-${raw}`;
     const ms = modules.map((m) => ({ id: safeId(m.id, 40), ms: Math.round(m.ms), ...(m.err ? { err: String(m.err).replace(/[^\w:.-]/g, '').slice(0, 40) } : {}) }));
     return {
-      v: 2, ts: now.toISOString(), type: 'hook', event: 'HookRun', cli: 'claude', sid, agent_id: null, agent_type: null, actor: 'main',
-      project: null, cwd: '', tool: input && input.tool_name ? safeId(input.tool_name, 40) : null, target: null, target_kind: null,
-      ok: ms.every((m) => !m.err), dur_ms: Math.round(totalMs), turns: null, tokens_in: null, tokens_out: null, status: String(event).slice(0, 30), model: null,
+      v: 2, ts: now.toISOString(), type: 'hook', event: 'HookRun', cli: 'claude', sid, agent_id: null, agent_type: null, actor: null,
+      project: null, cwd: '', tool: null, target: null, target_kind: null,
+      ok: null, dur_ms: Math.round(totalMs), turns: null, tokens_in: null, tokens_out: null, status: String(event).slice(0, 30), model: null,
       summary: `${event} ${Math.round(totalMs)}ms ${ms.map((m) => `${m.id}=${m.ms}${m.err ? '!' : ''}`).join(' ')}`.slice(0, 120),
-      data: { hook_event: String(event).slice(0, 30), modules: ms }, origin: null,
+      data: { hook_event: String(event).slice(0, 30), hook_tool: input && input.tool_name ? safeId(input.tool_name, 40) : null, failed: ms.some((m) => m.err), modules: ms }, origin: null,
     };
   } catch { return null; }
 }
