@@ -4,25 +4,15 @@
   "layer": "ext",
   "entry": "observe.mjs",
   "domain": "observe",
-  "desc": "cong doc audit/du lieu: view|why|map|query|digest|prune|runs|sizes|data-prune|ledger|cost|evidence (chi doc, prune mac dinh dry-run)",
-  "cmds": "view [YYYY-MM-DD] | why | map | query --report R | digest D | prune | runs list|show | sizes | data-prune | ledger [list] | cost | evidence",
+  "desc": "cong doc audit/du lieu: sizes|data-prune|ledger|report (chi doc, prune mac dinh dry-run)",
+  "cmds": "sizes | data-prune | ledger [list] | report",
   "default": "index",
   "domains": {
-    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (gop audit, audit-query, runs)", "cmds": "view [YYYY-MM-DD] | why | map | query --report R | digest D | prune | runs list|show | sizes | data-prune | ledger [list] | cost | evidence", "default": "index", "aliases": ["audit", "audit-query", "runs", "cost", "evidence"] }
-  },
-  "aliasMap": {
-    "audit": { "pass": ["view", "query", "digest", "prune", "why", "map"], "fallback": ["view"] },
-    "audit-query": { "fallback": ["query"] },
-    "runs": { "fallback": ["runs"] },
-    "cost": { "fallback": ["cost"], "onEmpty": ["cost"] },
-    "evidence": { "fallback": ["evidence"], "onEmpty": ["evidence"] }
+    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (gop audit, audit-query, runs)", "cmds": "sizes | data-prune | ledger [list] | report", "default": "index" }
   },
   "files": {
-    "helpers": ["runs.mjs", "data.mjs", "sizes.mjs", "digest.mjs", "prune.mjs"],
-    "review": ["review/review.mjs", "review/util.mjs", "review/view.mjs", "review/view-format.mjs", "review/why-map.mjs"],
-    "query": ["query/query.mjs", "query/files.mjs", "query/rows.mjs", "query/engine.mjs", "query/duck.mjs", "query/format.mjs", "query/args.mjs"]
-  },
-  "tests": ["data.test.mjs", "digest.test.mjs", "review/review.test.mjs", "review/why.test.mjs", "query/query.test.mjs"],
+    "helpers": ["data.mjs", "sizes.mjs", "prune.mjs"], "query": ["query/files.mjs"] },
+  "tests": ["data.test.mjs", "sizes.test.mjs"],
   "config": { "defaults": null, "schema": null },
   "data": "audit",
   "tier": "T1"
