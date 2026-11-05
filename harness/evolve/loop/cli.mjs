@@ -5,9 +5,10 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
+import { runAutopilot, queueOp } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve candidates [--days N] [--threshold N] [--limit N] [--source ext:<id>] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | eval run|list|baseline|compare|bench';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -24,6 +25,8 @@ export function parseArgs(argv) {
     else if (k === '--source') o.source = val();
     else if (k === '--target') o.target = val();
     else if (k === '--approve') o.approve = true;
+    else if (k === '--reject') o.reject = true;
+    else if (k === '--dry-run') o.dryRun = true;
     else if (k === '--force') o.force = true;
     else if (!o.cmd && !a.startsWith('-')) o.cmd = a;
     else if (!o.arg && !a.startsWith('-')) o.arg = a;
@@ -34,6 +37,19 @@ export function parseArgs(argv) {
 
 export async function render(o) {
   const need = () => { if (!o.arg) throw new Error(`thieu id\n${USAGE}`); return o.arg; };
+  if (o.cmd === 'autopilot') {
+    const r = await runAutopilot({ dryRun: o.dryRun, force: o.force });
+    const L = (t, a) => a.map((x) => `  ${t}: ${x.entry || x.ver || x.id || x.fp || x} ${x.reason || x.oracle || ''}`.trimEnd());
+    const lines = [`evolve autopilot${r.dryRun ? ' (dry-run, khong ghi)' : ''}${r.skipped ? `: bo qua - ${r.skipped}` : ''}`,
+      `ap dung ${r.applied.length} | xep hang ${r.queued.length} | ke hoach ${r.planned.length} | tu choi ${r.refused.length} | rollback ${r.rolledBack.length} | giu ${r.kept.length} | loi ${r.errors.length}`,
+      ...L('ap', r.applied), ...L('hang', r.queued), ...L('ke hoach', r.planned), ...L('cam', r.refused), ...L('rollback', r.rolledBack), ...r.errors.map((e) => `  loi: ${e}`)];
+    return { code: r.errors.length ? 1 : 0, summary: capLines(lines, 40).join('\n'), data: r };
+  }
+  if (o.cmd === 'queue') {
+    const r = await queueOp({ approve: o.approve ? o.arg : null, reject: o.reject ? o.arg : null });
+    if (r.items) return { code: 0, summary: capLines([`evolve queue: ${r.items.length} cho duyet / ${r.total}`, ...r.items.map((q) => `${q.id}  ${q.kind} -> ${q.target || '-'}  oracle=${q.oracle}  ${q.reason}`)], 40).join('\n'), data: r };
+    return { code: r.code, summary: r.code === 0 ? `queue ${r.id}: ${r.status}${r.ver ? ` (ver ${r.ver})` : r.manual ? ' (sua tay: khong co duong ap tu dong)' : ''}` : `queue tu choi: ${r.reason}`, data: r };
+  }
   if (o.cmd === 'candidates') {
     const r = await findCandidates({ ...o, maxBytes: undefined });
     const items = r.items.slice(0, o.limit || LIMITS.listLimit);

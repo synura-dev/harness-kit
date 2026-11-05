@@ -41,11 +41,15 @@ export function layoutOf(o = {}, root) {
   let raw = o.layout;
   if (!raw) { try { raw = loadConfig('evolve', { root, defaults: {} }).config; } catch { raw = null; } }
   const pick = (k) => (raw && okDir(raw[k]) ? raw[k].toLowerCase() : def[k]);
-  return { skillsDir: pick('skillsDir') };
+  const skillsDir = pick('skillsDir');
+  const sib = (d, n) => d.replace(/[^/]+$/, n); // rules/inject nam canh skills trong goc evolve
+  return { skillsDir, rulesDir: sib(skillsDir, 'rules'), injectDir: sib(skillsDir, 'inject') };
 }
 function buildAllow(layout) {
   return [
     [new RegExp('^' + esc(layout.skillsDir) + '/[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._/-]*\\.md$'), ['skill']],
+    [new RegExp('^' + esc(layout.rulesDir) + '/[a-z0-9][a-z0-9._-]*\\.json$'), ['rule']], // muc 1 (autopilot): file luat ledger
+    [new RegExp('^' + esc(layout.injectDir) + '/[a-z0-9][a-z0-9._-]*\\.md$'), ['inject']], // muc 1: text inject
   ];
 }
 const CASE_FOLD = process.platform === 'win32' || process.platform === 'darwin';

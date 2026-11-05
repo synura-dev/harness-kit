@@ -17,14 +17,14 @@ export const LIMITS = Object.freeze({
   maxAfterBytes: 256 * 1024, logLimit: 20, sampleChars: 200,
   patternChars: 1000,
 });
-export const KINDS = Object.freeze(['skill']);
+export const KINDS = Object.freeze(['skill', 'rule', 'inject']);
 const DAY = 86400000;
 
 const sha = (buf) => (buf == null ? 'absent' : crypto.createHash('sha256').update(buf).digest('hex'));
 const readBuf = (f) => { try { return fs.readFileSync(f); } catch { return null; } };
 const writeJson = (f, j) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(j, null, 2) + '\n', 'utf8'); };
 const rootFor = (k) => dataReadRoots(k)[0] || dataPathFor(k);
-const ctx = (o = {}) => {
+export const ctx = (o = {}) => {
   const hub = path.resolve(o.hubRoot || workspaceRoot());
   const evo = path.resolve(o.dataRoot || rootFor('evolve'));
   const audits = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);
@@ -53,7 +53,7 @@ export function redactPattern(p) {
 }
 
 // ---- candidates ----
-function nestedDateDirs(root) {
+export function nestedDateDirs(root) {
   const out = [];
   const ls = (p) => { try { return fs.readdirSync(p, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => d.name); } catch { return []; } };
   for (const a of ls(root)) {
@@ -109,6 +109,7 @@ export async function findCandidates(o = {}) {
   return { items, total: items.length, scanned, days, threshold, truncated };
 }
 
+import { ruleText, injectText } from './rule-content.mjs';
 import { classifyTarget as classifyRaw, same, layoutOf as layoutRaw } from './policy.mjs';
 // Policy luon nhan goc du lieu/evolve THUC (ctx) de suy dich mac dinh: <dataDir>/<evolve>/skills.
 const polOpts = (o = {}) => { const c = ctx(o); return { ...o, hubRoot: c.hub, dataBase: c.base, dataRoot: c.evo }; };
@@ -138,6 +139,13 @@ function buildChange(kind, cand, o) {
     const a = polAbs(target, kind, o);
     if (a && fs.existsSync(a)) throw new Error(`${target} da ton tai`);
     return { target, after: `---\nname: ${slug}\ndescription: Tranh loi lap ${cand.tool} (${cand.fp || cand.id}). Dung khi gap loi khop pattern nay.\n---\n\n${note}\n\n${ev}` };
+  }
+  if (kind === 'rule' || kind === 'inject') {
+    const L = layoutOf(o);
+    const target = o.target || (kind === 'rule' ? `${L.rulesDir}/${slug}.json` : `${L.injectDir}/${slug}.md`);
+    const a = polAbs(target, kind, o);
+    if (a && fs.existsSync(a)) throw new Error(`${target} da ton tai`);
+    return { target, after: kind === 'rule' ? ruleText(cand) : injectText(cand) };
   }
   throw new Error(`kind la: ${kind} (${KINDS.join('|')})`);
 }

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
+import { kickAutopilot } from './autopilot-kick.mjs';
 import { readLedger, writeLedger, claimDue, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -39,6 +40,7 @@ export async function handle(event, input, ctx = {}) {
     const r = claimDue(readLedger(file), nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines });
     if (r.changed) writeLedger(file, r.entries);
     if (event === 'SessionStart' && cfg.kick !== false) kickJob(dataOpts, ctx, nowMs);
+    if (event === 'SessionStart' && cfg.kickAutopilot !== false) kickAutopilot(dataOpts, ctx, nowMs); // evolve autopilot 1 lan/24h, detached
     return r.lines.length ? { additionalContext: r.lines.join('\n') } : {};
   } catch { return {}; }
 }
