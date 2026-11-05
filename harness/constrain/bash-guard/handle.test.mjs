@@ -2,7 +2,7 @@
 import { test, expect } from 'bun:test';
 import { DEFAULTS, handle, hookModule, toClaudeOutput, decide } from './hook.mjs';
 import { handle as agyHandle } from './adapters/agy.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const pre = (ti) => ({ hook_event_name: 'PreToolUse', tool_name: 'Bash', tool_input: ti });
 const ctx = { config: DEFAULTS };

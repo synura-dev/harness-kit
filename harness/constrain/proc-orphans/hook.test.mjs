@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { DEFAULTS, findChildren, load, handle, MODULE, seenRecently, signatureOf } from './hook.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const script = path.join(import.meta.dir, 'hook.mjs');
 const NOW = 1_000_000_000;

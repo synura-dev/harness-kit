@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ensureDataIgnore } from './paths.mjs';
-import { resolveCaps } from '../config/contract.mjs';
+import { resolveCaps } from '../config/constants.mjs';
 
 export const STORE_DEFAULTS = {
   maxBytes: 524288, // 512 KB

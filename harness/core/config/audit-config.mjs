@@ -1,224 +1,70 @@
 // Single source of truth for audit defaults. audit.config.json / audit.config.local.json only override.
 export const DEFAULTS = {
-  "retention_days": 30,
-  "max_file_bytes": 5242880,
-  "default_type": "other",
-  "schema_version": 2,
-  "base_path": "",
-  "transcript_max_bytes": 8388608,
-  "noise_cwd": ["(^|/)(bench|scratch[^/]*|zz-eval[^/]*|mcp-test)(/|$)"],
-  "bash_target_max": 160,
-  "error_max": 200,
-  "agent_lookup_max_bytes": 1048576,
-  "limits": {
-    "digest_max_rows": 200,
-    "query_timeout_ms": 30000,
-    "query_max_bytes": 209715200,
-    "query_max_rows": 100000,
-    "migrate_max_files": 2000
+  retention_days: 30,
+  max_file_bytes: 5242880,
+  default_type: "other",
+  schema_version: 2,
+  base_path: "",
+  transcript_max_bytes: 8388608,
+  noise_cwd: ["(^|/)(bench|scratch[^/]*|zz-eval[^/]*|mcp-test)(/|$)"],
+  bash_target_max: 160,
+  error_max: 200,
+  agent_lookup_max_bytes: 1048576,
+  limits: {
+    digest_max_rows: 200,
+    query_timeout_ms: 30000,
+    query_max_bytes: 209715200,
+    query_max_rows: 100000,
+    migrate_max_files: 2000,
   },
-  "events": {
-    "PreToolUse": "tool",
-    "PostToolUse": "tool",
-    "PostToolUseFailure": "tool",
-    "PostToolBatch": "tool",
-    "SessionStart": "session",
-    "SessionEnd": "session",
-    "Stop": "session",
-    "PostInvocation": "session",
-    "PreInvocation": "session",
-    "Setup": "session",
-    "SubagentStart": "subagent",
-    "SubagentStop": "subagent",
-    "UserPromptSubmit": "prompt",
-    "UserPromptExpansion": "prompt",
-    "PermissionRequest": "permission",
-    "PermissionDenied": "permission",
-    "Notification": "permission"
+  events: {
+    PreToolUse: "tool",
+    PostToolUse: "tool",
+    PostToolUseFailure: "tool",
+    PostToolBatch: "tool",
+    SessionStart: "session",
+    SessionEnd: "session",
+    Stop: "session",
+    PostInvocation: "session",
+    PreInvocation: "session",
+    Setup: "session",
+    SubagentStart: "subagent",
+    SubagentStop: "subagent",
+    UserPromptSubmit: "prompt",
+    UserPromptExpansion: "prompt",
+    PermissionRequest: "permission",
+    PermissionDenied: "permission",
+    Notification: "permission",
   },
-  "ok_events": {
-    "PostToolUse": true,
-    "PostToolUseFailure": false
+  ok_events: {
+    PostToolUse: true,
+    PostToolUseFailure: false,
   },
-  "event_data": {
-    "*": [
-      "cli",
-      "step_idx",
-      "permission_mode",
-      "source",
-      "reason",
-      "notification_type",
-      "from_model",
-      "to_model",
-      "model"
-    ]
+  event_data: {
+    "*": ["cli","step_idx","permission_mode","source","reason","notification_type","from_model","to_model","model"],
   },
-  "tools": [
-    {
-      "match": "Bash",
-      "target": [
-        "command"
-      ],
-      "kind": "command",
-      "data": [
-        "timeout"
-      ]
-    },
-    {
-      "match": "Read",
-      "target": [
-        "file_path"
-      ],
-      "kind": "path",
-      "data": [
-        "offset",
-        "limit"
-      ]
-    },
-    {
-      "match": "Write",
-      "target": [
-        "file_path"
-      ],
-      "kind": "path"
-    },
-    {
-      "match": "Edit",
-      "target": [
-        "file_path"
-      ],
-      "kind": "path",
-      "data": [
-        "replace_all"
-      ]
-    },
-    {
-      "match": "MultiEdit",
-      "target": [
-        "file_path"
-      ],
-      "kind": "path"
-    },
-    {
-      "match": "NotebookEdit",
-      "target": [
-        "notebook_path"
-      ],
-      "kind": "path",
-      "data": [
-        "edit_mode"
-      ],
-      "len": [
-        "new_source"
-      ]
-    },
-    {
-      "match": "Grep",
-      "target": [
-        "pattern"
-      ],
-      "kind": "pattern",
-      "data": [
-        "glob",
-        "type"
-      ]
-    },
-    {
-      "match": "Glob",
-      "target": [
-        "pattern"
-      ],
-      "kind": "pattern"
-    },
-    {
-      "match": "WebFetch",
-      "target": [
-        "url"
-      ],
-      "kind": "url",
-      "len": [
-        "prompt"
-      ]
-    },
-    {
-      "match": "WebSearch",
-      "target": [
-        "query"
-      ],
-      "kind": "pattern"
-    },
-    {
-      "match": "Agent",
-      "target": [
-        "subagent_type"
-      ],
-      "kind": "pattern",
-      "data": [
-        "isolation"
-      ],
-      "len": [
-        "prompt"
-      ]
-    },
-    {
-      "match": "Task",
-      "target": [
-        "subagent_type"
-      ],
-      "kind": "pattern",
-      "len": [
-        "prompt"
-      ]
-    },
-    {
-      "match": "Skill",
-      "target": [
-        "skill"
-      ],
-      "kind": "pattern"
-    },
-    {
-      "match": "mcp__*",
-      "target": [
-        "file_path",
-        "path",
-        "url",
-        "query",
-        "name",
-        "id"
-      ],
-      "kind": "auto",
-      "len": [
-        "message",
-        "body"
-      ]
-    },
-    {
-      "match": "MCP",
-      "target": [
-        "name",
-        "pattern",
-        "tool_name"
-      ],
-      "kind": "pattern",
-      "data": [
-        "server",
-        "server_name",
-        "tool_name"
-      ]
-    }
+  tools: [
+    {"match":"Bash","target":["command"],"kind":"command","data":["timeout"]},
+    {"match":"Read","target":["file_path"],"kind":"path","data":["offset","limit"]},
+    {"match":"Write","target":["file_path"],"kind":"path"},
+    {"match":"Edit","target":["file_path"],"kind":"path","data":["replace_all"]},
+    {"match":"MultiEdit","target":["file_path"],"kind":"path"},
+    {"match":"NotebookEdit","target":["notebook_path"],"kind":"path","data":["edit_mode"],"len":["new_source"]},
+    {"match":"Grep","target":["pattern"],"kind":"pattern","data":["glob","type"]},
+    {"match":"Glob","target":["pattern"],"kind":"pattern"},
+    {"match":"WebFetch","target":["url"],"kind":"url","len":["prompt"]},
+    {"match":"WebSearch","target":["query"],"kind":"pattern"},
+    {"match":"Agent","target":["subagent_type"],"kind":"pattern","data":["isolation"],"len":["prompt"]},
+    {"match":"Task","target":["subagent_type"],"kind":"pattern","len":["prompt"]},
+    {"match":"Skill","target":["skill"],"kind":"pattern"},
+    {"match":"mcp__*","target":["file_path","path","url","query","name","id"],"kind":"auto","len":["message","body"]},
+    {"match":"MCP","target":["name","pattern","tool_name"],"kind":"pattern","data":["server","server_name","tool_name"]},
   ],
-  "default_tool": {
-    "target": [
-      "file_path",
-      "path",
-      "url",
-      "command",
-      "pattern"
-    ],
-    "kind": "auto"
+  default_tool: {
+    target: ["file_path","path","url","command","pattern"],
+    kind: "auto",
   },
-  "redact": [
+  redact: [
     "(token|key|secret|password|bearer|authorization)\\s*[=:]\\s*((bearer|basic)\\s+)?\\S+",
     "bearer\\s+[A-Za-z0-9._~+/=-]{3,}",
     "(?<![\\w-])--(?!no-)[\\w-]*(?:password|passwd|passphrase|pass(?=\\s)|secret(?:[-_]?key)?|token|api[-_]?key|private[-_]?key)(?:-[\\w-]*)?(?<!-file)(?<!-dir)(?<!-path)\\s+(?:\"[^\"]*\"|'[^']*'|\\S+)",
@@ -232,15 +78,11 @@ export const DEFAULTS = {
     "eyJ[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]{5,}\\.[A-Za-z0-9_-]*",
     "[a-z][a-z0-9+.-]{0,31}://[^\\s/:@]+:[^\\s/@]+@",
     "\"(token|password|passwd|secret|api_?key|access_?token|authorization)\"\\s*:\\s*\"[^\"]*\"",
-    "(https?://[^\\s?#]+)\\?[^\\s]*"
+    "(https?://[^\\s?#]+)\\?[^\\s]*",
   ],
-  "sensitive_files": [
-    "^\\.env",
-    "^access\\.json$",
-    "\\.pem$",
-    "\\.key$"
-  ]
+  sensitive_files: ["^\\.env","^access\\.json$","\\.pem$","\\.key$"],
 };
+
 
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

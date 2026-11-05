@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { handle, hookModule, toOutput, load } from './hook.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const logFile = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'guard-handle-')), 'g.jsonl');
 const cfg = () => ({ ...load().config, logFile });

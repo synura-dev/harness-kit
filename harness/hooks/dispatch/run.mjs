@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { isObj, hkerrLine } from '../../core/io/paths.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 import { DEFAULTS, ORDER, loadModules, applies } from './modules.mjs';
 import { mergeResults, applyUpdate, render } from './merge.mjs';
 import { hookRunEnvelope } from '../../core/audit/signals.mjs';

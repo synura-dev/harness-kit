@@ -8,7 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { workspaceRoot, isObj, isPluginMode, REPO_DIR } from '../io/paths.mjs';
-import { CORE_RULE_DISABLE_LAYERS, LEGACY_WARNING, configPath, envName } from './contract.mjs';
+import { CORE_RULE_DISABLE_LAYERS, LEGACY_WARNING, configPath, envName } from './constants.mjs';
 
 const MAX_FILE_BYTES = 256 * 1024;
 const BAD = new Set(['__proto__', 'constructor', 'prototype']);

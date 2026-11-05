@@ -10,7 +10,7 @@ import { spawnSync } from '../../core/runtime/proc.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
 import { readJson, readJsonl, appendJsonl, dataPath, dataPathFor, today } from '../../core/io/storage.mjs';
-import { REPO_ROOT_FILES } from '../../core/config/contract.mjs';
+import { REPO_ROOT_FILES } from '../../core/config/constants.mjs';
 import { isStdRootFile } from './std-root.mjs';
 import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, classRetention, formatWarn, writeAtomic } from '../../core/registry/data-registry.mjs';
 

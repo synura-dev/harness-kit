@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import audit from './audit.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 test('default export hop le, handle async', () => {
   expect(validateHookModule(audit)).toEqual([]);

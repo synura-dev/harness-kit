@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { handle, hookModule, toOutput, loadApproval } from './hook.mjs';
-import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
+import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'approval-handle-'));
 const ctx = () => ({ config: loadApproval().config, auditRoot: root });
