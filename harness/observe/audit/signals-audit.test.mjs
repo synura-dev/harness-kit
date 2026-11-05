@@ -51,7 +51,7 @@ test('dispatch: do tre tung module + latencyRecord theo chinh sach', async () =>
   expect(r.timings.map((t) => t.id)).toEqual(['a', 'b']);
   expect(r.timings[1].err).toMatch(/^error:/);
   const rec = latencyRecord('Stop', r.input, r.timings, r.totalMs);
-  expect(rec.sink).toBe('audit'); expect(rec.data.type).toBe('hook'); expect(rec.data.ok).toBe(false);
+  expect(rec.sink).toBe('audit'); expect(rec.data.type).toBe('hook'); expect(rec.data.ok).toBeNull(); expect(rec.data.data.failed).toBe(true);
   const r2 = await dispatch({ event: 'PreToolUse', stdin: stdin('PreToolUse'), cfg: cfg2, profile: p });
   expect(latencyRecord('PreToolUse', r2.input, r2.timings, 5)).toBeNull(); // nhanh + khong loi -> bo qua
   expect(latencyRecord('PreToolUse', r2.input, [{ id: 'a', ms: 500 }], 500)).not.toBeNull(); // cham -> ghi
