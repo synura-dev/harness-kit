@@ -360,3 +360,13 @@ test('candidates --source loc theo nguon ext:<id>; mac dinh khong loc', async ()
   expect((await findCandidates({ ...o, source: 'ext:demo' })).items.map((x) => x.fp)).toEqual(['gggggggggg']);
   expect((await findCandidates({ ...o, source: 'ext:other' })).items.length).toBe(0);
 });
+
+test('policy: file rule/inject bat buoc tien to evolve- va khong trung luat mac dinh ledger', () => {
+  const bad = classifyTarget('evolve/rules/main-self-verify.json', 'rule', o);
+  expect(bad.ok).toBe(false);
+  expect(bad.reason).toContain('evolve-');
+  expect(classifyTarget('evolve/rules/x.json', 'rule', o).ok).toBe(false);
+  expect(classifyTarget('evolve/inject/x.md', 'inject', o).ok).toBe(false);
+  expect(classifyTarget('evolve/rules/evolve-ok.json', 'rule', o).ok).toBe(true);
+  expect(classifyTarget('evolve/inject/evolve-ok.md', 'inject', o).ok).toBe(true);
+});

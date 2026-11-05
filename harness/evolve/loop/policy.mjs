@@ -90,6 +90,10 @@ function realpathDeep(abs) {
 const relKey = (root, abs) => { if (!isInside(abs, root)) return null; const r = toPosix(path.relative(root, abs)); return r && !r.startsWith('..') ? r : null; };
 export const same = (a, b) => (CASE_FOLD ? a.toLowerCase() === b.toLowerCase() : a === b);
 
+// Ten file luat mac dinh cua observe/ledger (chi doc ten thu muc, khong import observe).
+function defaultLedgerNames() {
+  try { return new Set(fs.readdirSync(path.join(REPO_DIR, 'harness', 'observe', 'ledger', 'defaults')).map((x) => x.toLowerCase())); } catch { return new Set(); }
+}
 const hubOf = (o) => path.resolve(o.hubRoot || workspaceRoot());
 /** {ok, forbidden, reason, rel, abs}. Chuan hoa -> cam -> realpath trong goc du lieu (bat junction/symlink) -> cam theo vi tri that (du lieu/workspace/plugin root) -> allowlist. */
 export function classifyTarget(target, kind, o = {}) {
@@ -117,6 +121,11 @@ export function classifyTarget(target, kind, o = {}) {
   const hit = buildAllow(layoutOf(o, hubOf(o))).find(([re]) => re.test(n.key));
   if (!hit) return { ok: false, forbidden: false, reason: `dich ngoai allowlist (deny-by-default): ${n.rel}`, rel: n.rel };
   if (!hit[1].includes(kind)) return { ok: false, forbidden: false, reason: `kind ${kind} khong duoc ghi vao ${n.rel}`, rel: n.rel };
+  if (kind === 'rule' || kind === 'inject') {
+    const base = n.key.split('/').pop();
+    if (!base.startsWith('evolve-')) return { ok: false, forbidden: false, reason: `file ${kind} do evolve tao phai co tien to evolve- (${base})`, rel: n.rel };
+    if (defaultLedgerNames().has(base)) return { ok: false, forbidden: false, reason: `trung ten file mac dinh cua ledger (${base})`, rel: n.rel };
+  }
   return { ok: true, forbidden: false, reason: null, rel: n.rel, abs };
 }
 
