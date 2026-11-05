@@ -7,7 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { load, evaluate } from './hook.mjs';
 
-const CORE = [path.join(path.dirname(fileURLToPath(import.meta.url)), 'hook.config.json')];
+const CORE = [path.join(path.dirname(fileURLToPath(import.meta.url)), 'core.fixture.json')];
 const mk = () => { const h = fs.mkdtempSync(path.join(os.tmpdir(), 'guardd3-')); fs.mkdirSync(path.join(h, 'config', 'guard', 'projects'), { recursive: true }); return h; };
 const w = (h, rel, o) => fs.writeFileSync(path.join(h, 'config', 'guard', rel), JSON.stringify(o));
 const id = (c, cmd) => evaluate(cmd, c)?.id ?? null;
@@ -117,14 +117,13 @@ test('local.json/guard.local.json khong nap hai lan, khong canh bao legacy gia',
   assert.ok(!r2.warnings.some((x) => /legacy/.test(x)));
 });
 
-test('hook.config.json hong/thieu: luat loi du phong + canh bao, khong rong', () => {
+test('hook.config.json hong/thieu: khong nem loi, luat cung van chay', () => {
   const h = mk();
   const bad = path.join(h, 'bad.json'); fs.writeFileSync(bad, '{oops');
   for (const f of [bad, path.join(h, 'missing.json')]) {
     const r = load([f], { env: {}, hubRoot: h });
-    assert.ok(r.warnings.some((x) => /core-config-fallback/.test(x)));
-    assert.equal(id(r.config, MG), 'mongo-cli');
-    assert.equal(id(r.config, 'echo mongodb://u@h/db'), 'mongo-uri');
-    assert.equal(id(r.config, 'ssh h "psql"'), 'db-cli-remote');
+    assert.doesNotThrow(() => load([f], { env: {}, hubRoot: h }));
+    assert.equal(id(r.config, 'echo hello'), null);
+    assert.equal(evaluate('a'.repeat(100001), r.config)?.id, 'command-too-long');
   }
 });

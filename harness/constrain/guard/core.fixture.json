@@ -1,0 +1,57 @@
+{
+ "mode": "enforce",
+ "logFile": "",
+ "maxInputBytes": 1048576,
+ "maxCommandChars": 100000,
+ "remoteHostAliases": [],
+ "allowlist": [
+  {
+   "id": "hub-local-node",
+   "regex": "^\\s*node\\s+(--test\\b|\"?harness[\\\\/])",
+   "for": [
+    "remote-node-run"
+   ]
+  }
+ ],
+ "denyPatterns": [
+  {
+   "id": "mongo-cli",
+   "regex": "\\b(mongosh|mongodump|mongoexport|mongoimport|mongorestore|mongostat)\\b|\\bmongo\\s",
+   "reason": "Cam mongo shell/tools. Khong doc/thao tac DB. / Mongo CLI blocked; use app-level tools or ask the human."
+  },
+  {
+   "id": "mongo-uri",
+   "regex": "mongodb(\\+srv)?://",
+   "reason": "Cam chuoi ket noi MongoDB. / MongoDB connection string blocked."
+  },
+  {
+   "id": "mongo-driver",
+   "regex": "mongoose\\s*\\.\\s*(connect|createConnection)|\\bMongoClient\\b",
+   "reason": "Cam ket noi DB bang driver. / DB driver connect blocked."
+  },
+  {
+   "id": "db-cli-remote",
+   "remote": true,
+   "regex": "\\b(psql|mysql|redis-cli)\\b",
+   "reason": "Cam db client tren host tu xa. / DB client over ssh blocked."
+  },
+  {
+   "id": "remote-cat",
+   "remote": true,
+   "regex": "\\bcat\\s+(?!>)",
+   "unless": "\\|\\s*(head|tail|wc|sha256sum|md5sum|grep)\\b",
+   "reason": "Cam cat khong gioi han qua ssh. Dung head/tail/wc/grep -n. / Unbounded remote cat blocked."
+  },
+  {
+   "id": "remote-node-run",
+   "remote": true,
+   "regex": "\\b(node|bun)\\s+(?!-)[\\w./~$\\\\-]+\\.(m?js|cjs|ts)\\b",
+   "reason": "Cam chay file node/bun tren host tu xa. Chi cho node --check, node -v, node -e khong co tu khoa DB. / Remote script run blocked; allowed: node --check, -v, safe -e."
+  },
+  {
+   "id": "git-force-push",
+   "regex": "\\bgit\\s+push\\b[^;&|\\n]*(--force|\\s-f\\b)",
+   "reason": "fixture force push"
+  }
+ ]
+}
