@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { DEFAULTS, findChildren, load, handle, MODULE, seenRecently, signatureOf } from './hook.mjs';
+import { DEFAULTS, findChildren, describeChildren, pruneCached, load, handle, MODULE, seenRecently, signatureOf } from './hook.mjs';
 import { validateHookModule, validateHookResult } from '../../core/config/shape.mjs';
 
 const script = path.join(import.meta.dir, 'hook.mjs');
@@ -130,4 +130,33 @@ test('contract background: sweep chi theo background !== false (write:false van 
   const src = (await import('node:fs')).readFileSync(new URL('./hook.mjs', import.meta.url), 'utf8');
   expect(src).toContain('ctx.sweep !== false && ctx.background !== false');
   expect(src).not.toMatch(/ctx\.write !== false\) await sweepProcLedger/);
+});
+
+test('shell/console cua phien (conhost, cmd/powershell con truc tiep root, khong con nang) bi bo; ignoreNames config khong tat conhost', () => {
+  const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
+  const ps = [R(1, 0, 'claude.exe'), R(2, 1, 'conhost.exe'), R(3, 1, 'cmd.exe'), R(4, 1, 'powershell.exe'), R(9, 1, 'Node.exe'), R(99, 1, 'hook.exe')];
+  const cfg = { ...DEFAULTS, ignoreNames: [], watchNames: [...DEFAULTS.watchNames, 'conhost.exe', 'cmd.exe'] };
+  expect(findChildren(ps, 99, cfg, NOW).children.map((c) => c.pid)).toEqual([9]);
+});
+test('shell co con nang (bun) van bao con that', () => {
+  const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
+  const ps = [R(1, 0, 'claude.exe'), R(3, 1, 'cmd.exe'), R(5, 3, 'bun.exe'), R(99, 1, 'hook.exe')];
+  expect(findChildren(ps, 99, DEFAULTS, NOW).children.map((c) => c.pid)).toEqual([5]);
+});
+
+test('cache cu: pid da chet va con cua hook (powershell liet ke) khong bi dem nham; tien trinh that con song van bao', () => {
+  const R = (pid, ppid, name) => ({ pid, ppid, name, startMs: NOW - 600e3, cmd: '' });
+  const ps = [R(1, 0, 'claude.exe'), R(50, 99, 'powershell.exe'), R(60, 1, 'node.exe'), R(70, 1, 'bun.exe'), R(99, 1, 'node.exe')];
+  const kept = pruneCached(ps, 99, (pid) => pid !== 60);
+  expect(kept.map((p) => p.pid)).toEqual([1, 70]);
+  expect(findChildren([...kept, R(99, 1, 'node.exe')], 99, DEFAULTS, NOW).children.map((c) => c.pid)).toEqual([70]);
+});
+
+test('thong bao + audit kem ten#pid toi da 3 tien trinh bi dem', async () => {
+  const ch = [1, 2, 3, 4].map((i) => ({ pid: i, name: 'bun.exe' }));
+  expect(describeChildren(ch)).toBe('bun.exe#1, bun.exe#2, bun.exe#3 (+1)');
+  const r = await handle('Stop', { session_id: 's' }, { cfg: { ...DEFAULTS }, write: false, cache: false, sweep: false, scan: async () => ({ rootPid: 7, total: 4, children: ch }) });
+  expect(r.additionalContext).toContain('bun.exe#1');
+  expect(r.records[0].data.summary).toContain('bun.exe#3');
+  expect(r.records[0].data.data.children.length).toBe(4);
 });

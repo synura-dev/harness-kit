@@ -34,6 +34,7 @@ export const DEFAULTS = {
   watchNames: ['bash.exe', 'sh.exe', 'python.exe', 'python3.exe', 'node.exe', 'bun.exe', 'duckdb.exe', 'ping.exe', 'powershell.exe'],
   rootNames: ['claude.exe', 'agy.exe', 'agy'],
   ignoreNames: ['conhost.exe', 'openconsole.exe'], // luon bo qua (console host), ghi de qua config
+  shellNames: ['cmd.exe', 'powershell.exe', 'pwsh.exe', 'bash.exe', 'sh.exe'], // shell cua chinh phien: con truc tiep cua root, khong co con nang -> bo
   dedupeSec: 21600, // cung chu ky (root pid + tap pid) trong 6h -> khong canh bao lai; 0 = tat
   throttleSec: 900, // chu ky khac (pid churn): toi da 1 canh bao / root pid / 15 phut; 0 = tat
   liveAgentTtlSec: 7200, // subagent co SubagentStart ma chua SubagentStop: coi la con chay toi da 2h (agent bi giet khong co Stop)
@@ -45,12 +46,23 @@ export const DEFAULTS = {
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('proc-orphans', { defaults: DEFAULTS, files, env: { HOOK_PROC_ORPHANS_ENABLED: 'enabled' } });
 
+/** Mo ta toi da 3 tien trinh bi dem: "name#pid, ..." (+N them). */
+export const describeChildren = (children, max = 3) => children.slice(0, max).map((c) => `${c.name}#${c.pid}`).join(', ') + (children.length > max ? ` (+${children.length - max})` : '');
+/** Pid con song that (signal 0). EPERM = con song. */
+export const pidAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return !!e && e.code === 'EPERM'; } };
+/** Loc danh sach tien trinh da cache: bo con cua chinh hook (powershell lien ke cua listProcesses) va pid da chet (cache cu -> con "ma" bi dem nham). */
+export const pruneCached = (procs, selfPid, alive = pidAlive) => procs.filter((p) => p.pid !== selfPid && p.ppid !== selfPid && alive(p.pid));
+
 /** Thuan: procs [{pid,ppid,name,startMs,cmd}] -> {rootPid, children[]} (khong co root => rootPid null). */
 export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   const by = new Map(procs.map((p) => [p.pid, p]));
   const lc = (s) => String(s || '').toLowerCase();
   const shield = new Set();
-  const ign = (cfg.ignoreNames || DEFAULTS.ignoreNames).map(lc);
+  const ign = [...new Set([...DEFAULTS.ignoreNames, ...(cfg.ignoreNames || [])].map(lc))]; // console host luon bo, config chi them
+  const shells = new Set([...DEFAULTS.shellNames, ...(cfg.shellNames || [])].map(lc));
+  const kids = new Map();
+  for (const p of procs) (kids.get(p.ppid) || kids.set(p.ppid, []).get(p.ppid)).push(p);
+  const heavy = (pid, d = 0) => d < 8 && (kids.get(pid) || []).some((k) => (!ign.includes(lc(k.name)) && !shells.has(lc(k.name))) || heavy(k.pid, d + 1));
   let root = null;
   for (let p = by.get(selfPid), n = 0; p && n < 64; p = by.get(p.ppid), n++) {
     shield.add(p.pid);
@@ -59,7 +71,9 @@ export function findChildren(procs, selfPid, cfg, now = Date.now()) {
   if (!root) return { rootPid: null, children: [] };
   const children = [];
   for (const p of procs) {
-    if (shield.has(p.pid) || ign.includes(lc(p.name)) || !cfg.watchNames.includes(lc(p.name))) continue;
+    if (shield.has(p.pid) || ign.includes(lc(p.name))) continue;
+    if (!cfg.watchNames.includes(lc(p.name))) continue;
+    if (shells.has(lc(p.name)) && p.ppid === root.pid && !heavy(p.pid)) continue; // shell cua phien (Bash/PowerShell tool giu song)
     let q = by.get(p.ppid), n = 0, under = false;
     for (; q && n < 64; q = by.get(q.ppid), n++) if (q.pid === root.pid) { under = true; break; }
     if (!under) continue;
@@ -86,13 +100,14 @@ export async function scanChildren(cfg, ctx = {}) {
     try {
       const c = JSON.parse(fs.readFileSync(dataPathsFor('proc-orphans', 'scan-cache.json', eo)[0] || file, 'utf8'));
       if (c && Array.isArray(c.procs) && Date.now() - c.ts < ttl * 1000 && c.ts <= Date.now() + 1000) {
-        const r = findChildren([...c.procs.filter((p) => p.pid !== self.pid), self], self.pid, cfg);
+        const r = findChildren([...pruneCached(c.procs, self.pid), self], self.pid, cfg);
         if (r.rootPid != null) return r;
       }
     } catch {}
   }
   const { listProcesses } = await import('../../core/runtime/proc-list.mjs');
-  const { procs } = listProcesses({ timeoutMs: cfg.timeoutMs });
+  const { procs: all } = listProcesses({ timeoutMs: cfg.timeoutMs });
+  const procs = all.filter((p) => p.ppid !== process.pid); // powershell dung de liet ke la con cua hook: khong phai tien trinh mo coi
   if (ttl > 0 && ctx.cache !== false) {
     let tmp = null;
     try {
@@ -204,7 +219,7 @@ export async function handle(event, input, ctx = {}) {
     const sid = `claude-${String(input.session_id || 'unknown').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}`;
     const env = {
       ts, sid, type: 'proc', event: 'ProcOrphans', session_id: input.session_id || null, agent_id: input.agent_id || null,
-      origin: 'hook', summary: `${event}: ${r.total} tien trinh con con song (root pid ${r.rootPid})`,
+      origin: 'hook', summary: `${event}: ${r.total} tien trinh con con song (root pid ${r.rootPid}): ${describeChildren(r.children)}`,
       data: { trigger: event, note: 'khong gan duoc pid voi agent; liet ke moi con chau cua session', ...r },
     };
     const wopts = { max_file_bytes: 5242880 };
@@ -212,7 +227,7 @@ export async function handle(event, input, ctx = {}) {
       const { writeEnvelope, auditRoot } = await import('../../core/audit/audit-write.mjs');
       writeEnvelope(env, wopts, auditRoot());
     }
-    return { record: { rootPid: r.rootPid, total: r.total }, additionalContext: `proc-orphans: ${r.total} tien trinh con con song (root pid ${r.rootPid}); dung truoc khi bao cao cuoi`, records: [{ sink: 'audit', data: env, opts: wopts }] };
+    return { record: { rootPid: r.rootPid, total: r.total }, additionalContext: `proc-orphans: ${r.total} tien trinh con con song (root pid ${r.rootPid}: ${describeChildren(r.children)}); dung truoc khi bao cao cuoi`, records: [{ sink: 'audit', data: env, opts: wopts }] };
   } catch { return {}; } // fail-open
 }
 
