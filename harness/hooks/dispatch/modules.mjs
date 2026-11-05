@@ -24,10 +24,11 @@ const DATA_CHECK = { id: 'data-check', load: () => import('../../observe/data-ch
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
 const LEDGER_WARN = { id: 'ledger-warn', load: () => import('../../observe/ledger/hook.mjs') };
+const AGY_HEAL = { id: 'agy-heal', load: () => import('../../build/agy-heal/hook.mjs') };
 const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
-export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn']);
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn', 'agy-heal']);
 
 export const ORDER = Object.freeze({
   PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, AUDIT],
@@ -40,7 +41,7 @@ export const ORDER = Object.freeze({
   SessionEnd: [AUDIT],
   Stop: [AUDIT, PROC_ORPHANS],
   SubagentStop: [AUDIT, PROC_ORPHANS],
-  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, EXT_INJECT, LEDGER_WARN],
+  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, EXT_INJECT, LEDGER_WARN, AGY_HEAL],
   UserPromptSubmit: [AUDIT, LEDGER_WARN],
   WorktreeCreate: [WORKTREE],
   WorktreeRemove: [WORKTREE],
