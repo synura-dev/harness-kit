@@ -39,6 +39,21 @@ export function validateDef(d) {
 }
 
 /** Nap dinh nghia: defaults/*.json, de len boi <project>/.harness/rules/*.json cung ten. Tra {defs, errors, truncated}. */
+const PROTECTED_FREE = new Set(['message', 'desc', 'id', 'origin', 'protected', 'enabled']);
+const sameJson = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+/** Ghi de luat protected: chi doi message, cooldown_hours (>= mac dinh), siet nguong (threshold <= mac dinh); khong doi filter/source/action/... Tra danh sach vi pham. */
+export function protectedViolations(base, over) {
+  const v = [];
+  for (const k of Object.keys(over || {})) {
+    if (PROTECTED_FREE.has(k)) continue;
+    if (k === 'cooldown_hours') { if (!(Number(over[k]) >= Number(base.cooldown_hours ?? 24))) v.push('cooldown_hours nho hon mac dinh'); continue; }
+    if (k === 'threshold') { if (!(Number(over[k]) <= Number(base.threshold))) v.push('threshold lon hon mac dinh (chi duoc siet)'); continue; }
+    if (!sameJson(over[k], base[k])) v.push(`khong duoc doi ${k}`);
+  }
+  if (over && over.protected === false) v.push('khong duoc tat protected');
+  return v;
+}
+
 /** Du an duoc nap luat override: thu muc hub, hoac du an da dang ky qua ext trust (registry may). Fail-closed khi loi. */
 export function isTrustedProject(projectDir, hubDir = null) {
   try {
@@ -68,9 +83,15 @@ export function loadDefinitions({ defaultsDir = DEFAULTS_DIR, projectDir = null,
           if (prev && prev.protected === true) { errors.push({ file: f, errors: ['luat protected khong the tat bang ghi de; bo qua enabled:false'] }); continue; }
           map.delete(n); continue; // tat bang ghi de
         }
-        const errs = validateDef(j);
+        let def = j;
+        if (prev && prev.protected === true) {
+          const viol = protectedViolations(prev, j);
+          if (viol.length) { errors.push({ file: f, errors: [`ghi de luat protected bi bo: ${viol.join('; ')}`] }); continue; }
+          def = { ...prev, ...j, protected: true };
+        }
+        const errs = validateDef(def);
         if (errs.length) { errors.push({ file: f, errors: errs }); continue; }
-        map.set(n, { ...j, ...(prev && prev.protected === true ? { protected: true } : {}), id: j.id || n.replace(/\.json$/, ''), origin });
+        map.set(n, { ...def, id: def.id || n.replace(/\.json$/, ''), origin });
       } catch (err) { errors.push({ file: path.join(dir, n), errors: [String(err && err.message || err)] }); }
     }
   };

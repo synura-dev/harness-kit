@@ -53,11 +53,12 @@ test('duong dan khong dang ky bi bo qua + log; hub va du an dang ky duoc nap', (
 test('luat protected khong tat duoc bang enabled:false, van thay noi dung nhung giu protected', () => {
   const proj = mk(); const dir = path.join(proj, '.harness', 'rules'); fs.mkdirSync(dir, { recursive: true });
   for (const id of ['main-self-edit', 'main-self-verify', 'repeated-error', 'cap']) fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({ enabled: false }));
+  fs.writeFileSync(path.join(dir, 'deprecate.json'), JSON.stringify({ enabled: false }));
   fs.writeFileSync(path.join(dir, 'propose-fix.json'), JSON.stringify({ enabled: false }));
   const r = loadDefinitions({ evolveDir: null, projectDir: proj, trusted: () => true });
   const ids = r.defs.map((d) => d.id);
-  for (const id of ['main-self-edit', 'main-self-verify', 'repeated-error', 'cap']) assert.ok(ids.includes(id), id);
-  assert.ok(!ids.includes('propose-fix')); // khong protected -> tat duoc
+  for (const id of ['main-self-edit', 'main-self-verify', 'repeated-error', 'cap', 'propose-fix']) assert.ok(ids.includes(id), id);
+  assert.ok(!ids.includes('deprecate')); // khong protected -> tat duoc
   fs.rmSync(proj, { recursive: true, force: true });
 });
 

@@ -69,13 +69,13 @@ test('validateDef bat loi', () => {
 test('ghi de theo thu muc du an: cung ten thay, ten moi them, enabled:false tat; khong registry', () => {
   const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'rules-'));
   const dir = path.join(proj, '.harness', 'rules'); fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(path.join(dir, 'repeated-error.json'), JSON.stringify({ source: 'candidates', filter: { kind: 'error' }, threshold: 10, action: 'log' }));
+  fs.writeFileSync(path.join(dir, 'repeated-error.json'), JSON.stringify({ source: 'candidates', filter: { kind: 'error' }, threshold: 2, action: 'warn', message: 'x {count}' }));
   fs.writeFileSync(path.join(dir, 'main-self-edit.json'), JSON.stringify({ enabled: false }));
   fs.writeFileSync(path.join(dir, 'custom.json'), JSON.stringify({ source: 'audit', filter: {}, threshold: 1, action: 'report' }));
   fs.writeFileSync(path.join(dir, 'bad.json'), '{ khong phai json');
   const r = loadDefinitions({ projectDir: proj, trusted: () => true });
   const by = Object.fromEntries(r.defs.map((d) => [d.id, d]));
-  assert.equal(by['repeated-error'].threshold, 10); assert.equal(by['repeated-error'].origin, 'project');
+  assert.equal(by['repeated-error'].threshold, 2); assert.equal(by['repeated-error'].origin, 'project');
   assert.ok(by['main-self-edit']); assert.ok(by.custom); assert.ok(by['main-self-verify']);
   assert.equal(r.errors.length, 2); // bad.json + enabled:false cua luat protected bi bo qua
   fs.rmSync(proj, { recursive: true, force: true });
@@ -83,4 +83,25 @@ test('ghi de theo thu muc du an: cung ten thay, ten moi them, enabled:false tat;
 
 test('timeout nap dinh nghia -> truncated', () => {
   assert.equal(loadDefinitions({ timeoutMs: -1 }).truncated, 'timeout');
+});
+
+test('luat protected: propose-fix protected; ghi de chi doi message/cooldown(>=)/siet nguong; doi filter/source/action/noi long -> bo + errors', () => {
+  const proj = fs.mkdtempSync(path.join(os.tmpdir(), 'rules-prot-'));
+  const dir = path.join(proj, '.harness', 'rules'); fs.mkdirSync(dir, { recursive: true });
+  const base = loadDefinitions({ evolveDir: null }).defs.find((d) => d.id === 'propose-fix');
+  assert.equal(base.protected, true);
+  const put = (n, o) => fs.writeFileSync(path.join(dir, n), JSON.stringify(o));
+  const run = () => { const r = loadDefinitions({ projectDir: proj, trusted: () => true, evolveDir: null }); return { d: r.defs.find((x) => x.id === 'propose-fix'), errors: r.errors }; };
+  // hop le: doi message + cooldown lon hon + siet nguong; giu protected
+  put('propose-fix.json', { message: 'moi {count}', cooldown_hours: 200, threshold: 5 });
+  let r = run();
+  assert.equal(r.d.message, 'moi {count}'); assert.equal(r.d.cooldown_hours, 200); assert.equal(r.d.threshold, 5); assert.equal(r.d.protected, true); assert.equal(r.d.action, 'propose'); assert.equal(r.errors.length, 0);
+  // vi pham: moi cai bo override, giu mac dinh, ghi errors
+  for (const bad of [{ threshold: 11 }, { cooldown_hours: 1 }, { filter: { kind: 'x' } }, { source: 'audit' }, { action: 'log' }, { protected: false }]) {
+    put('propose-fix.json', { ...bad, message: 'x' });
+    r = run();
+    assert.equal(r.d.threshold, base.threshold, JSON.stringify(bad)); assert.equal(r.d.action, 'propose'); assert.deepEqual(r.d.filter, base.filter); assert.notEqual(r.d.message, 'x');
+    assert.equal(r.errors.length, 1, JSON.stringify(bad));
+  }
+  fs.rmSync(proj, { recursive: true, force: true });
 });
