@@ -55,13 +55,25 @@ function procDir() {
 }
 export const ledgerPath = (dir) => path.join(dir || process.env.HARNESS_PROC_DIR || procDir(), 'proc-ledger.json');
 const readLedger = (f) => { try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); return Array.isArray(j.entries) ? j.entries : []; } catch { return []; } };
+/** Doc de ghi (trong khoa): rename de len tren Windows co cua so ngan doc loi (EPERM/EBUSY/ENOENT/JSON do). Thu lai ngan; van loi thi throw de KHONG ghi de so bang [] (mat muc). File that su khong co -> []. */
+function readLedgerStrict(f) {
+  let last;
+  for (let i = 0; i < 40; i++) {
+    try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); return Array.isArray(j.entries) ? j.entries : []; } catch (e) {
+      last = e;
+      if (e && e.code === 'ENOENT' && !fs.existsSync(f) && i >= 2) return [];
+    }
+    try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10); } catch { /* bo qua */ }
+  }
+  throw last;
+}
 function writeLedger(f, entries) {
   const t = `${f}.${process.pid}.tmp`;
   try { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(t, JSON.stringify({ entries })); fs.renameSync(t, f); } catch { try { fs.unlinkSync(t); } catch {} }
 }
 /** Doc-sua-ghi so duoi khoa. fn(entries) -> entries moi | null (khong ghi). Khong lay duoc khoa -> bo qua (tra false). */
 function updateProcLedger(f, fn) {
-  const r = withLock(f, () => { const next = fn(readLedger(f)); if (next) writeLedger(f, next); return true; }, { staleMs: 15000, retries: 120, waitMs: 25 });
+  let r; try { r = withLock(f, () => { const next = fn(readLedgerStrict(f)); if (next) writeLedger(f, next); return true; }, { staleMs: 15000, retries: 120, waitMs: 25 }); } catch { return false; }
   return r.ok;
 }
 export const isAlive = (pid) => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
