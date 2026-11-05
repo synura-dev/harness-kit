@@ -109,7 +109,7 @@ export async function handle(event, input, ctx = {}) {
       const { writeEnvelope, auditRoot } = await import('../../core/audit/audit-write.mjs');
       writeEnvelope(env, wopts, auditRoot());
     }
-    return { record: { rootPid: r.rootPid, total: r.total }, records: [{ sink: 'audit', data: env, opts: wopts }] };
+    return { record: { rootPid: r.rootPid, total: r.total }, additionalContext: `proc-orphans: ${r.total} tien trinh con con song (root pid ${r.rootPid}); dung truoc khi bao cao cuoi`, records: [{ sink: 'audit', data: env, opts: wopts }] };
   } catch { return {}; } // fail-open
 }
 
