@@ -8,6 +8,16 @@ export const parseDate = (s) => {
   return Number.isFinite(t) ? t : null;
 };
 
+/** CreationDate cua wmic: yyyymmddHHMMSS.ffffff+mmm (gio dia phuong + do lech phut so voi UTC o cuoi) -> epoch ms dung. Thieu do lech -> coi la gio local may. Rac -> null. */
+export function parseWmicDate(cd) {
+  const m = /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)(?:\.(\d+))?([+-]\d{1,4})?/.exec(String(cd || '').trim());
+  if (!m) return null;
+  const [y, mo, d, h, mi, s] = m.slice(1, 7).map(Number);
+  const ms = m[7] ? Math.floor(Number(`0.${m[7]}`) * 1000) : 0;
+  if (m[8] == null) return new Date(y, mo - 1, d, h, mi, s, ms).getTime();
+  return Date.UTC(y, mo - 1, d, h, mi, s, ms) - Number(m[8]) * 60000;
+}
+
 /** Liet ke tien trinh (Win32_Process). Tra ve {procs, error?}. */
 export function listProcesses({ timeoutMs = 15000, maxProcs = 5000 } = {}) {
   if (process.platform !== 'win32') return { procs: [], error: 'chi ho tro win32' };
@@ -25,8 +35,7 @@ export function listProcesses({ timeoutMs = 15000, maxProcs = 5000 } = {}) {
   for (const line of w.stdout.split(/\r?\n/).slice(1)) {
     const c = line.split(','); if (c.length < 8) continue; // Node,Cmd,CreationDate,KMT,Name,PPID,PID,UMT -> sap xep theo header
     const [, cmd, cd, kmt, name, ppid, pid, umt] = [c[0], c.slice(1, c.length - 6).join(','), ...c.slice(-6)];
-    const m = /^(\d{4})(\d\d)(\d\d)(\d\d)(\d\d)(\d\d)/.exec(cd || '');
-    procs.push({ pid: +pid, ppid: +ppid, name, cmd, cpu: (Number(kmt) + Number(umt)) / 1e7, startMs: m ? Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null });
+    procs.push({ pid: +pid, ppid: +ppid, name, cmd, cpu: (Number(kmt) + Number(umt)) / 1e7, startMs: parseWmicDate(cd) });
     if (procs.length >= maxProcs) break;
   }
   return { procs };
