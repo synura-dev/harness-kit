@@ -8,7 +8,7 @@
   "cmds": "sizes | data-prune | ledger [list] | report",
   "default": "index",
   "domains": {
-    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (gop audit, audit-query, runs)", "cmds": "sizes | data-prune | ledger [list] | report", "default": "index" }
+    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (sizes, data-prune, ledger, report)", "cmds": "sizes | data-prune | ledger [list] | report", "default": "index" }
   },
   "files": {
     "helpers": ["data.mjs", "sizes.mjs", "prune.mjs"], "query": ["query/files.mjs"] },

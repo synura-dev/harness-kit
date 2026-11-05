@@ -282,14 +282,6 @@ test('CLI: apply khong --approve -> exit 2; khong co lenh -> usage (khong con --
   expect(u.stdout).not.toMatch(/hook-config|--set/);
 });
 
-test('eval branch: tran con luon < tran cong (120s+5s), theo --timeout-s neu co', async () => {
-  const { evalTimeoutMs, EVAL_TIMEOUT_MS } = await import('./cli.mjs');
-  expect(EVAL_TIMEOUT_MS).toBeLessThan(125000);
-  expect(evalTimeoutMs(['run'])).toBe(EVAL_TIMEOUT_MS);
-  expect(evalTimeoutMs(['run', '--timeout-s', '30'])).toBe(30000);
-  expect(evalTimeoutMs(['run', '--timeout-s=7'])).toBe(7000);
-  expect(evalTimeoutMs(['run', '--timeout-s', 'x'])).toBe(EVAL_TIMEOUT_MS);
-});
 
 test('layout cau hinh: skillsDir doi duoc; cam tuong minh van thang; layout xau bi bo ve mac dinh', () => {
   const lay = { skillsDir: 'ws/skills' };

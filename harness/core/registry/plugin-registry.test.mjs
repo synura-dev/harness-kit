@@ -32,11 +32,9 @@ test('loadHarnessRegistry: 3 vung + cli, khong loi, drift = 0', async () => {
   expect(r.errors).toEqual([]);
   expect(r.drift).toEqual([]);
   expect(r.domains.observe).toMatch(/observe[\\/]views[\\/]observe\.mjs$/);
-  expect(Object.keys(r.aliases)).toContain('audit-query'); // alias -> observe
-  expect(r.domains.build).toMatch(/build[\\/]skills[\\/]build\.mjs$/);
   expect(r.domains.constrain).toMatch(/constrain[\\/]cli[\\/]cli\.mjs$/);
-  expect(Object.keys(r.aliases)).toEqual(expect.arrayContaining(["doctor", "adapters", "skills", "install", "config", "cost", "evidence", "eval"]));
-  expect(Object.keys(r.domains).filter((d) => !r.ext[d]).sort()).toEqual(["agy", "build", "constrain", "data", "evolve", "ext", "observe", "play", "review", ...(isPluginMode() ? [] : ["plugin"])]); // plugin mode ship ext, khong ship tool plugin (xuat)
+  expect(Object.keys(r.aliases)).toEqual(expect.arrayContaining(["config"]));
+  expect(Object.keys(r.domains).filter((d) => !r.ext[d]).sort()).toEqual(["agy", "constrain", "data", "doctor", "evolve", "ext", "install", "observe"]); // plugin mode ship ext, khong ship tool plugin (xuat)
   expect(r.manifests.map((m) => m.dir)).toContain('harness/hooks/dispatch');
 });
 
@@ -93,7 +91,7 @@ test('architecture: sinh on dinh, idempotent, phat hien lech', async () => {
   const { renderArchitecture, applyArchitecture, syncArchitecture, ARCH_BEGIN, ARCH_END } = await import('./plugin-registry.mjs');
   const a = renderArchitecture(), b = renderArchitecture();
   expect(a).toBe(b);
-  expect(a).toContain("| `build` |");
+  expect(a).toContain("| `constrain` |");
   expect(a).toContain('flatMax=8');
   expect(applyArchitecture('x', a)).toBeNull();
   const doc = `hand\n${ARCH_BEGIN}\nold\n${ARCH_END}\ntail\n`;

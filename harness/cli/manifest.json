@@ -5,6 +5,8 @@
   "entry": "harness.mjs",
   "domain": "harness",
   "domains": {
+    "doctor": { "file": "commands/doctor.mjs", "desc": "kiem tra moi truong/hook/du lieu", "cmds": "[--json]", "default": "run" },
+    "install": { "file": "../build/install/cli.mjs", "desc": "cai harness tren may", "cmds": "[run] [--dry-run] [--skip-doctor] | --shim", "default": "run" },
     "ext": {
       "file": "commands/ext-cmd.mjs",
       "desc": "dang ky extension lop may (hash ghim, ask/TTY)",

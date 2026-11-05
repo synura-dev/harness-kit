@@ -9,7 +9,7 @@ test('hooks: liet ke module that cua dispatcher, moi module nap duoc va co handl
   const { rows, truncated } = await listHookModules();
   expect(truncated).toBeNull();
   const ids = rows.map((r) => r.id);
-  for (const id of ['guard', 'approval', 'bash-guard', 'audit', 'verify-gate']) expect(ids).toContain(id);
+  for (const id of ['guard', 'bash-guard', 'audit']) expect(ids).toContain(id);
   expect(rows.every((r) => r.status === 'ok')).toBe(true);
   expect(rows.find((r) => r.id === 'guard').gate).toBe(true);
   expect(rows.find((r) => r.id === 'audit').events).toContain('PreToolUse');

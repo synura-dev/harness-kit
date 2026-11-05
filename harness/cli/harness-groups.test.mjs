@@ -49,7 +49,7 @@ test('groups: index nhom theo vung, 4 nhom chinh luon co tieu de, domain cu o ru
   const x = idx(r);
   expect(x.code).toBe(0);
   const t = x.text;
-  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Chay (play, tools, hooks) (run) ==']) expect(t).toContain(h);
+  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==']) expect(t).toContain(h);
   expect(t.indexOf('ev - EV')).toBeGreaterThan(t.indexOf('(observe)'));
   expect(t.indexOf('ev - EV')).toBeLessThan(t.indexOf('(constrain)'));
   expect(t.indexOf('old - OLD')).toBeGreaterThan(t.indexOf('(run)'));
@@ -98,8 +98,8 @@ test('groups: domain trung ten giua 2 manifest -> bao loi, khong ghi de im lang'
 test('groups: groupOf suy tu duong dan, khong hardcode domain', () => {
   expect(groupOf({ script: 'harness/observe/evidence/cli.mjs' })).toBe('observe');
   expect(groupOf({ script: 'harness/cli/commands/doctor.mjs' })).toBe('cli');
-  expect(groupOf({ script: 'harness/hooks/demo/x.mjs' })).toBe('run');
-  expect(groupOf({})).toBe('run');
+  expect(groupOf({ script: 'harness/hooks/demo/x.mjs' })).toBe('hooks');
+  expect(groupOf({})).toBe('cli');
 });
 
 test('groups: index dai bi cat <= INDEX_MAX_LINES kem goi y --flat', () => {
