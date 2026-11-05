@@ -22,7 +22,7 @@ const opts = { extDirs: [hubDir], registryFile: reg, env: { ...process.env, HUB_
 test('manifestDataEntries doc tasks/runs, bo muc sai', () => {
   const e = manifestDataEntries(hubDir, 'hub');
   expect(Object.keys(e).sort()).toEqual(['runs', 'tasks']);
-  expect(e.tasks).toMatchObject({ zone: 'knowledge', class: 'durable', path: 'knowledge/tasks', legacy: 'tasks', owner: 'hub/tasks' });
+  expect(e.tasks).toMatchObject({ zone: 'knowledge', class: 'durable', path: 'knowledge/tasks', owner: 'hub/tasks' });
   expect(e.runs).toMatchObject({ zone: 'system', class: 'log', retentionDays: 14, path: 'system/runs', owner: 'hub/dispatch' });
 });
 
@@ -30,7 +30,7 @@ test('loadDataRegistry gop; dataReadRoots + resolveEntry nhu entry thuong', () =
   const r = loadDataRegistry(opts);
   expect(Object.keys(r.entries).sort()).toEqual(['audit', 'runs', 'tasks']);
   const roots = dataReadRoots('tasks', { ...opts, registry: r });
-  expect(roots.length).toBe(2);
+  expect(roots.length).toBe(1);
   expect(roots[0]).toBe(path.join(dd, 'knowledge', 'tasks'));
   const hit = resolveEntry(path.join(dd, 'system', 'runs', 'a.log'), { ...opts, registry: r });
   expect(hit && hit.key).toBe('runs');

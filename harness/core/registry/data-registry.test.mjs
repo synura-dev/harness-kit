@@ -177,20 +177,3 @@ test('dataReadRoots: legacy cua pattern ra ngoai dataDir (.. / tuyet doi) bi loc
   }
 });
 
-test('setEntryPath: restoreLegacy khoi phuc legacy cu (co/khong co) khi hoan tac', () => {
-  const hub = fs.mkdtempSync(path.join(os.tmpdir(), 'drleg-'));
-  const rf = path.join(hub, 'r.json');
-  fs.writeFileSync(rf, JSON.stringify({ entries: { 'a/b': { class: 'log', legacy: 'old/L' }, 'c/d': { class: 'log' } } }));
-  const o = { registryFile: rf, workspacesDir: path.join(hub, 'ws'), env: { HUB_DIR: hub } };
-  const u = m.setEntryPath('a/b', 'x/y', o);
-  expect(u.hadLegacy).toBe(true);
-  expect(u.prevLegacy).toBe('old/L');
-  m.setEntryPath('x/y', 'a/b', { ...o, restoreLegacy: { had: u.hadLegacy, value: u.prevLegacy } });
-  const j = JSON.parse(fs.readFileSync(rf, 'utf8')).entries['a/b'];
-  expect(j.path).toBe('a/b');
-  expect(j.legacy).toBe('old/L');
-  const u2 = m.setEntryPath('c/d', 'e/f', o);
-  expect(u2.hadLegacy).toBe(false);
-  m.setEntryPath('e/f', 'c/d', { ...o, restoreLegacy: { had: false } });
-  expect(JSON.parse(fs.readFileSync(rf, 'utf8')).entries['c/d'].legacy).toBeUndefined();
-});

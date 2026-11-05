@@ -58,12 +58,6 @@ export function dataPathFor(key, ...rest) {
         try { process.stderr.write(formatWarn({ rule: 'legacy-read', path: p.rel, key, detail: 'doc tu duong dan cu (chua co cap <node>/)', fix: `ghi moi vao ${r.rel}` }) + '\n'); } catch {}
       }
     }
-  } else if (opts.mode === 'read' && r.usingLegacy) {
-    base = r.legacyRel;
-    if (!opts.quiet && !legacyWarned.has(key)) {
-      legacyWarned.add(key);
-      try { process.stderr.write(formatWarn({ rule: 'legacy-read', path: r.legacyRel, key, detail: 'doc tu duong dan cu', fix: `harness data mv ${r.legacyRel} ${r.rel} --yes` }) + '\n'); } catch {}
-    }
   }
   const out = path.join(root, ...base.split('/'), ...segs);
   if (!isInside(out, root)) throw new Error('duong dan thoat khoi dataDir');

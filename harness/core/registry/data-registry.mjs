@@ -168,7 +168,7 @@ export function manifestDataEntries(extDir, ownerPrefix = path.basename(extDir))
         const rel = [...(e.zone ? [e.zone] : []), ...segs].join('/');
         const key = e.tool ? String(e.tool) : segs[segs.length - 1];
         if (out[key]) continue;
-        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), ...(capsOf(e.caps) ? { caps: capsOf(e.caps) } : {}), target: rel, path: rel, ...(e.legacy ? { legacy: String(e.legacy) } : {}), ...(e.zone === 'workspaces' ? { deprecatedPath: true } : {}) };
+        out[key] = { ...(e.zone ? { zone: e.zone } : {}), ...(e.class ? { class: e.class } : {}), ...(e.zone === 'workspaces' ? { workspace: typeof e.workspace === 'string' && e.workspace ? e.workspace : id } : {}), owner: `${ownerPrefix}/${n}`, ...(e.retentionDays !== undefined && e.retentionDays !== null ? { retentionDays: e.retentionDays } : {}), ...(capsOf(e.caps) ? { caps: capsOf(e.caps) } : {}), target: rel, path: rel, ...(e.zone === 'workspaces' ? { deprecatedPath: true } : {}) };
       } catch { /* bo muc sai */ }
     }
   }
@@ -275,7 +275,7 @@ export function checkWrite(abs, opts = {}) {
     if (isAudit && mode === 'enforce') mode = 'warn';
     const pth = segs.slice(0, Math.min(segs.length, 3)).join('/');
     let warn = null;
-    if (!entry) warn = { rule: 'unregistered', path: pth, key, detail: 'key chua dang ky trong registry', fix: `harness data register ${key} --class log` };
+    if (!entry) warn = { rule: 'unregistered', path: pth, key, detail: 'key chua dang ky trong registry', fix: `them data[] vao manifest ext (zone/class/retention)` };
     else {
       const miss = ['class', 'zone', 'owner'].filter((f) => !entry[f]);
       if (miss.length) warn = { rule: 'missing-field', path: pth, key, detail: 'thieu ' + miss.join(','), fix: `harness data register ${key} --class log --owner <owner>` };
@@ -298,8 +298,7 @@ export function formatWarn(w) {
 }
 
 /**
- * Phan giai duong dan vat ly cua key (tuong thich sau `data mv`).
- * rel = ghi (luon moi); readRel = doc (moi neu ton tai, khong thi legacy neu ton tai).
+ * Phan giai duong dan vat ly cua key. rel = ghi = doc.
  * @returns {{rel:string, legacyRel:string|null, readRel:string, usingLegacy:boolean, exists:{new:boolean,legacy:boolean}}}
  */
 export function resolveDataRel(key, opts = {}) {
@@ -331,67 +330,18 @@ export function resolveDataRel(key, opts = {}) {
     }
   }
   const rel = toPosix(base).replace(/\/+$/, '');
-  const legacyRel = e && e.legacy ? safeLegacy(e.legacy) : null;
   const root = dataRoot(undefined, opts);
   const ex = (r) => { try { return !!r && fs.existsSync(path.join(root, r)); } catch { return false; } };
-  const exists = { new: ex(rel), legacy: ex(legacyRel) };
-  const usingLegacy = !exists.new && exists.legacy;
-  return { rel, legacyRel, readRel: usingLegacy ? legacyRel : rel, usingLegacy, exists };
+  return { rel, legacyRel: null, legacyRels: [], readRel: rel, usingLegacy: false, exists: { new: ex(rel), legacy: false } };
 }
 
-/** Cap nhat entry co phys path === from (registry.json hoac workspaces/<ws>.json): path=to, legacy=from (ve lai legacy cu thi bo legacy). Tra {key,file}|null. */
-export function setEntryPath(from, to, opts = {}) {
-  const hub = workspaceRoot(opts);
-  const codeDir = opts.pluginDir || REPO_DIR;
-  const file = opts.registryFile || path.join(isPluginMode(codeDir) ? codeDir : hub, 'harness', 'observe', 'storage', 'registry.json');
-  const wsDir = opts.workspacesDir || path.join(hub, 'config', 'data', 'workspaces');
-  const norm = (x) => toPosix(x).replace(/\/+$/, '');
-  let prev;
-  const apply = (v) => {
-    prev = v.legacy;
-    v.path = to;
-    if (opts.restoreLegacy) { if (opts.restoreLegacy.had) v.legacy = opts.restoreLegacy.value; else delete v.legacy; }
-    else if (opts.dropLegacy) delete v.legacy;
-    else if (v.legacy !== undefined && norm(v.legacy) === norm(to)) delete v.legacy; else v.legacy = from;
-  };
-  const j = readJ(file);
-  if (isObj(j) && isObj(j.entries)) {
-    for (const [k, v] of Object.entries(j.entries)) {
-      if (isObj(v) && norm(v.path || k) === norm(from)) { apply(v); writeAtomic(file, JSON.stringify(j, null, 2) + '\n'); cache.clear(); return { key: k, file, hadLegacy: prev !== undefined, prevLegacy: prev }; }
-    }
-  }
-  let names = [];
-  try { names = fs.readdirSync(wsDir).filter((n) => n.endsWith('.json') && !n.endsWith('.example.json')).sort(); } catch {}
-  for (const n of names) {
-    const wf = path.join(wsDir, n);
-    const w = readJ(wf);
-    if (!isObj(w)) continue;
-    const ws = typeof w.workspace === 'string' ? w.workspace : n.slice(0, -5);
-    const src = isObj(w.entries) ? w.entries : w;
-    for (const [k, v] of Object.entries(src)) {
-      if (!isObj(v) || k.startsWith('_') || k === 'workspace') continue;
-      const key = k.includes('/') ? k : `workspaces/${ws}/${k}`;
-      if (norm(v.path || k) === norm(from)) { apply(v); writeAtomic(wf, JSON.stringify(w, null, 2) + '\n'); cache.clear(); return { key, file: wf, hadLegacy: prev !== undefined, prevLegacy: prev }; }
-    }
-  }
-  return null;
-}
-
-/**
- * Cac goc DOC cua key theo thu tu [path moi, legacy], chi nhung goc ton tai (tuyet doi).
- * Reader doc gop 2 noi trong giai doan relocate/mvpart. Khong ghi stderr.
- * @returns {string[]}
- */
+/** Cac goc DOC cua key: chi path moi neu ton tai (tuyet doi). Khong ghi stderr. */
 export function dataReadRoots(key, opts = {}) {
   const r = resolveDataRel(key, opts);
   const root = dataRoot(undefined, opts);
-  const out = [];
-  if (r.needsNode) return out;
-  const ex = (x) => { try { return fs.existsSync(path.join(root, ...x.split('/'))); } catch { return false; } };
-  const inRoot = (x) => isInside(x, root);
-  if (r.exists.new) { const x = path.join(root, ...r.rel.split('/')); if (inRoot(x)) out.push(x); }
-  for (const l of r.legacyRels || (r.legacyRel ? [r.legacyRel] : [])) if (l !== r.rel && (r.legacyRels ? ex(l) : r.exists.legacy)) { const x = path.join(root, ...l.split('/')); if (inRoot(x)) out.push(x); }
-  return out;
+  if (r.needsNode || !r.exists.new) return [];
+  const x = path.join(root, ...r.rel.split('/'));
+  return isInside(x, root) ? [x] : [];
 }
 
 /** Chon goc DOC cho entry mau theo node: rel moi neu <rel>/<segs> ton tai, khong thi legacy dau tien co <legacy>/<segs>. -> {rel, legacy:boolean} */
@@ -411,23 +361,3 @@ export function dataPathsFor(key, ...parts) {
   return dataReadRoots(key, opts).map((b) => path.join(b, ...segs)).filter((p) => { try { return fs.existsSync(p); } catch { return false; } });
 }
 
-/**
- * Doctor: key da bo legacy ma goc cu (ten key o goc du lieu) van con muc => co tien trinh ghi nham duong cu.
- * @returns {string[]} canh bao (rong neu on)
- */
-export function checkLegacyWrites(opts = {}) {
-  const out = [];
-  try {
-    const reg = opts.registry || loadDataRegistry(opts);
-    const root = dataRoot(undefined, opts);
-    for (const key of Object.keys(DEFAULT_PATHS)) {
-      const e = reg.entries[key];
-      const p = (e && e.path) || DEFAULT_PATHS[key];
-      if ((e && e.legacy) || toPosix(p) === key) continue;
-      let n = 0;
-      try { n = fs.readdirSync(path.join(root, key)).length; } catch { continue; }
-      if (n > 0) out.push(formatWarn({ rule: 'legacy-write', path: key, key, detail: `${key} o goc con ${n} muc sau khi entry da bo legacy (co tien trinh ghi duong cu)`, fix: `harness data mvpart ${key} --before <ngay> --rest --drop-legacy` }));
-    }
-  } catch { /* fail-open */ }
-  return out;
-}

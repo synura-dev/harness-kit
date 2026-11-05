@@ -8,7 +8,7 @@ const reg = JSON.parse(fs.readFileSync(path.join(path.dirname(fileURLToPath(impo
 test('entry play thuoc loi (harness/tools/play), giu path/class/retention', () => {
   const p = reg.entries.play;
   expect(p.owner).toBe('harness/tools/play');
-  expect(p).toMatchObject({ zone: 'system', class: 'log', retentionDays: 14, path: 'system/play', target: 'system/play', legacy: 'play' });
+  expect(p).toMatchObject({ zone: 'system', class: 'log', retentionDays: 14, path: 'system/play', target: 'system/play' });
 });
 
 test('khong entry loi nao co owner hub/play', () => {

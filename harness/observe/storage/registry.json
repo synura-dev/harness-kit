@@ -20,8 +20,7 @@
       "owner": "harness/tools/play",
       "retentionDays": 14,
       "target": "system/play",
-      "path": "system/play",
-      "legacy": "play"
+      "path": "system/play"
     },
     "worktree": {
       "zone": "system",
@@ -29,8 +28,7 @@
       "owner": "harness/constrain/worktree",
       "retentionDays": 30,
       "target": "system/worktree",
-      "path": "system/worktree",
-      "legacy": "worktree"
+      "path": "system/worktree"
     },
     "watchdog": {
       "zone": "system",
@@ -38,8 +36,7 @@
       "owner": "harness/cli/commands/proc-watch.mjs",
       "retentionDays": 14,
       "target": "system/watchdog",
-      "path": "system/watchdog",
-      "legacy": "watchdog"
+      "path": "system/watchdog"
     },
     "ledger": {
       "zone": "system",
@@ -64,8 +61,7 @@
       "owner": "harness/constrain/proc-orphans",
       "retentionDays": 7,
       "target": "system/proc-orphans",
-      "path": "system/proc-orphans",
-      "legacy": "proc-orphans"
+      "path": "system/proc-orphans"
     },
     "ext-inject": {
       "zone": "system",

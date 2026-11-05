@@ -218,8 +218,6 @@ try {
   for (const m of checkRegistry(HUB_ROOT)) warn('registry', m);
 } catch (e) { console.log('[warn] registry check loi:', e.message); }
 try {
-  const { checkLegacyWrites } = await import(new URL('../../core/registry/data-registry.mjs', import.meta.url).href);
-  for (const m of checkLegacyWrites()) warn('data', m);
 } catch (e) { console.log('[warn] legacy-write check loi:', e.message); }
 if (!BARE) try {
   const { syncArchitecture } = await import(new URL('../../core/registry/plugin-registry.mjs', import.meta.url).href);
@@ -321,7 +319,7 @@ try {
   } catch { /* fail-open */ }
   try {
     const { loadNodeHook } = await import(new URL('../../core/io/node-hook.mjs', import.meta.url).href);
-    const { unsafeWorkspaceNodes } = await import(new URL('../../observe/storage/archive.mjs', import.meta.url).href);
+    const { unsafeWorkspaceNodes } = await import(new URL('../../observe/storage/workspaces.mjs', import.meta.url).href);
     const nh = loadNodeHook({ root: HUB_ROOT });
     const bad = nh.mod && typeof nh.mod.listNodes === 'function' ? unsafeWorkspaceNodes(nh.mod.listNodes()) : [];
     cap(bad.map((n) => `data-ws-unsafe node ${n.id}: workspace "${n.workspace}" khong an toan (dung node id) -> sua workspace trong INDEX cua nut`), 10);

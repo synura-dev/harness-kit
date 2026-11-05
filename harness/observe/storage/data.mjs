@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { loadConfig } from '../../core/config/config.mjs';
 import { loadNodeHook, hookNodes as hookNodesCore } from '../../core/io/node-hook.mjs';
-import { orphanWorkspaces } from './archive.mjs';
+import { orphanWorkspaces } from './workspaces.mjs';
 import { spawnSync } from '../../core/runtime/proc.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
@@ -16,7 +16,7 @@ import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, class
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
-const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | archive <ws> [--yes] (ws mo coi -> _archive/workspaces/, dry-run) | mv <from> <to> [--yes] | relocate <key> <to-rel> [--yes] (chi doi cho ghi, doc gop 2 noi) | mvpart <key> [--yes] [--keep-days N] (chuyen phan vung date= da dong tu legacy) | register <zone>/<domain>/<tool> --class C --owner P [--no-resolve: chi tmp] | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes]  (--json --raw --timeout-s N)';
+const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes]  (--json --raw --timeout-s N)';
 
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 /** Registry hop nhat do loader chung o core (registry.json + config/data/workspaces/*.json, mode Q5 qua HARNESS_DATA_ENFORCE). */
@@ -74,7 +74,7 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
   // key dang cu (ten cap 1) hoac '<zone>/<domain>/<tool>' (W3 register): nhan ca ten cap 1 cua duong dan.
   const byPath = knownTop(reg);
   for (const u of top(root)) {
-    if (!byPath.has(u.name) && !ZONES.includes(u.name) && !Object.hasOwn(reg.entries, u.name)) W('unregistered', u.name, u.name, 'muc la ngoai registry', `harness data adopt --yes (hoac harness data register system/${u.name} --class log)`);
+    if (!byPath.has(u.name) && !ZONES.includes(u.name) && !Object.hasOwn(reg.entries, u.name)) W('unregistered', u.name, u.name, 'muc la ngoai registry', `harness data adopt --yes`);
   }
   for (const [key, ent] of Object.entries(reg.entries)) {
     for (const f of ['zone', 'class', 'owner']) if (!ent[f]) W('missing-field', key, key, `thieu ${f}`, `them "${f}" cho muc ${key} trong registry`);
@@ -83,7 +83,6 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
     if (ent.zone === 'workspaces' && !ent.workspace) W('missing-field', key, key, 'thieu workspace', 'them "workspace" cho muc zone=workspaces');
     const p = phys(key, ent); const abs = path.join(root, p);
     if (ent.deprecatedPath) W('deprecated-path', p, key, 'path cu the khai bao trong manifest data[] (workspaces/<ws>/<tool> co dinh)', 'khai bao {zone:"workspaces", tool, class} (khong path) de dung mau workspaces/*/<tool>');
-    if (ent.legacy && ent.legacy !== p && fs.existsSync(abs) && fs.existsSync(path.join(root, ent.legacy))) W('duplicate', p, key, `ton tai ca ${p} va ${ent.legacy}`, `gop thu cong roi xoa ${ent.legacy} (hoac harness data mv)`);
     if (!isInside(abs, root) || samePath(abs, root) || !fs.existsSync(abs)) continue;
     const st = fs.statSync(abs);
     const w = st.isDirectory() ? walk(abs, opts) : { files: [{ p: abs, size: st.size, mtime: st.mtimeMs }], truncated: null };
@@ -102,7 +101,7 @@ export function scanZones({ root = dataRoot(), reg = loadRegistry(), repoRoot = 
       if (old) W('retention', p, key, `${old} file qua ${r} ngay`, `harness data clean --days ${r} (dry-run, them --yes de xoa)`);
     }
   }
-  if (Array.isArray(opts.nodes)) for (const ws of orphanWorkspaces(root, opts.nodes)) W('orphan-ws', `workspaces/${ws}`, `workspaces/${ws}`, 'workspace khong nut nao tro toi', `harness data archive ${ws} (dry-run, them --yes)`);
+  if (Array.isArray(opts.nodes)) for (const ws of orphanWorkspaces(root, opts.nodes)) W('orphan-ws', `workspaces/${ws}`, `workspaces/${ws}`, 'workspace khong nut nao tro toi', 'xu ly thu cong (workspace khong con nut)');
   for (const d of top(inboxDir(root))) {
     if (d.isDirectory() && DATE_RE.test(d.name) && Date.parse(d.name + 'T00:00:00Z') < now - 30 * 86400000) W('stray', `_inbox/${d.name}`, '_inbox', '_inbox qua 30 ngay', 'harness data inbox prune --days 30 (dry-run)');
   }
@@ -301,11 +300,11 @@ export function tailDomain({ root = dataRoot(), reg = loadRegistry(), domain, n 
   const dirs = [];
   for (const [k, e] of Object.entries(reg.entries)) {
     const p = phys(k, e).replace(/\\/g, '/').replace(/\/+$/, '');
-    if (k === dom || k.split('/').pop() === dom || p === dom || p.split('/').pop() === dom || e.tool === dom) { dirs.push(path.join(root, p)); if (e.legacy) dirs.push(path.join(root, String(e.legacy).replace(/\\/g, '/').replace(/\/+$/, ''))); }
+    if (k === dom || k.split('/').pop() === dom || p === dom || p.split('/').pop() === dom || e.tool === dom) { dirs.push(path.join(root, p)); }
   }
   for (const [k, e] of Object.entries(reg.entries)) { // alias tuong minh: entry.tailPaths[alias] = thu muc con (vd audit -> gateway)
     const sub = e.tailPaths && Object.prototype.hasOwnProperty.call(e.tailPaths, dom) ? String(e.tailPaths[dom]) : null;
-    if (sub && !/(^|[\\/])\.\.([\\/]|$)/.test(sub) && !path.isAbsolute(sub)) { dirs.push(path.join(root, phys(k, e), sub)); if (e.legacy) dirs.push(path.join(root, String(e.legacy), sub)); }
+    if (sub && !/(^|[\\/])\.\.([\\/]|$)/.test(sub) && !path.isAbsolute(sub)) { dirs.push(path.join(root, phys(k, e), sub)); }
   }
   if (!dirs.length) throw new Error(`domain chua dang ky: ${dom}`);
   const deadline = opts.deadline ?? Date.now() + LIMITS.timeoutS * 1000;
@@ -377,28 +376,10 @@ export async function run(argv = process.argv.slice(2)) {
       const summary = s.warnings.length ? s.warnings.map(formatWarn).join('\n') : `khong vi pham (${s.files} file)`;
       return { code: s.warnings.some((w) => w.rule !== 'deprecated-path') ? 1 : 0, ...emit({ summary, data: s, truncated: s.truncated ? (s.reason || 'timeout') : null }, o) };
     }
-    if (cmd === 'archive') {
-      const { archiveCmd } = await import(new URL('./archive.mjs', import.meta.url));
-      const out = await archiveCmd(r.filter((x) => x !== '--json'), { root, reg, nodes: hookNodes(), opts, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
-      for (const l of out.lines || []) console.log(l);
-      return { code: out.code ?? 0 };
-    }
-    if (cmd === 'mv') {
-      const { mvCmd } = await import(new URL('./mv.mjs', import.meta.url));
-      const out = await mvCmd(r.filter((x) => x !== '--json'), { root, reg, o, hubRoot: workspaceRoot(), opts, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
-      for (const l of out.lines || []) console.log(l);
-      return { code: out.code ?? 0 };
-    }
-    if (cmd === 'relocate' || cmd === 'mvpart') {
-      const mod = await import(new URL(cmd === 'relocate' ? './relocate.mjs' : './mvpart.mjs', import.meta.url));
-      const out = await (cmd === 'relocate' ? mod.relocateCmd : mod.mvpartCmd)(r.filter((x) => x !== '--json'), { root, reg, o, hubRoot: workspaceRoot(), opts, registryFile: process.env.HARNESS_DATA_REGISTRY || undefined, wsDir: process.env.HARNESS_DATA_WORKSPACES || undefined });
-      for (const l of out.lines || []) console.log(l);
-      return { code: out.code ?? 0 };
-    }
-    if (cmd === 'register' || cmd === 'tree') {
+    if (cmd === 'tree') {
       let mod = null;
-      try { mod = await import(new URL('./register.mjs', import.meta.url)); } catch {}
-      const fn = mod && mod[cmd === 'register' ? 'registerCmd' : 'treeCmd'];
+      try { mod = await import(new URL('./tree.mjs', import.meta.url)); } catch {}
+      const fn = mod && mod.treeCmd;
       if (!fn) { console.error(`data ${cmd}: chua cai`); return { code: 1 }; }
       // Provider/owner roots tu config workspace (projectResolver: module export resolveProject; ownerRoots). Thieu -> bo qua.
       let hc = {}; try { hc = loadConfig('workspace', { root: workspaceRoot() }).config || {}; } catch {}

@@ -23,31 +23,6 @@ test('chua chuyen: rel = entry.path hoac key, legacy null', () => {
   expect(resolveDataRel('khong-co', o).rel).toBe('khong-co');
 });
 
-test('sau mv: ghi -> moi; doc -> moi neu co, khong thi legacy + canh bao 1 lan', () => {
-  const { dd, o } = mk({ path: 'workspaces/g/new', legacy: 'old', class: 'log', owner: 'o', zone: 'workspaces' });
-  put(dd, 'old');
-  let r = resolveDataRel('workspaces/g/rel', o);
-  expect(r.rel).toBe('workspaces/g/new');
-  expect(r.legacyRel).toBe('old');
-  expect(r.exists).toEqual({ new: false, legacy: true });
-  expect(r.readRel).toBe('old');
-  const w = path.join(dd, 'workspaces', 'g', 'new', 'f.json');
-  expect(dataPathFor('workspaces/g/rel', 'f.json', o)).toBe(w);
-  const errs = [];
-  const orig = process.stderr.write;
-  process.stderr.write = (s) => { errs.push(String(s)); return true; };
-  try {
-    expect(dataPathFor('workspaces/g/rel', 'f.json', { ...o, mode: 'read' })).toBe(path.join(dd, 'old', 'f.json'));
-    dataPathFor('workspaces/g/rel', 'f.json', { ...o, mode: 'read' });
-  } finally { process.stderr.write = orig; }
-  expect(errs.filter((e) => e.includes('rule=legacy-read')).length).toBe(1);
-  expect(errs.join('')).toMatch(/fix="harness data mv old workspaces\/g\/new --yes"/);
-  put(dd, 'workspaces/g/new');
-  r = resolveDataRel('workspaces/g/rel', o);
-  expect(r.exists.new).toBe(true);
-  expect(dataPathFor('workspaces/g/rel', 'f.json', { ...o, mode: 'read' })).toBe(w);
-});
-
 test('dataPathFor chan thoat dataDir', () => {
   const { o } = mk({ path: 'a' });
   expect(() => dataPathFor('workspaces/g/rel', '..', o)).toThrow();
