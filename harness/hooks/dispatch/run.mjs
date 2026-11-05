@@ -8,6 +8,17 @@ import { isObj, hkerrLine } from '../../core/io/paths.mjs';
 import { validateHookModule, validateHookResult } from '../../core/config/contract.mjs';
 import { DEFAULTS, ORDER, loadModules, applies } from './modules.mjs';
 import { mergeResults, applyUpdate, render } from './merge.mjs';
+import { hookRunEnvelope } from '../../core/audit/signals.mjs';
+
+/** Chinh sach ghi do tre module: su kien tool (nhieu) chi ghi khi cham/loi (>= slowMs); su kien khac ghi luon. Worktree* khong ghi. */
+export const TOOL_EVENTS = Object.freeze(['PreToolUse', 'PostToolUse', 'PostToolUseFailure']);
+export function latencyRecord(event, input, timings, totalMs, slowMs = 100) {
+  if (!Array.isArray(timings) || !timings.length || /^Worktree/.test(String(event))) return null;
+  const sum = timings.reduce((a, t) => a + (t.ms || 0), 0); // tong thoi gian module (khong tinh khoi dong node)
+  if (TOOL_EVENTS.includes(event) && sum < slowMs && !timings.some((t) => t.err)) return null;
+  const env = hookRunEnvelope(event, input, timings, totalMs);
+  return env ? { sink: 'audit', data: env } : null;
+}
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const TIMEOUT = Symbol('timeout');
@@ -92,7 +103,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   if (cfg.enabled === false && ev !== 'WorktreeCreate') return { ...profile.noop(ev), records: [], input: original };
   if (profile.setEvent && !original.hook_event_name) original.hook_event_name = ev;
   const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
-  const state = { input: original, items: [], traces: [], denied: false, warns: [] };
+  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [] };
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
 
   const work = async () => {
@@ -104,12 +115,13 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       const left = budget - (Date.now() - startedAt);
       if (left < 50) { trace(m.id, 'budget'); if (m.gate && m.mod.onError !== 'closed') state.warns.push(gateWarn(m.id, 'budget')); continue; }
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
-      let res; let kind = '';
+      let res; let kind = ''; const t0 = Date.now();
       try {
         const ctx = { write: false, deadline: Date.now() + tmo };
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
       if (!kind && validateHookResult(res).length) kind = 'bad-result';
+      state.timings.push({ id: m.id, ms: Date.now() - t0, ...(kind ? { err: kind } : {}) });
       if (kind) {
         trace(m.id, kind);
         if (m.gate && m.mod.onError !== 'closed') state.warns.push(gateWarn(m.id, kind));
@@ -135,7 +147,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   const out = profile.render(ev, merged);
   if (state.warns.length) out.stderr = (out.stderr || '') + state.warns.join('');
   const records = [...merged.records, ...state.traces];
-  return { ...out, records, input: original };
+  return { ...out, records, input: original, timings: state.timings, totalMs: Date.now() - startedAt };
 }
 
 async function loadCfg() {
@@ -156,6 +168,7 @@ export async function main({ event, only = '', profile = CLAUDE } = {}) {
     const r = await dispatch({ event, only, stdin, cfg, startedAt, profile });
     out = r; records = r.records; input = r.input;
     if (profile.mapRecords) records = profile.mapRecords(records, input);
+    try { const lr = latencyRecord(event || input.hook_event_name, input, r.timings, r.totalMs, cfg.hookSlowMs); if (lr) records = [...records, lr]; } catch {}
   } catch { /* fail-open */ }
   try { if (out.stdout) fs.writeSync(1, out.stdout); if (out.stderr) fs.writeSync(2, out.stderr); } catch {}
   try { await writeRecords(records, input); } catch {}

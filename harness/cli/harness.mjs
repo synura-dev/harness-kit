@@ -280,7 +280,7 @@ function logGateway(e) {
     ensureDataIgnore(); fs.mkdirSync(dir, { recursive: true });
     guardWrite(path.join(dir, 'gateway.jsonl')); // chi warn (audit khong enforce)
     const args = e.args.map((a) => String(a).slice(0, 80)).slice(0, 10);
-    fs.appendFileSync(path.join(dir, 'gateway.jsonl'), JSON.stringify({ ts, domain: e.domain, cmd: e.cmd, args, session: process.env.CLAUDE_SESSION_ID || null, exit: e.exit, ms: e.ms, ...(e.dataWarn ? { dataWarn: e.dataWarn } : {}) }) + '\n');
+    fs.appendFileSync(path.join(dir, 'gateway.jsonl'), JSON.stringify({ ts, domain: e.domain, cmd: e.cmd, args, session: process.env.CLAUDE_SESSION_ID || null, exit: e.exit, ms: e.ms, ...(e.domain === 'tasks' && e.cmd === 'set' && e.args.some((a) => /^--status(=|$)/.test(String(a))) ? { signal: 'task_status' } : {}), ...(e.dataWarn ? { dataWarn: e.dataWarn } : {}) }) + '\n');
   } catch {}
 }
 

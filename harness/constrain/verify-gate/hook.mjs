@@ -155,7 +155,7 @@ function traceRaw(root, inp, sid, decision, code, extra = {}, now = new Date(), 
   const reason = [inp.hook_event_name || '?', extra.missing && extra.missing.length ? 'missing=' + extra.missing.join(',') : '',
     Number.isFinite(extra.edits) ? 'edits=' + extra.edits : '', extra.bad_lines ? 'bad=' + extra.bad_lines : '',
     extra.cwd_assumed ? 'cwd_assumed=' + extra.cwd_assumed : '', extra.error || ''].filter(Boolean).join(' ');
-  const ev = { kind: 'gate', decision, hook: GATE_HOOK, rule: code, reason };
+  const ev = { kind: 'gate', decision, hook: GATE_HOOK, rule: code, reason, ...(decision === 'block' ? { signal: 'verify_fail' } : {}) };
   if (sinkOpts && sinkOpts.records) sinkOpts.records.push({ sink: 'gate', data: ev, ctx });
   if (sinkOpts && sinkOpts.write === false) return false;
   return recordGate(ev, ctx, { root, now });
