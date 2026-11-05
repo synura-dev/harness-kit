@@ -39,3 +39,12 @@ test('cong tac env va enabled=false tat; fail-open', async () => {
   await handle('SessionStart', { session_id: 's' }, { cfg: { ...cfg, autoClean: { ...cfg.autoClean, enabled: false } }, env: { HUB_DATA_DIR: d, HOOK_DATA_CHECK_DOCTOR: '0' }, spawnClean }); assert.equal(n, 0);
   assert.deepEqual(await ss(mk(), { spawnClean: () => { throw new Error('x'); } }), {});
 });
+
+test('contract background: write:false (dispatcher) van spawn clean; background:false thi khong', async () => {
+  const d = mk(); let n = 0; const spawnClean = () => { n++; };
+  fs.writeFileSync(sf(d), JSON.stringify({ lastRun: Date.now() - 25 * 3600e3, done: true, seen: true, files: 0 }));
+  assert.deepEqual(await ss(d, { write: false, background: false }), {}); // spawn mac dinh bi no-op, khong nem (seam spawnClean cua test van duoc giu)
+  fs.rmSync(path.join(d, '.state', 'data-check-clean.lock'), { force: true });
+  fs.writeFileSync(sf(d), JSON.stringify({ lastRun: Date.now() - 25 * 3600e3, done: true, seen: true, files: 0 }));
+  await ss(d, { spawnClean, write: false, background: true }); assert.equal(n, 1);
+});

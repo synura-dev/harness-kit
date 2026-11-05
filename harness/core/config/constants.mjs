@@ -170,6 +170,7 @@ export function strongestDecision(list) {
  * Hop dong module hook cho dispatcher (Dot 5): MOI module `export default { id, events, tools?, timeoutMs, onError, handle }`.
  * handle LA `async handle(event, input, ctx)` (dispatcher luon await). ctx: { write?: boolean, cfg|config?, root?, now?, ... }.
  * ctx.write === false: module KHONG ghi bat ky file nao (audit/gate/log/cache); chi tra `records` de dispatcher ghi.
+ * ctx.background: true (dispatcher) / mac dinh = module duoc chay tac vu nen (spawn job, sweep, don); false = khong (test). write:false KHONG chan tac vu nen.
  * ctx.write khac false (mac dinh; vo main chay truc tiep truyen true): module tu ghi nhu truoc (module thuan khong bao gio ghi, vo main ghi).
  * Ket qua: { decision?, reason?, updatedInput?, additionalContext?, block?, records?: [{sink, data, ctx?, opts?}], record? }.
  * records = viec ghi vet; sink thuoc `sinks`: gate (recordGate(data, ctx||input)), audit (writeEnvelope(data, opts)),

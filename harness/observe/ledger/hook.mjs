@@ -73,7 +73,7 @@ export async function handle(event, input, ctx = {}) {
     if (!cfg.enabled || !input || typeof input !== 'object') return {};
     if (event !== 'SessionStart' && event !== 'UserPromptSubmit') return {};
     const nowMs = ctx.nowMs || Date.now();
-    const noWrite = ctx.write === false; // write:false = khong sweep/spawn nen (ghi so PID, khoa kick, stamp)
+    const bg = ctx.background !== false; // background:false = khong sweep/kick (test); write:false (dispatcher) khong chan
     const dataOpts = ctx.env ? { env: ctx.env } : undefined;
     const file = ledgerFile(dataOpts);
     const sid = String(input.session_id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || null;
@@ -85,9 +85,8 @@ export async function handle(event, input, ctx = {}) {
     if (pending === null ? fs.existsSync(file) && claimRebuild(file, nowMs) : pending.length) {
       updateLedger(file, (es) => { const c = claimDue(es, nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines }); r.lines = c.lines; return c.changed || pending === null ? c.entries : null; }, { lock: { retries: 20, waitMs: 25 } }); // khong khoa duoc -> bo qua lan nay (fail-open)
     }
-    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env && !noWrite) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
-    // Kick/bao loi la trang thai rieng cua module (nhu cache proc-orphans): dispatcher luon truyen write:false nen KHONG duoc chan theo write (loi that: job khong bao gio chay).
-    if (event === 'SessionStart' && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
+    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env && bg) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
+    if (event === 'SessionStart' && bg && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
     const errLine = event === 'SessionStart' ? jobErrorLine(dataOpts, nowMs) : null;
     const inj = event === 'SessionStart' && cfg.inject !== false ? readInject(dataOpts) : [];
     const all = [...(errLine ? [frameLine(errLine)] : []), ...r.lines.map(frameLine), ...inj];

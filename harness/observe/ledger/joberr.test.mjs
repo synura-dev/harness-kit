@@ -73,3 +73,10 @@ test('jobHealth + hook: loi hien 1 lan qua additionalContext, cooldown; observe 
   assert.equal(jobHealth(readState(dataOpts)), null);
   rm(d);
 });
+
+test('contract background: background:false khong kick; background:true (dispatcher, write:false) kick', async () => {
+  const d = mk(); let n = 0; const base = { env: { HUB_DATA_DIR: d }, nowMs: NOW, write: false, spawnJob: () => { n++; }, spawnReport: () => {} };
+  await handle('SessionStart', { session_id: 's' }, { ...base, background: false }); assert.equal(n, 0);
+  await handle('SessionStart', { session_id: 's' }, { ...base, background: true }); assert.equal(n, 1);
+  rm(d);
+});

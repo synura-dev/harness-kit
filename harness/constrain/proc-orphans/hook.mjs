@@ -194,7 +194,7 @@ export async function handle(event, input, ctx = {}) {
     if (!cfg.enabled || !input || typeof input !== 'object' || !cfg.events.includes(event)) return {};
     const live = await liveAgents(event, input, cfg, ctx);
     if (event === 'SubagentStart') return {}; // chi ghi so, khong quet
-    if (ctx.sweep !== false && ctx.write !== false) await sweepProcLedger(); // write:false = khong ghi gi (sweep ghi so PID + stamp)
+    if (ctx.sweep !== false && ctx.background !== false) await sweepProcLedger(); // background:false = khong sweep (sweep ghi so PID + stamp)
     if (live > 0) return {}; // con subagent khac dang chay: con chau cua no khong phai mo coi -> im, khong quet
     const r = typeof ctx.scan === 'function' ? await ctx.scan() : await scanChildren(cfg, ctx); // ctx.scan: seam cho test
     if (!r.children.length) return {};
