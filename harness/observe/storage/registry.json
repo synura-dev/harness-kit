@@ -49,6 +49,15 @@
       "target": "system/ledger",
       "path": "system/ledger"
     },
+    "proc": {
+      "zone": "system",
+      "class": "cache",
+      "owner": "harness/core/runtime/proc.mjs",
+      "retentionDays": 7,
+      "note": "so PID tac vu nen (proc-ledger.json), thay os.tmpdir()",
+      "target": "system/proc",
+      "path": "system/proc"
+    },
     "proc-orphans": {
       "zone": "system",
       "class": "log",

@@ -147,15 +147,5 @@ if (isEntry(import.meta.url)) { await main(); process.exit(0); }
 
 /** Don so PID tac vu nen (proc.mjs): PID chet -> xoa muc; qua han + con song + dung lenh -> kill. Fail-open. */
 export async function sweepProcLedger() {
-  try {
-    const { sweepLedger } = await import('../../core/runtime/proc.mjs');
-    const { listProcesses } = await import('../../core/runtime/proc-list.mjs');
-    let byPid = null;
-    const matches = (pid, cmd) => {
-      if (!byPid) { byPid = new Map(listProcesses({ timeoutMs: 5000 }).procs.map((p) => [p.pid, String(p.cmd || '')])); }
-      const live = byPid.get(pid); const head = String(cmd || '').split(' ').slice(-1)[0];
-      return live != null && (!head || live.includes(head) || String(cmd).includes(live.slice(0, 60)));
-    };
-    return sweepLedger({ matches });
-  } catch { return null; }
+  try { return await (await import('../../core/runtime/proc.mjs')).sweepBackground(); } catch { return null; }
 }

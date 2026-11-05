@@ -1,7 +1,7 @@
 // Batch check re cua doctor chay nen (<=1 lan/24h): ref, import, manifest, clutter, stray. Ghi state; hook chi doc. Khong check nang.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnBackground } from '../../core/runtime/proc.mjs';
+import { spawnBackground, bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 
 const REL = ['.state', 'data-check-doctor.json'];
@@ -69,6 +69,7 @@ export function doctorAuto(dd, cfg, ctx = {}) {
 
 if (process.argv[2] === '--run' && process.argv[3] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const { workspaceRoot, REPO_DIR } = await import('../../core/io/paths.mjs');
+  bgDoneOnExit();
   const kill = setTimeout(() => process.exit(2), 60000); // timeout cung: dung em, lan sau thu lai
   try { await runBatch(process.argv[3], workspaceRoot(), REPO_DIR); } catch {}
   clearTimeout(kill);

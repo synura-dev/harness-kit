@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { workspaceRoot } from '../../core/io/paths.mjs';
+import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { auditRoot } from '../../core/audit/audit-write.mjs';
 import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
@@ -67,6 +68,7 @@ export async function runJob(opts = {}) {
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  bgDoneOnExit();
   const a = process.argv.slice(2);
   const ti = a.indexOf('--timeout-s');
   const timeoutMs = ti >= 0 && Number(a[ti + 1]) > 0 ? Number(a[ti + 1]) * 1000 : JOB.timeoutS * 1000;

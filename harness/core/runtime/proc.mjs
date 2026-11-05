@@ -4,6 +4,7 @@ import cp from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { dataPathFor } from '../io/storage.mjs';
 
 const WIN = process.platform === 'win32';
 export const DEFAULT_TIMEOUT_MS = 600000;
@@ -45,7 +46,11 @@ export function spawnTimed(cmd, args, opts = {}) {
 }
 
 // ---- Tac vu nen: so PID + khoa ----
-export const ledgerPath = (dir) => path.join(dir || process.env.HARNESS_PROC_DIR || path.join(os.tmpdir(), 'harness-kit'), 'proc-ledger.json');
+// So PID: state cua data harness (zone system, khoa 'proc' trong observe/storage/registry.json); chi khi khong resolve duoc moi roi ve tmpdir.
+function procDir() {
+  try { return dataPathFor('proc', { quiet: true }); } catch { return path.join(os.tmpdir(), 'harness-kit'); }
+}
+export const ledgerPath = (dir) => path.join(dir || process.env.HARNESS_PROC_DIR || procDir(), 'proc-ledger.json');
 const readLedger = (f) => { try { const j = JSON.parse(fs.readFileSync(f, 'utf8')); return Array.isArray(j.entries) ? j.entries : []; } catch { return []; } };
 function writeLedger(f, entries) {
   const t = `${f}.${process.pid}.tmp`;
@@ -84,12 +89,34 @@ export function sweepLedger({ dir, now = Date.now(), alive = isAlive, kill = kil
 export function spawnBackground({ cmd, args = [], key, deadlineMs = 10 * 60e3, dir, cwd, env, now = Date.now() }) {
   try {
     if (key && isRunning(key, { dir, now })) return null;
-    const p = cp.spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, cwd, env: env || process.env });
+    const penv = { ...(env || process.env), ...(key ? { HARNESS_BG_KEY: key } : {}), ...(dir ? { HARNESS_PROC_DIR: dir } : {}) };
+    const p = cp.spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, cwd, env: penv });
     p.on('error', () => {}); p.unref();
     if (!p.pid) return null;
     try { os.setPriority(p.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* khong dat duoc */ }
     const f = ledgerPath(dir);
     writeLedger(f, [...readLedger(f).filter((e) => e.pid !== p.pid), { pid: p.pid, key: key || null, cmd: [cmd, ...args].join(' ').slice(0, 300), startedAt: now, deadline: now + deadlineMs }]);
     return p.pid;
+  } catch { return null; }
+}
+
+/** Trong chinh script con (chay qua spawnBackground): khi thoat xoa muc khoi so PID (ledgerDone). Khong co HARNESS_BG_KEY -> khong lam gi. */
+export function bgDoneOnExit() {
+  if (!process.env.HARNESS_BG_KEY) return;
+  const dir = process.env.HARNESS_PROC_DIR || undefined;
+  process.on('exit', () => { try { ledgerDone({ pid: process.pid }, { dir }); } catch { /* fail-open */ } });
+}
+
+/** Don so PID co doi chieu lenh that (tranh giet nham PID tai dung). Dung chung cho hook proc-orphans va SessionStart. Fail-open. */
+export async function sweepBackground() {
+  try {
+    const { listProcesses } = await import('./proc-list.mjs');
+    let byPid = null;
+    const matches = (pid, cmd) => {
+      if (!byPid) byPid = new Map(listProcesses({ timeoutMs: 5000 }).procs.map((p) => [p.pid, String(p.cmd || '')]));
+      const live = byPid.get(pid); const head = String(cmd || '').split(' ').slice(-1)[0];
+      return live != null && (!head || live.includes(head) || String(cmd).includes(live.slice(0, 60)));
+    };
+    return sweepLedger({ matches });
   } catch { return null; }
 }

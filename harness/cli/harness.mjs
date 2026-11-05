@@ -7,7 +7,7 @@
 // Registry = manifest.json cua tung extension (harness/{cli,plugins,tools,hooks}/.../manifest.json): script/desc/cmds/default. Loi/thieu => fallback toi thieu. Hook khong goi qua shim.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from '../core/runtime/proc.mjs';
+import { spawnSync, bgDoneOnExit } from '../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit } from '../core/io/out.mjs';
 import { loadExternals, runExternal, blockExternal } from '../core/ext/ext-host.mjs';
@@ -286,6 +286,7 @@ function logGateway(e) {
 
 const isMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 if (isMain) {
+  bgDoneOnExit();
   const root = path.resolve(fileURLToPath(import.meta.url), '..', '..', '..');
   const r = run(process.argv.slice(2), root);
   // External (va ext bi CHAN) tra stdout/stderr da bat (core chay stdio inherit nen rong): phai in ra, khong thi mat output.

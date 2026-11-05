@@ -2,7 +2,7 @@
 // KHONG tinh nang trong hook. SessionStart them: neu job lo qua han (>=1h) thi spawn nen (detached), khong cho. Fail-open.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawnBackground, sweepBackground } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
 import { readLedger, writeLedger, claimDue, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
@@ -19,8 +19,7 @@ export function kickJob(dataOpts, ctx = {}, nowMs = Date.now()) {
     fs.mkdirSync(path.dirname(lock), { recursive: true });
     fs.writeFileSync(lock, JSON.stringify({ ts: nowMs, pid: process.pid }));
     const go = ctx.spawnJob || (() => {
-      const p = spawn(process.execPath, [path.join(HERE, 'job.mjs'), '--timeout-s', String(JOB.timeoutS)], { detached: true, stdio: 'ignore', windowsHide: true, env: process.env });
-      p.on('error', () => {}); p.unref();
+      spawnBackground({ cmd: process.execPath, args: [path.join(HERE, 'job.mjs'), '--timeout-s', String(JOB.timeoutS)], key: 'ledger-job', deadlineMs: (JOB.timeoutS + 60) * 1000, env: process.env });
     });
     go();
     return true;
@@ -38,6 +37,7 @@ export async function handle(event, input, ctx = {}) {
     const sid = String(input.session_id || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || null;
     const r = claimDue(readLedger(file), nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines });
     if (r.changed) writeLedger(file, r.entries);
+    if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
     if (event === 'SessionStart' && cfg.kick !== false) kickJob(dataOpts, ctx, nowMs);
     return r.lines.length ? { additionalContext: r.lines.join('\n') } : {};
   } catch { return {}; }
