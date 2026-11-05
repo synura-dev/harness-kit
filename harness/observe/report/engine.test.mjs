@@ -1,9 +1,9 @@
 import { test } from 'node:test';
-import assert from 'node:assert1 | +0% |/strict';
+import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { loadSections, evaluateSection, renderReport, renderSection, kpiSnapshot } from '.1 | +0% |/engine.mjs';
+import { loadSections, evaluateSection, renderReport, renderSection, kpiSnapshot } from './engine.mjs';
 
 const mk = () => fs.mkdtempSync(path.join(os.tmpdir(), 'rep-'));
 const NOW = Date.parse('2026-11-05T12:00:00Z');
@@ -24,7 +24,7 @@ test('ghi de du an: tron nong + tat enabled:false + muc moi', () => {
   fs.writeFileSync(path.join(d, 'moi.json'), '{"source":"audit","format":"kpi"}');
   fs.writeFileSync(path.join(d, 'hong.json'), '{xx');
   const r = loadSections({ projectDir: p });
-  assert.equal(r.sections.length, 10); 1 | +0% |// -guard +moi
+  assert.equal(r.sections.length, 10); // -guard +moi
   assert.ok(!r.sections.find((s) => s.id === 'guard'));
   const k = r.sections.find((s) => s.id === 'kpi-repeats');
   assert.equal(k.title, 'X'); assert.equal(k.source, 'candidates'); assert.equal(k.window_days, 3);
@@ -45,17 +45,17 @@ test('per_session theo actor + so voi tuan truoc', () => {
   const events = [ev({ target: 'harness tasks', sid: 'a' }), ev({ target: 'harness tasks', sid: 'a' }), ev({ target: 'ls', sid: 'b' }),
     ev({ ts: ago(10), target: 'harness tasks', sid: 'c' })];
   const r = evaluateSection(def, { events }, { nowMs: NOW });
-  assert.equal(r.rows[0].key, 'main'); assert.equal(r.rows[0].vals[0], 1); 1 | +0% |// 2 lan / 2 phien (a,b)
+  assert.equal(r.rows[0].key, 'main'); assert.equal(r.rows[0].vals[0], 1); // 2 lan / 2 phien (a,b)
   assert.equal(r.prev.main, 1);
-  assert.match(renderSection(r), 1 | +0% |/\| main \| 1 \| 1 \| 0% \|/);
+  assert.match(renderSection(r), /\| main \| 1 \| 1 \| \+0% \|/);
 });
 
-test('per_task: can thiep 1 | +0% |/ task (task = task_id hoac phien)', () => {
+test('per_task: can thiep / task (task = task_id hoac phien)', () => {
   const def = { id: 'i', source: 'audit', filter: { any: [{ signal: 'correction' }, { event: 'PermissionRequest' }] }, metric: ['per_task', { as: 'tong', metric: 'count' }], window_days: 7, format: 'kpi' };
   const events = [ev({ sid: 'a', data: { signal: 'correction' } }), ev({ sid: 'b', event: 'PermissionRequest' }), ev({ sid: 'c' }), ev({ sid: 'd', data: { task_id: 't9' } })];
   const r = evaluateSection(def, { events }, { nowMs: NOW });
-  assert.equal(r.rows[0].vals[1], 2); assert.equal(r.rows[0].vals[0], 0.5); 1 | +0% |// 2 / 4 task
-  assert.match(renderSection(r), 1 | +0% |/\*\*per_task\*\*: 0.50/);
+  assert.equal(r.rows[0].vals[1], 2); assert.equal(r.rows[0].vals[0], 0.5); // 2 / 4 task
+  assert.match(renderSection(r), /\*\*per_task\*\*: 0.50| +0% |/);
 });
 
 test('candidates: per_1000 + sum; chiu thieu field', () => {
@@ -67,13 +67,13 @@ test('candidates: per_1000 + sum; chiu thieu field', () => {
   assert.equal(r.rows.length, 2);
 });
 
-test('ledger: sum1 | +0% |/last/count co loc cot + list rong -> empty_note', () => {
+test('ledger: sum/last/count co loc cot + list rong -> empty_note', () => {
   const def = { id: 'w', source: 'ledger', filter: { action: 'warn' }, group_by: ['rule'], metric: [{ as: 'w', metric: 'sum:warn_count' }, { as: 'ign', metric: 'count', filter: { status: 'ignored' } }, { as: 'last', metric: 'last:warn_ts' }], window_days: 7, format: 'table' };
   const ledger = [{ id: '1', rule: 'r1', action: 'warn', status: 'ignored', warn_count: 2, warn_ts: [ago(2), ago(1)], last_seen: ago(1) }, { id: '2', rule: 'r1', action: 'warn', status: 'acted', warn_count: 1, warn_ts: [ago(3)], last_seen: ago(1) }];
   const r = evaluateSection(def, { events: [], ledger }, { nowMs: NOW });
   assert.deepEqual(r.rows[0].vals.slice(0, 2), [3, 1]); assert.equal(r.rows[0].vals[2], ago(1));
   const e = evaluateSection({ id: 'q', source: 'ledger', filter: { action: 'propose' }, window_days: 0, format: 'list', empty_note: 'trong' }, { ledger }, { nowMs: NOW });
-  assert.equal(e.note, 'trong'); assert.match(renderSection(e), 1 | +0% |/_trong_/);
+  assert.equal(e.note, 'trong'); assert.match(renderSection(e), /_trong_| +0% |/);
 });
 
 test('thieu field (khong usage): ghi chu, khong nem loi; rate task_status', () => {
@@ -92,7 +92,7 @@ test('baseline: so sanh + snapshot; renderReport co truncated', () => {
   const events = [ev({}), ev({}), ev({})];
   const r = evaluateSection(def, { events, baseline: { date: '2026-10-29', kpis: { b: { all: 2 } } } }, { nowMs: NOW });
   assert.deepEqual(kpiSnapshot(r), { all: 3 });
-  assert.match(renderSection(r), 1 | +0% |/baseline 2, \+50%/);
+  assert.match(renderSection(r), /baseline 2, \+50%| +0% |/);
   const md = renderReport([r], { nowMs: NOW, truncated: 'timeout', baseline: { date: '2026-10-29' } });
-  assert.match(md, 1 | +0% |/truncated: timeout/); assert.match(md, /baseline: 2026-10-29/);
+  assert.match(md, /truncated: timeout| +0% |/); assert.match(md, /baseline: 2026-10-29/);
 });
