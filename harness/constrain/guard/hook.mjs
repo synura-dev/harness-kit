@@ -255,6 +255,11 @@ function extract(inp) {
     const hit = !!np && LAUNCHER_FILE_RE.test(np);
     return { cmd: hit ? '> bin/harness.mjs' : '', tool: inp.tool_name, agy: false, filePath: fp };
   }
+  if (/^(Read|Grep|Glob)$/.test(inp.tool_name)) {
+    const ti = inp.tool_input || {};
+    const fp = [ti.file_path, ti.path, ti.pattern, ti.glob].filter((v) => typeof v === 'string' && v).join('\n');
+    return { cmd: '', tool: inp.tool_name, agy: false, filePath: fp };
+  }
   if (inp.tool_name === 'Bash' || inp.tool_name === 'PowerShell') {
     const c = inp.tool_input && inp.tool_input.command;
     return { cmd: typeof c === 'string' ? c : '', tool: inp.tool_name, agy: false };
@@ -339,7 +344,7 @@ export async function handle(event, input, ctx = {}) {
   } catch { return done({}); }
 }
 
-const META = { id: 'guard', events: ['PreToolUse'], tools: /^(Bash|PowerShell|run_command|Edit|Write|MultiEdit|NotebookEdit)$/, timeoutMs: 2500, onError: 'open' };
+const META = { id: 'guard', events: ['PreToolUse'], tools: /^(Bash|PowerShell|run_command|Edit|Write|MultiEdit|NotebookEdit|Read|Grep|Glob)$/, timeoutMs: 2500, onError: 'open' };
 /** Alias cu (test). Chuan dispatcher la export default. */
 export const hookModule = Object.freeze({ ...META, handle });
 /** Chuan HOOK_MODULE: async handle(event, input, ctx). */

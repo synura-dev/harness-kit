@@ -157,7 +157,7 @@ export function check(input, cfg, ctx = {}) {
     const g = globBase(tool === 'Glob' ? ti.pattern : ti.glob);
     return !!g && inData(g, ti.path ? path.resolve(cwd, ti.path) : cwd, cfg, ctx);
   }
-  if (tool === 'Bash') return bashRefsData(ti.command || '', cwd, cfg, ctx);
+  if (tool === 'Bash' || tool === 'PowerShell') return bashRefsData(ti.command || '', cwd, cfg, ctx);
   return false;
 }
 
@@ -172,5 +172,5 @@ export async function handle(event, input, ctx = {}) {
   } catch { return {}; } // fail-open
 }
 
-const META = { id: 'data-gate', events: ['PreToolUse'], tools: /^(Read|Write|Edit|NotebookEdit|MultiEdit|Glob|Grep|Bash)$/, timeoutMs: 1500, onError: 'open' };
+const META = { id: 'data-gate', events: ['PreToolUse'], tools: /^(Read|Write|Edit|NotebookEdit|MultiEdit|Glob|Grep|Bash|PowerShell)$/, timeoutMs: 1500, onError: 'open' };
 export default Object.freeze({ ...META, handle: async (event, input, ctx) => handle(event, input, ctx) });
