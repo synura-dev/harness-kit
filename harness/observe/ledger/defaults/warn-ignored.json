@@ -1,0 +1,10 @@
+{
+  "desc": "canh bao khong kem hanh dong (loi van lap trong cung phien) -> muc bao cao",
+  "source": "ledger",
+  "filter": { "status": "ignored" },
+  "group_by": ["rule"],
+  "metric": "count",
+  "threshold": 1,
+  "action": "report",
+  "message": "canh bao luat {key} bi bo qua {count} fp (khong kem hanh dong)"
+}
