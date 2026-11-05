@@ -1,7 +1,7 @@
-// Batch check re cua doctor chay nen (<=1 lan/24h): ref, import, manifest, clutter, stray. Ghi state; hook chi doc. Khong check nang.
+// Batch check re cua doctor chay nen (<=1 lan/24h): data scan (runtime). Ghi state; hook chi doc. Khong check nang.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnBackground, bgDoneOnExit } from '../../core/runtime/proc.mjs';
+import { spawnBackground, spawnSync, bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { Worker, isMainThread, workerData, parentPort } from 'node:worker_threads';
 
@@ -10,24 +10,13 @@ const wj = (f, o) => { const t = `${f}.${process.pid}.tmp`; try { fs.mkdirSync(p
 const rd = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8').replace(/^﻿/, '')); } catch { return null; } };
 export const stateFile = (dd) => path.join(dd, ...REL);
 
-/** Tinh danh sach loi (chuoi on dinh) tu cac check re. Moi nhom check bao try rieng. */
+/** Tinh danh sach loi (chuoi on dinh): chi check runtime = data scan (retention/dang ky/stray). Check phat trien nam o dev/. */
 export async function collectErrors(hubRoot, repoDir) {
   const out = [];
-  const M = (p) => import(new URL(p, import.meta.url).href);
-  try { const { scanProcDirect } = await M('../../core/checks/proc-check.mjs'); for (const v of scanProcDirect(hubRoot)) out.push(`proc-direct: ${v.file}:${v.line}`); } catch {}
-  try { const { checkManifest, checkRegistry } = await M('../../core/checks/manifest-check.mjs'); for (const m of [...checkManifest(hubRoot), ...checkRegistry(hubRoot)]) out.push(`manifest: ${m}`); } catch {}
   try {
-    const { buildScanInput, collectStray } = await M('../../core/checks/scan-input.mjs');
-    const { checkRefs } = await M('../../core/checks/ref-check.mjs');
-    const { scanTree } = await M('../../core/checks/import-check.mjs');
-    const { checkClutter, checkStray } = await M('../../core/checks/clutter-check.mjs');
-    const si = buildScanInput(hubRoot);
-    if (path.resolve(hubRoot).toLowerCase() === path.resolve(repoDir).toLowerCase()) for (const e of checkRefs({ files: si.files, exists: si.exists }).errors) out.push(`ref: ${e.file}:${e.line} -> ${e.ref}`);
-    const imp = scanTree(hubRoot);
-    for (const v of imp.violations) out.push(`import: ${v.file}:${v.line} ${v.from} -> ${v.to}`);
-    for (const m of imp.missing) out.push(`import: ${m.file}:${m.line} thieu ${m.spec}`);
-    for (const f of checkClutter(si.files, si.registry).findings) if (f.severity === 'error') out.push(`clutter: ${f.rule} ${f.path}`);
-    for (const s of checkStray(collectStray(hubRoot).entries)) out.push(`stray: ${s.path}`);
+    const gate = path.join(repoDir || hubRoot, 'harness', 'cli', 'harness.mjs');
+    const r = spawnSync(process.execPath, [gate, 'data', 'scan', '--json'], { encoding: 'utf8', timeout: 20000, cwd: hubRoot });
+    for (const w of JSON.parse(r.stdout).warnings || []) if (['retention', 'over-caps', 'unregistered', 'stray'].includes(w.rule)) out.push(`data: ${w.rule} ${w.path}`);
   } catch {}
   return [...new Set(out)];
 }
