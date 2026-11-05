@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnBackground, spawnSync, bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
+import { cleanLine } from '../../core/audit/safe-text.mjs';
 import { Worker, isMainThread, workerData, parentPort } from 'node:worker_threads';
 
 const REL = ['.state', 'data-check-doctor.json'];
@@ -40,7 +41,7 @@ export function doctorAuto(dd, cfg, ctx = {}) {
     if (!da.enabled || env.HOOK_DATA_CHECK_DOCTOR === '0') return [];
     const f = stateFile(dd); const st = rd(f) || {}; const now = Date.now(); let lines = [];
     if (st.seen === false && Array.isArray(st.fresh) && st.fresh.length) {
-      lines = st.fresh.slice(0, da.maxLines).map((e) => `doctor: loi moi ${String(e).slice(0, 160)}`);
+      lines = st.fresh.slice(0, da.maxLines).map((e) => `doctor: loi moi ${cleanLine(e, 160)}`);
       if (st.fresh.length > da.maxLines) lines.push(`doctor: ... con ${st.fresh.length - da.maxLines} loi moi nua. Xem: harness doctor`);
       wj(f, { ...st, seen: true });
     }

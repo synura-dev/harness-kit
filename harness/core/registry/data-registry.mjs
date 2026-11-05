@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { dataRoot, workspaceRoot, isPluginMode, REPO_DIR, isInside } from '../io/paths.mjs';
 import { loadConfig } from '../config/config.mjs';
+import { cleanLine } from '../audit/safe-text.mjs';
 import { workspaceFor, isSafeWs } from '../io/node-hook.mjs';
 
 /** Cac vung cap 1 cua data/. */
@@ -294,7 +295,7 @@ export function classRetention(entry) {
 /** Dong canh bao: data-warn rule= path= key= detail="..." fix="..." */
 export function formatWarn(w) {
   const q = (s) => `"${String(s ?? '').replace(/"/g, "'")}"`;
-  return `data-warn rule=${w.rule} path=${w.path} key=${w.key} detail=${q(w.detail)} fix=${q(w.fix)}`;
+  return `data-warn rule=${w.rule} path=${cleanLine(w.path, 300)} key=${cleanLine(w.key, 100)} detail=${q(w.detail)} fix=${q(w.fix)}`;
 }
 
 /**
