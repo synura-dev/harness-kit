@@ -16,8 +16,9 @@ const SPAWN = {
   prune: path.join(HERE, 'prune.mjs'),
   cost: path.join(HERE, '..', 'cost', 'cli.mjs'),
   evidence: path.join(HERE, '..', 'evidence', 'cli.mjs'),
+  ledger: path.join(HERE, '..', 'ledger', 'cli.mjs'),
 };
-const COMMANDS = ['view', 'why', 'map', 'query', 'digest', 'prune', 'runs', 'sizes', 'data-prune', 'cost', 'evidence'];
+const COMMANDS = ['view', 'why', 'map', 'query', 'digest', 'prune', 'runs', 'sizes', 'data-prune', 'cost', 'evidence', 'ledger'];
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const USAGE = `usage: harness.mjs observe <${COMMANDS.join('|')}> [args]  (view [YYYY-MM-DD] mac dinh khi chi co ngay)`;
 
