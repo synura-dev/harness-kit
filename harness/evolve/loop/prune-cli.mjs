@@ -6,13 +6,16 @@ import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { auditRoot } from '../../core/audit/audit-write.mjs';
 import { capLines } from '../../core/io/out.mjs';
 import { pruneCandidates, readState, writeState } from './prune.mjs';
+import { listRegistered } from '../../core/ext/ext-trust.mjs';
 
 export async function runPrune(o = {}) {
   const hub = path.resolve(o.hubRoot || process.env.CLAUDE_PROJECT_DIR || workspaceRoot());
   const evo = path.resolve(o.dataRoot || (dataReadRoots('evolve')[0] || dataPathFor('evolve')));
   const auditDirs = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);
   const stateFile = path.join(evo, 'prune-state.json');
-  const r = await pruneCandidates({ auditDirs, projectDir: hub, days: o.days, timeoutMs: o.timeoutMs, state: readState(stateFile) });
+  let extRoots = o.extRoots; // ext hub da dang ky (API ext registry) de dem lenh ext
+  if (!extRoots) { try { extRoots = listRegistered({ workspace: hub }).map((e) => e.root); } catch { extRoots = []; } }
+  const r = await pruneCandidates({ auditDirs, projectDir: hub, extRoots, days: o.days, timeoutMs: o.timeoutMs, state: readState(stateFile) });
   if (o.record && !r.truncated) writeState(stateFile, r.state);
   const dep = r.items.filter((i) => i.kind === 'deprecate');
   const lines = [
