@@ -94,11 +94,16 @@ Hook Stop/SubagentStop, CHI CANH BAO (khong block, khong kill, fail-open). Khi a
 Payload Stop/SubagentStop KHONG co pid cua agent. Hook tim to tien claude.exe/agy gan nhat qua chuoi ppid cua chinh no roi liet ke moi con chau (bash/node/python/ping...) tuoi >= minAgeSec. Vi vay KHONG gan duoc tien trinh voi tung subagent: ban ghi la "con chau cua session luc agent dung".
 Con chau dang chay hop le (vd lenh nen cua main) cung bi liet ke: day la tin hieu, khong phai ket luan.
 
+### Chong bao gia / lap
+- Subagent dang chay: SubagentStart/SubagentStop ghi `data/system/proc-orphans/live-agents.json` ({session_id: {agent_id: ts}}). Con agent KHAC cua cung session dang chay -> Stop/SubagentStop im, khong quet (con chau churn cua agent khong phai mo coi). Muc khong co SubagentStop het han sau `liveAgentTtlSec` (2h).
+- Chong lap theo nguoi nhan (root pid + main/agent_id) trong `warned.json`: cung chu ky (tap pid) im `dedupeSec` (6h); chu ky khac im `throttleSec` (15 phut, chan pid churn khi khong theo doi duoc agent).
+- Hai file tren la trang thai module nhu cache quet: ghi ca khi `ctx.write:false`, tat ghi bang `ctx.cache:false`. Loi -> fail-open (canh bao nhu cu).
+
 ### Cache quet
 Danh sach tien trinh duoc cache 60s (`scanCacheTtlSec`, 0 = tat) o `data/system/proc-orphans/scan-cache.json`. Cache la trang thai rieng cua module, KHONG phai vet audit/gate: `ctx.write:false` (dispatcher goi) chi tat ghi audit, cache van duoc doc/ghi. Test co lap truyen `ctx.cache:false` (khong doc/ghi cache) hoac `ctx.env.HUB_DATA_DIR` tro thu muc tam.
 
 ### Cau hinh
-`hook.config.json` (ghi de), `hook.config.local.json`, env `HOOK_PROC_ORPHANS_ENABLED`. Mac dinh trong `DEFAULTS` (hook.mjs): events, minAgeSec, watchNames, protectCmd, timeoutMs, maxListed.
+`hook.config.json` (ghi de), `hook.config.local.json`, env `HOOK_PROC_ORPHANS_ENABLED`. Mac dinh trong `DEFAULTS` (hook.mjs): events, minAgeSec, watchNames, protectCmd, timeoutMs, maxListed, dedupeSec, throttleSec, liveAgentTtlSec.
 
 ### Test
 `bun test harness/constrain/proc-orphans`

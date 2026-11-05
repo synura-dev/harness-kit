@@ -1,6 +1,8 @@
 // Hook Stop/SubagentStop: CHI CANH BAO. Ghi vao audit danh sach tien trinh con con song cua session claude.
 // GIOI HAN: payload Stop/SubagentStop khong co pid cua agent => khong gan duoc pid voi tung subagent.
 // Ta lay to tien claude.exe/agy gan nhat cua hook (process.ppid chain) roi liet ke moi con chau con song (tru chuoi cua hook).
+// Chong bao gia: SubagentStart/SubagentStop ghi so agent dang chay theo session; con agent khac dang chay -> im (khong quet,
+// vi con chau cua no khong phai mo coi). Sau do: cung chu ky im dedupeSec, chu ky khac im throttleSec (pid churn).
 // Khong bao gio block stop, khong kill. Fail-open.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -27,12 +29,14 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 
 export const DEFAULTS = {
   enabled: true,
-  events: ['Stop', 'SubagentStop'],
+  events: ['Stop', 'SubagentStop', 'SubagentStart'], // SubagentStart: chi ghi so agent dang chay (khong quet)
   minAgeSec: 5,
   watchNames: ['bash.exe', 'sh.exe', 'python.exe', 'python3.exe', 'node.exe', 'bun.exe', 'duckdb.exe', 'ping.exe', 'powershell.exe'],
   rootNames: ['claude.exe', 'agy.exe', 'agy'],
   ignoreNames: ['conhost.exe', 'openconsole.exe'], // luon bo qua (console host), ghi de qua config
   dedupeSec: 21600, // cung chu ky (root pid + tap pid) trong 6h -> khong canh bao lai; 0 = tat
+  throttleSec: 900, // chu ky khac (pid churn): toi da 1 canh bao / root pid / 15 phut; 0 = tat
+  liveAgentTtlSec: 7200, // subagent co SubagentStart ma chua SubagentStop: coi la con chay toi da 2h (agent bi giet khong co Stop)
   protectCmd: ['telegram', 'server.ts', 'mcp', 'native-host', 'claude-code'],
   timeoutMs: 3000,
   maxListed: 20,
@@ -112,9 +116,13 @@ export async function scanChildren(cfg, ctx = {}) {
 /** Chu ky canh bao: root pid + tap pid da sort. */
 export const signatureOf = (rootPid, children) => JSON.stringify([rootPid, children.map((c) => c.pid).sort((a, b) => a - b)]);
 
-/** Chong lap: true = chu ky nay da canh bao trong ttl giay. Cap nhat state (atomic, khoa) tru khi write===false. Fail-open: loi -> false. */
+/**
+ * Chong lap: true = da canh bao gan day cho root pid nay: cung chu ky trong dedupeSec, chu ky khac trong throttleSec.
+ * Cap nhat state (atomic, khoa) tru khi ctx.cache===false. ctx.now (test). Fail-open: loi -> false.
+ */
 export async function seenRecently(sig, rootPid, cfg, ctx = {}) {
-  const ttl = Number.isFinite(cfg.dedupeSec) ? cfg.dedupeSec : 21600;
+  const thr = Number.isFinite(cfg.throttleSec) ? Math.max(0, cfg.throttleSec) : 900;
+  const ttl = Math.max(thr, Number.isFinite(cfg.dedupeSec) ? cfg.dedupeSec : 21600);
   if (ttl <= 0) return false;
   try {
     const { dataPathFor } = await import('../../core/io/storage.mjs');
@@ -122,10 +130,10 @@ export async function seenRecently(sig, rootPid, cfg, ctx = {}) {
     const file = dataPathFor('proc-orphans', 'warned.json', ctx.env ? { env: ctx.env } : {});
     let st = {};
     try { st = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
-    const now = Date.now();
+    const now = ctx.now ?? Date.now();
     const prev = st[String(rootPid)];
-    if (prev && prev.sig === sig && now - prev.ts < ttl * 1000 && prev.ts <= now + 1000) return true;
-    if (ctx.write === false) return false;
+    if (prev && now - prev.ts < (prev.sig === sig ? ttl : thr) * 1000 && prev.ts <= now + 1000) return true;
+    if (ctx.cache === false) return false; // trang thai module (nhu scan-cache): ghi ca khi write:false (dispatcher)
     fs.mkdirSync(path.dirname(file), { recursive: true });
     withLock(file, () => {
       let cur = {}; try { cur = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
@@ -139,13 +147,59 @@ export async function seenRecently(sig, rootPid, cfg, ctx = {}) {
   } catch { return false; }
 }
 
+/**
+ * So subagent dang chay theo session (data proc-orphans/live-agents.json: {session_id: {agent_id: ts}}).
+ * SubagentStart them agent_id, SubagentStop xoa (khoa, atomic; ghi ca khi write:false, tru ctx.cache===false). Muc qua liveAgentTtlSec bi bo.
+ * Tra so agent KHAC agent hien tai con chay. ctx.now (test). Fail-open: loi -> 0 (canh bao nhu cu).
+ */
+export async function liveAgents(event, input, cfg, ctx = {}) {
+  const sid = String(input.session_id || ''), aid = String(input.agent_id || '');
+  if (!sid) return 0;
+  try {
+    const ttl = (Number.isFinite(cfg.liveAgentTtlSec) ? cfg.liveAgentTtlSec : 7200) * 1000;
+    const now = ctx.now ?? Date.now();
+    const { dataPathFor } = await import('../../core/io/storage.mjs');
+    const file = dataPathFor('proc-orphans', 'live-agents.json', ctx.env ? { env: ctx.env } : {});
+    const read = () => {
+      let st = {}; try { st = JSON.parse(fs.readFileSync(file, 'utf8')) || {}; } catch {}
+      for (const s of Object.keys(st)) {
+        const a = st[s] && typeof st[s] === 'object' ? st[s] : {};
+        for (const k of Object.keys(a)) if (!(now - a[k] < ttl && a[k] <= now + 1000)) delete a[k];
+        if (Object.keys(a).length) st[s] = a; else delete st[s];
+      }
+      return st;
+    };
+    let st = read();
+    if (aid && (event === 'SubagentStart' || event === 'SubagentStop') && ctx.cache !== false) {
+      const { withLock } = await import('../../core/runtime/lockfile.mjs');
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      const r = withLock(file, () => {
+        const cur = read();
+        if (event === 'SubagentStart') (cur[sid] ||= {})[aid] = now;
+        else if (cur[sid]) { delete cur[sid][aid]; if (!Object.keys(cur[sid]).length) delete cur[sid]; }
+        const tmp = file + '.' + process.pid + '.tmp';
+        fs.writeFileSync(tmp, JSON.stringify(cur));
+        fs.renameSync(tmp, file);
+        return cur;
+      });
+      if (r.ok) st = r.value;
+    }
+    return Object.keys(st[sid] || {}).filter((k) => k !== aid).length;
+  } catch { return 0; }
+}
+
 export async function handle(event, input, ctx = {}) {
   try {
     const cfg = ctx.cfg ?? load().config;
     if (!cfg.enabled || !input || typeof input !== 'object' || !cfg.events.includes(event)) return {};
+    const live = await liveAgents(event, input, cfg, ctx);
+    if (event === 'SubagentStart') return {}; // chi ghi so, khong quet
     if (ctx.sweep !== false && ctx.write !== false) await sweepProcLedger(); // write:false = khong ghi gi (sweep ghi so PID + stamp)
-    const r = await scanChildren(cfg, ctx);
+    if (live > 0) return {}; // con subagent khac dang chay: con chau cua no khong phai mo coi -> im, khong quet
+    const r = typeof ctx.scan === 'function' ? await ctx.scan() : await scanChildren(cfg, ctx); // ctx.scan: seam cho test
     if (!r.children.length) return {};
+    // khoa chong lap theo nguoi nhan (main / tung subagent): canh bao cho subagent khong che canh bao cho main
+    if (await seenRecently(signatureOf(r.rootPid, r.children), `${r.rootPid}:${input.agent_id || 'main'}`, cfg, ctx)) return {};
     const ts = new Date().toISOString();
     const sid = `claude-${String(input.session_id || 'unknown').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64)}`;
     const env = {
@@ -165,7 +219,7 @@ export async function handle(event, input, ctx = {}) {
 const META = { id: 'proc-orphans', events: DEFAULTS.events, timeoutMs: DEFAULTS.timeoutMs, onError: 'open' };
 /** Alias cu (test). */
 export const MODULE = Object.freeze({ ...META, handle });
-/** Chuan HOOK_MODULE: async handle(event, input, ctx). ctx.write === false: khong ghi audit (cache quet van ghi; ctx.cache === false tat cache). */
+/** Chuan HOOK_MODULE: async handle(event, input, ctx). ctx.write === false: khong ghi audit (cache quet + state warned/live-agents van ghi; ctx.cache === false tat ghi). */
 export default Object.freeze({ ...META, handle: async (event, input, ctx) => handle(event, input, ctx) });
 
 async function main() {

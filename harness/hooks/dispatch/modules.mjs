@@ -36,7 +36,7 @@ export const ORDER = Object.freeze({
   PermissionRequest: [AUDIT],
   PermissionDenied: [AUDIT],
   Notification: [AUDIT],
-  SubagentStart: [AUDIT, EXT_INJECT],
+  SubagentStart: [AUDIT, EXT_INJECT, PROC_ORPHANS], // proc-orphans: chi ghi so agent dang chay
   SessionEnd: [AUDIT],
   Stop: [AUDIT, PROC_ORPHANS],
   SubagentStop: [AUDIT, PROC_ORPHANS],

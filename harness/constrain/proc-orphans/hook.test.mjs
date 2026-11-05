@@ -42,7 +42,7 @@ test('handle(): Stop that -> khong decision, ket qua hop le voi validateHookResu
   const prev = process.env.CLAUDE_AUDIT_DIR;
   process.env.CLAUDE_AUDIT_DIR = dir;
   try {
-    const r = await handle('Stop', { hook_event_name: 'Stop', session_id: 't-po-h' }, { cfg: DEFAULTS });
+    const r = await handle('Stop', { hook_event_name: 'Stop', session_id: 't-po-h' }, { cfg: DEFAULTS, env: { ...process.env, HUB_DATA_DIR: dir } });
     expect(validateHookResult(r)).toEqual([]);
     expect(r.decision).toBeUndefined();
   } finally {
@@ -67,10 +67,61 @@ test('chong lap: cung chu ky khong canh bao lan 2, chu ky moi thi canh bao, writ
   try {
     const a = signatureOf(9, [{ pid: 5 }, { pid: 3 }]);
     expect(a).toBe(signatureOf(9, [{ pid: 3 }, { pid: 5 }]));
-    expect(await seenRecently(a, 9, DEFAULTS, { env, write: false })).toBe(false);
-    expect(await seenRecently(a, 9, DEFAULTS, { env, write: false })).toBe(false);
-    expect(await seenRecently(a, 9, DEFAULTS, { env })).toBe(false);
+    expect(await seenRecently(a, 9, DEFAULTS, { env, cache: false })).toBe(false);
+    expect(await seenRecently(a, 9, DEFAULTS, { env, cache: false })).toBe(false);
+    expect(await seenRecently(a, 9, DEFAULTS, { env, write: false })).toBe(false); // write:false (dispatcher) van ghi state
     expect(await seenRecently(a, 9, DEFAULTS, { env })).toBe(true);
-    expect(await seenRecently(signatureOf(9, [{ pid: 3 }, { pid: 5 }, { pid: 6 }]), 9, DEFAULTS, { env })).toBe(false);
+    const b = signatureOf(9, [{ pid: 3 }, { pid: 5 }, { pid: 6 }]);
+    expect(await seenRecently(b, 9, DEFAULTS, { env })).toBe(true); // chu ky khac trong throttleSec -> van im
+    const later = Date.now() + (DEFAULTS.throttleSec + 1) * 1000;
+    expect(await seenRecently(b, 9, DEFAULTS, { env, now: later })).toBe(false); // het throttle -> canh bao, ghi ts=later
+    expect(await seenRecently(b, 9, { ...DEFAULTS, throttleSec: 0 }, { env, now: later + 1 })).toBe(true); // cung chu ky trong dedupeSec
+    expect(await seenRecently(a, 9, { ...DEFAULTS, throttleSec: 0 }, { env, now: later + 2 })).toBe(false); // throttle tat -> chu ky moi canh bao ngay
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
+
+// Mo phong: con chau thay doi pid lien tuc duoi subagent dang chay; root pid 1, scan qua ctx.scan (khong quet that).
+const kids = (...pids) => ({ rootPid: 1, children: pids.map((pid) => ({ pid, name: 'bash.exe' })), total: pids.length });
+const run = (dir) => {
+  const env = { ...process.env, HUB_DATA_DIR: dir };
+  return (event, input, scan, extra = {}) => handle(event, { session_id: 'S', ...input }, { cfg: DEFAULTS, write: false, sweep: false, env, scan: () => scan, ...extra });
+};
+const warned = (res) => typeof res.additionalContext === 'string';
+const withDir = async (fn) => { const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'po-sim-')); try { await fn(run(dir)); } finally { fs.rmSync(dir, { recursive: true, force: true }); } };
+
+test('subagent dang chay: 20 lan Stop cua main voi tap pid doi lien tuc -> 0 canh bao; SubagentStart chi ghi so', () => withDir(async (h) => {
+  expect(await h('SubagentStart', { agent_id: 'a1' }, kids(99))).toEqual({});
+  let n = 0;
+  for (let i = 0; i < 20; i++) if (warned(await h('Stop', {}, kids(100 + i, 200 + i)))) n++;
+  expect(n).toBe(0);
+}));
+
+test('agent cua session khac khong lam im session nay', () => withDir(async (h) => {
+  await h('SubagentStart', { agent_id: 'a1' }, kids());
+  expect(warned(await h('Stop', { session_id: 'OTHER' }, kids(7)))).toBe(true);
+}));
+
+test('khong theo doi duoc agent (cache:false): pid churn van toi da 1 canh bao / throttle', () => withDir(async (h) => {
+  await h('SubagentStart', { agent_id: 'a1' }, kids(), { cache: false });
+  let n = 0;
+  for (let i = 0; i < 20; i++) if (warned(await h('Stop', {}, kids(100 + i, 200 + i)))) n++;
+  expect(n).toBe(1);
+}));
+
+test('mo coi that sau khi moi agent dung van canh bao main; dedupe sau do', () => withDir(async (h) => {
+  await h('SubagentStart', { agent_id: 'a1' }, kids());
+  await h('SubagentStart', { agent_id: 'a2' }, kids());
+  expect(warned(await h('Stop', {}, kids(10, 11)))).toBe(false);
+  expect(warned(await h('SubagentStop', { agent_id: 'a1' }, kids(12)))).toBe(false); // a2 con chay
+  expect(warned(await h('SubagentStop', { agent_id: 'a2' }, kids(13)))).toBe(true); // agent cuoi: canh bao cho chinh no
+  const r = await h('Stop', {}, kids(13));
+  expect(warned(r)).toBe(true); // main co khoa chong lap rieng
+  expect(r.additionalContext).toContain('1 tien trinh');
+  expect(warned(await h('Stop', {}, kids(13)))).toBe(false); // cung mo coi: dedupe
+}));
+
+test('agent co SubagentStart ma khong co SubagentStop: het liveAgentTtlSec thi het lam im', () => withDir(async (h) => {
+  await h('SubagentStart', { agent_id: 'ghost' }, kids());
+  expect(warned(await h('Stop', {}, kids(5)))).toBe(false);
+  expect(warned(await h('Stop', {}, kids(5), { now: Date.now() + (DEFAULTS.liveAgentTtlSec + 1) * 1000 }))).toBe(true);
+}));
