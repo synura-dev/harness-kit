@@ -5,7 +5,6 @@ import path from 'node:path';
 import { spawnBackground, sweepBackground } from '../../core/runtime/proc.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { kickReport } from '../report/run.mjs';
-import { kickAutopilot } from './autopilot-kick.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
 import { readLedger, readPending, updateLedger, claimDue, claimRebuild, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
@@ -45,7 +44,7 @@ export function kickJob(dataOpts, ctx = {}, nowMs = Date.now()) {
     fs.mkdirSync(path.dirname(lock), { recursive: true });
     fs.writeFileSync(lock, JSON.stringify({ ts: nowMs, pid: process.pid }));
     const go = ctx.spawnJob || (() => {
-      spawnBackground({ cmd: process.execPath, args: [path.join(HERE, 'job.mjs'), '--timeout-s', String(JOB.timeoutS)], key: 'ledger-job', deadlineMs: (JOB.timeoutS + 60) * 1000, env: process.env });
+      spawnBackground({ cmd: process.execPath, args: [path.join(HERE, 'job.mjs'), '--timeout-s', String(JOB.timeoutS)], key: 'ledger-job', deadlineMs: (JOB.timeoutS + 180) * 1000, env: process.env });
     });
     go();
     return true;
@@ -71,7 +70,6 @@ export async function handle(event, input, ctx = {}) {
       updateLedger(file, (es) => { const c = claimDue(es, nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines }); r.lines = c.lines; return c.changed || pending === null ? c.entries : null; }, { lock: { retries: 20, waitMs: 25 } }); // khong khoa duoc -> bo qua lan nay (fail-open)
     }
     if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env && !noWrite) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
-    if (event === 'SessionStart' && !noWrite && cfg.kickAutopilot !== false) kickAutopilot(dataOpts, { ...ctx, spawnAutopilot: ctx.spawnAutopilot || (ctx.spawnJob ? () => {} : undefined) }, nowMs); // evolve autopilot 1 lan/24h
     if (event === 'SessionStart' && !noWrite && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
     const inj = event === 'SessionStart' && cfg.inject !== false ? readInject(dataOpts) : [];
     const all = [...r.lines.map(frameLine), ...inj];

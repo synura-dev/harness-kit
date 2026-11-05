@@ -1,4 +1,4 @@
-// evolve prune-candidates [--days N] [--json] [--record]: giu harness gon (tran + deprecate theo muc dung).
+// evolve scan deprecate [--days N] [--json] [--record]: giu harness gon (tran + deprecate theo muc dung).
 import path from 'node:path';
 import { workspaceRoot, dataDir } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
