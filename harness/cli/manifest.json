@@ -10,7 +10,7 @@
     "ext": {
       "file": "commands/ext-cmd.mjs",
       "desc": "dang ky extension lop may (hash ghim, ask/TTY)",
-      "cmds": "register <path> | approve <id> | list | verify",
+      "cmds": "register <path> | approve <id> | remove <id> [--yes] | list | verify",
       "default": "index"
     },
     "agy": {

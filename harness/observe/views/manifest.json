@@ -5,10 +5,10 @@
   "entry": "observe.mjs",
   "domain": "observe",
   "desc": "cong doc audit/du lieu: sizes|data-prune|usage|ledger|report (chi doc, prune mac dinh dry-run)",
-  "cmds": "sizes | data-prune | usage | ledger [list] | report",
+  "cmds": "sizes | data-prune | usage | ledger [list|close] | report",
   "default": "index",
   "domains": {
-    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (sizes, data-prune, usage, ledger, report)", "cmds": "sizes | data-prune | usage | ledger [list] | report", "default": "index" }
+    "observe": { "file": "observe.mjs", "desc": "cong doc audit/du lieu (sizes, data-prune, usage, ledger, report)", "cmds": "sizes | data-prune | usage | ledger [list|close] | report", "default": "index" }
   },
   "files": {
     "helpers": ["data.mjs", "sizes.mjs", "prune.mjs", "usage.mjs"], "query": ["query/files.mjs"] },
