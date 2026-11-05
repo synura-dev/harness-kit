@@ -92,9 +92,30 @@ test('warn-pending.json: hook chi doc tom tat; khong co muc due -> khong dong va
   assert.match(r.additionalContext, /ledger\[r\] \(du lieu quan sat/);
   assert.deepEqual(readPending(file), []); // da phat -> tom tat rong
   const before = fs.statSync(file).mtimeMs; const raw = fs.readFileSync(file, 'utf8');
-  fs.writeFileSync(file, raw + '{ hong'); // neu hook parse/ghi so thi se doi/hong; chi doc tom tat thi giu nguyen
+  fs.writeFileSync(file, raw.replace('msg a', 'XXX a')); // (cung kich thuoc) neu hook parse/ghi so thi se doi/hong; chi doc tom tat thi giu nguyen
   r = await handle('UserPromptSubmit', { session_id: 's1' }, { env, nowMs: NOW + 1000 });
-  assert.deepEqual(r, {}); assert.equal(fs.readFileSync(file, 'utf8'), raw + '{ hong');
+  assert.deepEqual(r, {}); assert.equal(fs.readFileSync(file, 'utf8'), raw.replace('msg a', 'XXX a'));
   void before; void pendingPathFor;
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('warn-pending: lech so (bytes) -> readPending null; hook rebuild toi da 1 lan/10 phut', async () => {
+  const d = mk(); const env = { HUB_DATA_DIR: d };
+  const { ledgerFile, claimRebuild } = await import('./ledger.mjs');
+  const file = ledgerFile({ env });
+  const f = (fp) => ({ rule: 'r', fp, key: fp, count: 3, sessions: 1, first_ts: null, last_ts: new Date(NOW).toISOString(), sample: '', action: 'warn', cooldown_hours: 24, message: 'msg ' + fp, occ: [] });
+  writeLedger(file, applyFindings([], [f('a')], NOW).entries);
+  assert.equal(readPending(file).length, 1);
+  fs.appendFileSync(file, ' \n'); // so doi ngoai giao dich -> tom tat khong con khop
+  assert.equal(readPending(file), null);
+  // lan 1: rebuild (doc so, ghi lai ca hai); lan 2 trong 10 phut: bo qua, khong doc/ghi so
+  fs.rmSync(pendingPathFor(file));
+  await handle('UserPromptSubmit', { session_id: 's1' }, { env, nowMs: NOW });
+  assert.notEqual(readPending(file), null);
+  fs.rmSync(pendingPathFor(file));
+  const raw = fs.readFileSync(file, 'utf8');
+  const r = await handle('UserPromptSubmit', { session_id: 's1' }, { env, nowMs: NOW + 60000 });
+  assert.deepEqual(r, {}); assert.equal(fs.readFileSync(file, 'utf8'), raw); assert.equal(fs.existsSync(pendingPathFor(file)), false);
+  assert.equal(claimRebuild(file, NOW + 11 * 60e3), true); // qua 10 phut -> duoc rebuild lai
   fs.rmSync(d, { recursive: true, force: true });
 });

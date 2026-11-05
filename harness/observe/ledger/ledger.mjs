@@ -43,14 +43,40 @@ export function writeLedger(file, entries) {
   const keep = entries.length > POLICY.maxEntries
     ? [...entries].sort((a, b) => (a.status === 'resolved') - (b.status === 'resolved') || String(b.last_seen).localeCompare(String(a.last_seen))).slice(0, POLICY.maxEntries)
     : entries;
-  const ok = atomicWrite(file, keep.map((e) => JSON.stringify(e)).join('\n') + (keep.length ? '\n' : ''));
-  if (ok) atomicWrite(pendingPathFor(file), JSON.stringify({ ts: Date.now(), pending: pendingOf(keep) }) + '\n'); // nho, de hook khong phai parse ca so
-  return ok;
+  const text = keep.map((e) => JSON.stringify(e)).join('\n') + (keep.length ? '\n' : '');
+  return atomicWritePair(file, text, pendingPathFor(file), JSON.stringify({ ts: Date.now(), bytes: Buffer.byteLength(text), pending: pendingOf(keep) }) + '\n'); // tom tat nho de hook khong phai parse ca so
+}
+
+// Ghi so + tom tat CUNG giao dich (goi duoi khoa file): ghi ca hai tmp truoc, roi rename lien tiep. Tom tat mang `bytes` cua so -> lech (crash giua hai rename) thi readPending coi la hong.
+function atomicWritePair(file, text, pfile, ptext) {
+  const gf = guardWrite(file), gp = guardWrite(pfile);
+  if (!gf.ok || !gp.ok) return false;
+  const t1 = `${file}.${process.pid}.tmp`, t2 = `${pfile}.${process.pid}.tmp`;
+  try {
+    ensureDataIgnore(); fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(t1, text, 'utf8'); fs.writeFileSync(t2, ptext, 'utf8');
+    fs.renameSync(t1, file); fs.renameSync(t2, pfile);
+    return true;
+  } catch { for (const t of [t1, t2]) { try { fs.unlinkSync(t); } catch { /* khong co */ } } return false; }
+}
+export const REBUILD_MIN_INTERVAL_MS = 10 * 60e3;
+export const rebuildStampFile = (file) => path.join(path.dirname(file), 'warn-pending.rebuild.json');
+/** Cho phep rebuild tom tat khi hong/thieu toi da 1 lan/10 phut (stamp); true = duoc phep va da danh dau. */
+export function claimRebuild(file, nowMs = Date.now()) {
+  const sf = rebuildStampFile(file);
+  try { const j = JSON.parse(fs.readFileSync(sf, 'utf8')); if (nowMs - Number(j.ts) < REBUILD_MIN_INTERVAL_MS) return false; } catch { /* chua co stamp */ }
+  atomicWrite(sf, JSON.stringify({ ts: nowMs }) + '\n');
+  return true;
 }
 
 /** Doc tom tat canh bao; null neu thieu/hong (hook se doc so day du mot lan de tu lanh). */
 export function readPending(file) {
-  try { const j = JSON.parse(fs.readFileSync(pendingPathFor(file), 'utf8')); return Array.isArray(j.pending) ? j.pending : null; } catch { return null; }
+  try {
+    const j = JSON.parse(fs.readFileSync(pendingPathFor(file), 'utf8'));
+    if (!Array.isArray(j.pending)) return null;
+    if (Number.isFinite(j.bytes) && fs.statSync(file).size !== j.bytes) return null; // lech so (crash giua hai rename / so bi sua ngoai)
+    return j.pending;
+  } catch { return null; }
 }
 
 /**

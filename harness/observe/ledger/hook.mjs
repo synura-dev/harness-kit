@@ -8,7 +8,7 @@ import { kickReport } from '../report/run.mjs';
 import { kickAutopilot } from './autopilot-kick.mjs';
 import { fileURLToPath } from 'node:url';
 import { REPO_DIR } from '../../core/io/paths.mjs';
-import { readLedger, readPending, updateLedger, claimDue, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
+import { readLedger, readPending, updateLedger, claimDue, claimRebuild, ledgerFile, ledgerDir, POLICY, JOB, jobDue } from './ledger.mjs';
 import { safeText, cleanLine, OBSERVED_FRAME } from '../../core/audit/safe-text.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -65,7 +65,8 @@ export async function handle(event, input, ctx = {}) {
     // Thieu tom tat (so cu / chua chay job) -> doc so day du mot lan de tu lanh (claimDue ghi lai tom tat).
     const pending = readPending(file);
     const r = { lines: [] };
-    if (pending === null ? fs.existsSync(file) : pending.length) {
+    // Tom tat hong/thieu: rebuild toi da 1 lan/10 phut (stamp) de khong doc ca so moi prompt.
+    if (pending === null ? fs.existsSync(file) && claimRebuild(file, nowMs) : pending.length) {
       updateLedger(file, (es) => { const c = claimDue(es, nowMs, { sid: sid && `claude-${sid}`, max: cfg.maxLines }); r.lines = c.lines; return c.changed || pending === null ? c.entries : null; }, { lock: { retries: 20, waitMs: 25 } }); // khong khoa duoc -> bo qua lan nay (fail-open)
     }
     if (event === 'SessionStart' && cfg.sweep !== false && !ctx.env) await sweepBackground(); // don so PID tac vu nen (muc chet/qua han)
