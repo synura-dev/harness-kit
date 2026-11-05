@@ -1,4 +1,4 @@
-// harness/observe/views/data.mjs - retention du lieu: `observe data-prune [--yes] [--dir D] [--timeout-s N]` | `observe sizes` (xem sizes.mjs).
+// harness/observe/views/data.mjs - retention du lieu: `observe data-prune [--yes] [--dir D] [--timeout-s N]` | `observe sizes [dir]` (xem sizes.mjs).
 // Mac dinh dry-run (chi bao); --yes moi xoa. Retention: events 30 ngay, digests 90, runs 14, baselines giu 10 ban moi nhat (contract.mjs).
 // root bat buoc = workspaceRoot() (hoac cha cua data dir neu HUB_DATA_DIR ngoai hub); qua han -> dung em, in `truncated: timeout`.
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { pruneDir } from '../../core/io/jsonl-store.mjs';
 import { workspaceRoot, dataRoot, isInside, samePath } from '../../core/io/paths.mjs';
 
 const MAX_TIMEOUT_S = 120;
-const USAGE = 'Usage: node harness/cli/harness.mjs data prune [--yes] [--dir <thu-muc-trong-hub>] [--timeout-s N<=120]  (mac dinh dry-run)';
+const USAGE = 'Usage: node harness/cli/harness.mjs observe data-prune [--yes] [--dir <thu-muc-trong-hub>] [--timeout-s N<=120]  (mac dinh dry-run)';
 
 export function parseDataArgs(argv) {
   const o = { cmd: null, yes: false, timeoutS: 30, dir: null };
@@ -40,10 +40,10 @@ export function runPrune({ dir, yes = false, timeoutS = 30, hub = workspaceRoot(
 }
 
 export function dataMain(argv) {
-  if (argv[0] === 'sizes') { sizesMain(argv.slice(1)); return 0; }
+  if (argv[0] === 'sizes') return sizesMain(argv.slice(1));
   let r;
-  try { r = runPrune(parseDataArgs(argv)); } catch (e) { console.error(`data: ${e.message}\n${USAGE}`); return 2; }
-  console.log(`${r.dryRun ? '[dry-run] ' : ''}data prune ${r.dir}: kept=${r.kept} removed=${r.removed}${r.dryRun ? ' (them --yes de xoa that)' : ''}`);
+  try { r = runPrune(parseDataArgs(argv)); } catch (e) { console.error(`observe data-prune: ${e.message}\n${USAGE}`); return 2; }
+  console.log(`${r.dryRun ? '[dry-run] ' : ''}data-prune ${r.dir}: kept=${r.kept} removed=${r.removed}${r.dryRun ? ' (them --yes de xoa that)' : ''}`);
   for (const f of r.files.slice(0, 50)) console.log(`  - ${f}`);
   if (r.files.length > 50) console.log(`  ... con ${r.files.length - 50} muc`);
   if (r.truncated) console.log(`truncated: ${r.truncated}`);

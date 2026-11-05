@@ -146,11 +146,12 @@ export function countUsage(events, inv) {
   const doms = new Map();
   for (const c of inv.commands) { if (!doms.has(c.domain)) doms.set(c.domain, new Set()); doms.get(c.domain).add(c.cmd); }
   const u = { command: new Acc(), hook: new Acc(), skill: new Acc(), agent: new Acc() };
+  const agentSub = new Acc(); // dem theo agent_id (su kien cua subagent) - doi chieu voi PreToolUse, khong cong don
   const gwFirst = events.reduce((a, e) => (e.gw && (!a || e.ts < a) ? e.ts : a), null);
   const src = { command_gateway: 0, command_bash_fallback: 0, gateway_since: gwFirst, hookrun_events: 0, hookrun_since: null };
   const seen = new Set();
   for (const e of events) {
-    if (e.gw) { if (e.domain && e.cmd) { u.command.hit(`${e.domain}.${e.cmd}`, e); src.command_gateway++; } continue; }
+    if (e.gw) { if (e.domain && e.cmd && e.cmd !== '(default)') { u.command.hit(`${e.domain}.${e.cmd}`, e); src.command_gateway++; } continue; }
     if (e.event === 'HookRun') {
       src.hookrun_events++; if (!src.hookrun_since || e.ts < src.hookrun_since) src.hookrun_since = e.ts;
       for (const m of (e.data && e.data.modules) || []) if (m && m.id) u.hook.hit(m.id, e, Number(m.ms) || 0);
@@ -165,12 +166,14 @@ export function countUsage(events, inv) {
       const n = String(d.subagent_type || e.target || '').trim().split(/\s+/)[0];
       if (n) u.agent.hit(n, e);
     }
-    if (e.agent_type && e.agent_id && !seen.has(e.agent_id)) { seen.add(e.agent_id); u.agent.hit(e.agent_type, e); }
+    if (e.agent_type && e.agent_id && !seen.has(e.agent_id)) { seen.add(e.agent_id); agentSub.hit(e.agent_type, e); }
     if (e.tool === 'Bash' && e.event === 'PreToolUse' && (!gwFirst || e.ts < gwFirst)) {
       const m = HARNESS_RE.exec(String(d.cmd_line || e.target || ''));
       if (m && doms.has(m[1]) && m[2] && doms.get(m[1]).has(m[2])) { u.command.hit(`${m[1]}.${m[2]}`, e); src.command_bash_fallback++; }
     }
   }
+  // Mot lan goi subagent hien ca o PreToolUse (main) lan su kien cua chinh subagent: lay max theo ten, khong cong don.
+  for (const [id, x] of agentSub.m) { const cur = u.agent.m.get(id); if (!cur || cur.count < x.count) u.agent.m.set(id, x); }
   return { usage: u, sources: src };
 }
 
@@ -206,7 +209,12 @@ export function buildCandidates({ inv, usage, state = {}, caps = {}, nowMs = Dat
 }
 
 export const readState = (file) => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch { return {}; } };
-export function writeState(file, st) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, JSON.stringify(st, null, 2) + '\n', 'utf8'); }
+export function writeState(file, st) { // atomic: ghi tmp roi rename
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const t = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(t, JSON.stringify(st, null, 2) + '\n', 'utf8');
+  fs.renameSync(t, file);
+}
 
 /** Diem vao. o: {auditDirs, projectDir, pluginRoot, extRoots, days, caps, nowMs, timeoutMs, maxBytes, state, order, waitDays}. */
 export async function pruneCandidates(o = {}) {

@@ -240,7 +240,7 @@ export function run(argv, root, opts = {}) {
   const t0 = Date.now();
   const r = spawnSync(process.execPath, [script, ...args], { cwd: root, stdio: opts.capture ? 'pipe' : 'inherit', encoding: 'utf8', timeout: tmo, env: { ...process.env, HARNESS_GATEWAY: '1' } });
   const code = r.error ? 2 : (r.status ?? 1);
-  logGateway({ domain, cmd: rest[0] || null, args: rest.slice(1), exit: code, ms: Date.now() - t0, dataWarn: unregisteredDirs() });
+  logGateway({ domain, cmd: rest[0] || '(default)', args: rest.slice(1), exit: code, ms: Date.now() - t0, dataWarn: unregisteredDirs() });
   if (r.error) return { code: 2, text: r.error.code === 'ETIMEDOUT' ? 'truncated: timeout' : String(r.error.message) };
   return { code: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
 }
@@ -272,7 +272,7 @@ export function unregisteredDirs(opts = {}) {
   } catch { return null; }
 }
 
-// Log cong: 1 dong JSONL/lenh vao <audit-root>/gateway/date=YYYY-MM-DD/gateway.jsonl. Loi log khong lam hong lenh.
+// Log cong: 1 dong JSONL/lenh (khong ghi signal task_status: bashSignal cua audit da ghi tu lenh Bash, tranh dem doi). cmd='(default)' khi khong co lenh con vao <audit-root>/gateway/date=YYYY-MM-DD/gateway.jsonl. Loi log khong lam hong lenh.
 function logGateway(e) {
   try {
     const ts = new Date().toISOString();
@@ -280,7 +280,7 @@ function logGateway(e) {
     ensureDataIgnore(); fs.mkdirSync(dir, { recursive: true });
     guardWrite(path.join(dir, 'gateway.jsonl')); // chi warn (audit khong enforce)
     const args = e.args.map((a) => String(a).slice(0, 80)).slice(0, 10);
-    fs.appendFileSync(path.join(dir, 'gateway.jsonl'), JSON.stringify({ ts, domain: e.domain, cmd: e.cmd, args, session: process.env.CLAUDE_SESSION_ID || null, exit: e.exit, ms: e.ms, ...(e.domain === 'tasks' && e.cmd === 'set' && e.args.some((a) => /^--status(=|$)/.test(String(a))) ? { signal: 'task_status' } : {}), ...(e.dataWarn ? { dataWarn: e.dataWarn } : {}) }) + '\n');
+    fs.appendFileSync(path.join(dir, 'gateway.jsonl'), JSON.stringify({ ts, domain: e.domain, cmd: e.cmd, args, session: process.env.CLAUDE_SESSION_ID || null, exit: e.exit, ms: e.ms, ...(e.dataWarn ? { dataWarn: e.dataWarn } : {}) }) + '\n');
   } catch {}
 }
 
