@@ -69,18 +69,6 @@ const GUARD_AGY = {
   },
 };
 
-/** approval agy: cung module approval cua Claude. agy chay lenh qua shell bat ky (Windows: PowerShell) -> danh gia ca Bash va PowerShell, lay muc manh nhat. */
-const APPROVAL_AGY = {
-  id: 'approval-agy', events: ['PreToolUse'], timeoutMs: 2500, onError: 'open',
-  async handle(event, input, ctx) {
-    if (!input || !input.toolCall || input.toolCall.name !== 'run_command') return {};
-    const a = (await import('../../constrain/approval/hook.mjs')).default;
-    const rs = [];
-    for (const t of ['Bash', 'PowerShell']) rs.push(await a.handle(event, toClaudeInput(input, t), ctx));
-    return strongest(rs);
-  },
-};
-
 /** session agy: doctor luc SessionStart, MISS/LOI -> stderr; khong chan phien. */
 const SESSION_AGY = {
   id: 'session-agy', events: ['SessionStart'], timeoutMs: 9000, onError: 'open',
@@ -100,7 +88,7 @@ const SESSION_AGY = {
 const wrap = (m, gate = false) => ({ id: m.id, gate, load: async () => ({ default: m }) });
 export const AGY_ORDER = Object.freeze({
   SessionStart: [wrap(AUDIT_AGY), wrap(SESSION_AGY)],
-  PreToolUse: [wrap(GUARD_AGY, true), wrap(APPROVAL_AGY, true), wrap(BASH_GUARD_AGY, true), wrap(AUDIT_AGY)],
+  PreToolUse: [wrap(GUARD_AGY, true), wrap(BASH_GUARD_AGY, true), wrap(AUDIT_AGY)],
   PostToolUse: [wrap(AUDIT_AGY)],
   PostInvocation: [wrap(AUDIT_AGY)],
   Stop: [wrap(AUDIT_AGY)],

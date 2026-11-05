@@ -19,17 +19,15 @@ const GUARD = { id: 'guard', gate: true, load: () => import('../../constrain/gua
 const DATA_GATE = { id: 'data-gate', gate: true, load: () => import('../../constrain/data-gate/hook.mjs') };
 const BASH_GUARD = { id: 'bash-guard', gate: true, load: () => import('../../constrain/bash-guard/hook.mjs') };
 const MODEL_POLICY = { id: 'model-policy', gate: true, load: () => import('../../constrain/model-policy/hook.mjs') };
-const VERIFY_GATE = { id: 'verify-gate', load: () => import('../../constrain/verify-gate/hook.mjs') };
 const PROC_ORPHANS = { id: 'proc-orphans', load: () => import('../../constrain/proc-orphans/hook.mjs') };
 const DATA_CHECK = { id: 'data-check', load: () => import('../../observe/data-check/hook.mjs') };
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
-const DIFF_REVIEW = { id: 'diff-review', load: () => import('../../observe/diff-review/hook.mjs') };
 const LEDGER_WARN = { id: 'ledger-warn', load: () => import('../../observe/ledger/hook.mjs') };
 const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
-export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'verify-gate', 'user-shim', 'ext-inject', 'ledger-warn']);
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn']);
 
 export const ORDER = Object.freeze({
   PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, AUDIT],
@@ -38,10 +36,10 @@ export const ORDER = Object.freeze({
   PermissionRequest: [AUDIT],
   PermissionDenied: [AUDIT],
   Notification: [AUDIT],
-  SubagentStart: [AUDIT, EXT_INJECT, DIFF_REVIEW],
+  SubagentStart: [AUDIT, EXT_INJECT],
   SessionEnd: [AUDIT],
-  Stop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
-  SubagentStop: [AUDIT, VERIFY_GATE, PROC_ORPHANS],
+  Stop: [AUDIT, PROC_ORPHANS],
+  SubagentStop: [AUDIT, PROC_ORPHANS],
   SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, EXT_INJECT, LEDGER_WARN],
   UserPromptSubmit: [AUDIT, LEDGER_WARN],
   WorktreeCreate: [WORKTREE],

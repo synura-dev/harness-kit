@@ -17,7 +17,7 @@
     "play": {
       "zone": "system",
       "class": "log",
-      "owner": "harness/tools/play",
+      "owner": "ext-out/hub-verify/play",
       "retentionDays": 14,
       "target": "system/play",
       "path": "system/play"
@@ -33,7 +33,7 @@
     "watchdog": {
       "zone": "system",
       "class": "log",
-      "owner": "harness/cli/commands/proc-watch.mjs",
+      "owner": "harness/constrain/proc-orphans",
       "retentionDays": 14,
       "target": "system/watchdog",
       "path": "system/watchdog"

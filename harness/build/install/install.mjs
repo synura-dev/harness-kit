@@ -9,16 +9,6 @@ import { REPO_DIR } from '../../core/io/paths.mjs';
 import { syncUserShim } from '../../core/runtime/user-shim.mjs';
 
 const DOCTOR_TIMEOUT_MS = 30000;
-const SKILLS_CLI = fileURLToPath(new URL('../skills/cli.mjs', import.meta.url));
-
-/** Goi CLI skills (build|check) voi --json; tra du lieu da parse hoac {problems|issues} bao loi (het gio/khong parse duoc). */
-function skillsCli(sub, root, args, timeoutS) {
-  const r = spawnSync(process.execPath, [SKILLS_CLI, sub, ...args, '--root', root, '--json', '--timeout-s', String(timeoutS)], { encoding: 'utf8', timeout: (timeoutS + 15) * 1000 });
-  try { return JSON.parse(String(r.stdout || '')); } catch { /* roi xuong loi */ }
-  const why = r.error ? (r.error.code || r.error.message) : `exit ${r.status}`;
-  return sub === 'build' ? { items: [], problems: [`skills build khong chay duoc: ${why}`] } : { ok: false, checked: 0, issues: [{ issue: 'skills check khong chay duoc', detail: why }] };
-}
-
 /** [{name, ok:true|false|null, detail}] ok=null = tuy chon/khong co. */
 export function checkRuntime({ nodeVersion = process.versions.node, bunVersion } = {}) {
   const major = Number(String(nodeVersion).split('.')[0]);
@@ -56,19 +46,6 @@ export function install({ root, apply = true, skipDoctor = false, timeoutS = 60,
   const steps = [];
   const rt = runtime();
   steps.push({ step: 'runtime', ok: rt.every((x) => x.ok !== false), lines: rt.map((x) => `${x.ok === true ? 'OK  ' : x.ok === false ? 'MISS' : '--  '} ${x.name}: ${x.detail}`) });
-
-  const b = skillsCli('build', root, [...(apply ? ['--apply'] : []), '--adopt'], timeoutS);
-  const acts = b.items.filter((i) => i.action !== 'skip');
-  const lines = [`${b.items.length} dich, ${acts.length} ${apply ? 'da ghi' : 'se ghi'}, ${b.items.length - acts.length} khop (bo qua)`];
-  for (const i of acts) lines.push(`  ${i.action}: ${i.target}`);
-  for (const p of b.problems) lines.push(`  LOI: ${p}`);
-  if (b.truncated) lines.push(`  truncated: ${b.truncated}`);
-  steps.push({ step: 'skills build', ok: !b.problems.length && !b.truncated, lines });
-
-  if (apply) {
-    const c = skillsCli('check', root, [], timeoutS);
-    steps.push({ step: 'skills check', ok: c.ok, lines: c.ok ? [`sach (${c.checked} cap nguon-dich)`] : c.issues.map((i) => `${i.issue}: ${i.target || i.skill}${i.detail ? ' - ' + i.detail : ''}`) });
-  }
 
   if (skipDoctor) steps.push({ step: 'doctor', ok: null, lines: ['bo qua (--skip-doctor)'] });
   else { const d = doctor(root); steps.push({ step: 'doctor', ok: d.ok, lines: d.lines.length ? d.lines : [d.ok ? 'khong co canh bao' : 'doctor bao loi (xem node harness/cli/commands/doctor.mjs)'] }); }

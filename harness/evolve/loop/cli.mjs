@@ -2,14 +2,13 @@
 // harness evolve candidates|propose|check|apply|rollback|log|list. Xem README.md.
 // Chung: --json --raw --max-bytes N --timeout-s N (scan audit).
 import path from 'node:path';
-import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt, capLines } from '../../core/io/out.mjs';
 import { findPatterns } from './patterns.mjs';
 import { runAutopilot, queueOp, confirmTty } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | eval run|list|baseline|compare|bench';
+const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -122,26 +121,7 @@ export async function render(o) {
   throw new Error(`lenh la: ${o.cmd ?? '(trong)'}\n${USAGE}`);
 }
 
-// evolve eval ... -> evolve/eval/cli.mjs (domain `eval` cu la alias). Khong import (contract cam loop -> eval): spawn con.
-// Tran con < tran cong (harness.mjs: timeout-s + 5s) de con tu dung truoc khi cong kill; het han thi diet ca cay tien trinh (Windows: taskkill /T).
-export const EVAL_TIMEOUT_MS = 110000;
-export function evalTimeoutMs(args) {
-  const i = args.findIndex((a) => a === '--timeout-s' || a.startsWith('--timeout-s='));
-  const v = i < 0 ? NaN : Number(args[i].includes('=') ? args[i].split('=')[1] : args[i + 1]);
-  return Number.isFinite(v) && v > 0 ? v * 1000 : EVAL_TIMEOUT_MS;
-}
-function runEval(args, { script = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'eval', 'cli.mjs') } = {}) {
-  const r = spawnSync(process.execPath, [script, ...args], { stdio: 'inherit', timeout: evalTimeoutMs(args) });
-  if (r.error) {
-    if (r.error.code === 'ETIMEDOUT' && r.pid && process.platform === 'win32') spawnSync('taskkill', ['/PID', String(r.pid), '/T', '/F'], { stdio: 'ignore', timeout: 5000 });
-    console.error(r.error.code === 'ETIMEDOUT' ? 'truncated: timeout' : r.error.message);
-    return 2;
-  }
-  return r.status ?? 1;
-}
-
 export async function main(argv = process.argv.slice(2)) {
-  if (argv[0] === 'eval') return runEval(argv.slice(1));
   try {
     const o = parseArgs(argv);
     if (!o.cmd) { console.log(USAGE); return 0; }
