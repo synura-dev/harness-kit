@@ -62,17 +62,17 @@ test('deriveEnv: du an thuong / khong CLAUDE_PROJECT_DIR -> giu mac dinh plugin 
   expect(e.HARNESS_CONFIG_DIR).toBeUndefined();
 });
 
-test('du an co dau hieu: force push -> deny, du lieu vao <du an>/data, khong tao .harness', () => {
+test('du an co dau hieu: doc .env -> deny, du lieu vao <du an>/data, khong tao .harness', () => {
   const d = wsProject();
-  const r = run('PreToolUse', bash('git push --force origin main', d), cleanEnv({ CLAUDE_PROJECT_DIR: d }));
+  const r = run('PreToolUse', bash('cat .env', d), cleanEnv({ CLAUDE_PROJECT_DIR: d }));
   expect(r.status === 2 || decision(r) === 'deny').toBe(true);
   expect(files(path.join(d, 'data')).length).toBeGreaterThan(0);
   expect(fs.existsSync(path.join(d, '.harness'))).toBe(false);
 });
 
-test('du an sach: force push -> deny, du lieu vao <du an>/.harness, khong tao data/', () => {
+test('du an sach: doc .env -> deny, du lieu vao <du an>/.harness, khong tao data/', () => {
   const d = plainProject();
-  const r = run('PreToolUse', bash('git push --force origin main', d), cleanEnv({ CLAUDE_PROJECT_DIR: d }));
+  const r = run('PreToolUse', bash('cat .env', d), cleanEnv({ CLAUDE_PROJECT_DIR: d }));
   expect(r.status === 2 || decision(r) === 'deny').toBe(true);
   expect(files(path.join(d, '.harness')).length).toBeGreaterThan(0);
   expect(fs.existsSync(path.join(d, 'data'))).toBe(false);
