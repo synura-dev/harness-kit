@@ -1,0 +1,12 @@
+{
+  "desc": "main tu sua file trong du an khac hub thay vi giao subagent",
+  "source": "audit",
+  "days": 1,
+  "filter": { "actor": "main", "edit": true, "scope": "other" },
+  "group_by": ["project"],
+  "metric": "count",
+  "threshold": 3,
+  "action": "warn",
+  "cooldown_hours": 12,
+  "message": "main tu sua {count} lan trong du an {key}; giao builder (main chi orchestrate)"
+}

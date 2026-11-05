@@ -41,6 +41,14 @@
       "path": "system/watchdog",
       "legacy": "watchdog"
     },
+    "ledger": {
+      "zone": "system",
+      "class": "durable",
+      "owner": "harness/observe/ledger",
+      "note": "so su co ledger.jsonl + state.json (job lo)",
+      "target": "system/ledger",
+      "path": "system/ledger"
+    },
     "proc-orphans": {
       "zone": "system",
       "class": "log",
