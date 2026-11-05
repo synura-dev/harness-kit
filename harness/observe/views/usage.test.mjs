@@ -41,3 +41,10 @@ test('harnessCall: duong dan, bo chuoi nhay; tally dem PowerShell', () => {
   const ps = { event: 'PostToolUse', tool: 'PowerShell', ok: true, data: { cmd_line: 'harness tasks new' } };
   expect(tally([ps], 'cmd').get('tasks new')).toEqual({ n: 1, err: 0 });
 });
+
+test('tally: loi that = PostToolUseFailure (ok=false, exit_code) va PostToolUse exit_code != 0', () => {
+  const fail = (tool, cmd, code) => ({ event: 'PostToolUseFailure', tool, ok: false, target: cmd, data: { exit_code: code, error: `Exit code ${code}` } });
+  const ev = [post('harness tasks new'), fail('Bash', 'harness tasks new --bad', 1), fail('PowerShell', 'harness tasks set', 2), { event: 'PostToolUse', tool: 'Bash', ok: true, data: { cmd_line: 'harness tasks set', exit_code: 3 } }];
+  expect(tally(ev, 'cmd').get('tasks new')).toEqual({ n: 2, err: 1 });
+  expect(tally(ev, 'cmd').get('tasks set')).toEqual({ n: 2, err: 2 });
+});

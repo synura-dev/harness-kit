@@ -25,11 +25,12 @@ export function tally(events, by) {
       if (ev.hook) add(ev.hook, ev.action === 'error' || ev.ok === false);
       continue;
     }
-    if (ev.event !== 'PostToolUse' || ev.tool !== 'Bash' && ev.tool !== 'PowerShell') continue;
+    // Loi that: Claude gui PostToolUseFailure (ok=false, data.exit_code) thay vi PostToolUse; PostToolUse co the mang exit_code != 0.
+    if (ev.event !== 'PostToolUse' && ev.event !== 'PostToolUseFailure' || ev.tool !== 'Bash' && ev.tool !== 'PowerShell') continue;
     const d = ev.data || {};
     const c = harnessCall(d.cmd_line || ev.target);
     if (!c) continue;
-    add(by === 'ext' ? c.domain : (c.sub ? `${c.domain} ${c.sub}` : c.domain), ev.ok === false);
+    add(by === 'ext' ? c.domain : (c.sub ? `${c.domain} ${c.sub}` : c.domain), ev.event === 'PostToolUseFailure' || ev.ok === false || (typeof d.exit_code === 'number' && d.exit_code !== 0));
   }
   return m;
 }
