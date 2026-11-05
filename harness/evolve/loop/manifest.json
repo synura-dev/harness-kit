@@ -10,7 +10,7 @@
   "aliases": ["eval"],
   "aliasMap": { "eval": { "fallback": ["eval"], "onEmpty": ["eval", "help"] } },
   "files": { "helpers": ["loop.mjs", "policy.mjs", "patterns.mjs", "prune.mjs", "prune-cli.mjs", "autopilot.mjs", "rule-content.mjs"] },
-  "tests": ["loop.test.mjs", "patterns.test.mjs", "prune.test.mjs", "autopilot.test.mjs"],
+  "tests": ["loop.test.mjs", "patterns.test.mjs", "prune.test.mjs", "autopilot.test.mjs", "rule-content.test.mjs"],
   "config": { "defaults": null, "schema": null },
   "data": "evolve",
   "tier": "T1"
