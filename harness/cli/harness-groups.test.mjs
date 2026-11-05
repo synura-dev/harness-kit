@@ -44,16 +44,16 @@ test('domain la hoan toan: goi y domain gan ten nhat, khong co -> harness --help
   expect(JSON.parse(far.stderr.trim().slice(6)).fix_command).toBe('harness --help');
 });
 
-test('groups: index nhom theo vung, 4 nhom chinh luon co tieu de, domain cu o legacy', () => {
+test('groups: index nhom theo vung, 4 nhom chinh luon co tieu de, domain cu o run', () => {
   const r = hub({ ev: { zone: 'observe' }, gate: { zone: 'constrain' }, old: { zone: 'plugins' }, tl: { zone: 'tools' }, sk: { zone: 'build' } });
   const x = idx(r);
   expect(x.code).toBe(0);
   const t = x.text;
-  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Chay (play, plugins/tools/hooks) (legacy) ==']) expect(t).toContain(h);
+  for (const h of ['== Quan sat (observe) ==', '== Han che (constrain) ==', '== Tien hoa (evolve) ==', '== Build (build) ==', '== Chay (play, tools, hooks) (run) ==']) expect(t).toContain(h);
   expect(t.indexOf('ev - EV')).toBeGreaterThan(t.indexOf('(observe)'));
   expect(t.indexOf('ev - EV')).toBeLessThan(t.indexOf('(constrain)'));
-  expect(t.indexOf('old - OLD')).toBeGreaterThan(t.indexOf('(legacy)'));
-  expect(t.indexOf('tl - TL')).toBeGreaterThan(t.indexOf('(legacy)'));
+  expect(t.indexOf('old - OLD')).toBeGreaterThan(t.indexOf('(run)'));
+  expect(t.indexOf('tl - TL')).toBeGreaterThan(t.indexOf('(run)'));
   expect(t).toMatch(/\(evolve\) ==\n\(chua co domain\)/);
   expect(t.split('\n').length).toBeLessThanOrEqual(INDEX_MAX_LINES);
 });
@@ -74,7 +74,7 @@ test('groups: <nhom> va --group liet ke domain cua nhom; domain trung ten nhom u
   expect(g.text).toBe('== Quan sat (observe) ==\nev - EV - (khong co lenh con)');
   expect(idx(r, ['evolve']).text).toBe('evolve - EVOLVE - (khong co lenh con)');
   expect(idx(r, ['--group', 'evolve']).text).toContain('== Tien hoa (evolve) ==');
-  expect(idx(r, ['--group=legacy']).text).toContain('old - OLD');
+  expect(idx(r, ['--group=run']).text).toContain('old - OLD');
   expect(JSON.parse(idx(r, ['--group', 'observe', '--json']).text)).toEqual({ ev: { desc: 'EV', cmds: null, default: 'index', available: true, group: 'observe' } });
   const bad = idx(r, ['--group', 'zzz']);
   expect(bad.code).toBe(2);
@@ -98,8 +98,8 @@ test('groups: domain trung ten giua 2 manifest -> bao loi, khong ghi de im lang'
 test('groups: groupOf suy tu duong dan, khong hardcode domain', () => {
   expect(groupOf({ script: 'harness/observe/evidence/cli.mjs' })).toBe('observe');
   expect(groupOf({ script: 'harness/cli/commands/doctor.mjs' })).toBe('cli');
-  expect(groupOf({ script: 'harness/hooks/demo/x.mjs' })).toBe('legacy');
-  expect(groupOf({})).toBe('legacy');
+  expect(groupOf({ script: 'harness/hooks/demo/x.mjs' })).toBe('run');
+  expect(groupOf({})).toBe('run');
 });
 
 test('groups: index dai bi cat <= INDEX_MAX_LINES kem goi y --flat', () => {

@@ -1,4 +1,4 @@
-// node harness/cli/harness.mjs                -> index nhom theo vung (observe/constrain/evolve + build/cli/legacy), dong "domain - mo ta - lenh con"
+// node harness/cli/harness.mjs                -> index nhom theo vung (observe/constrain/evolve + build/cli/run), dong "domain - mo ta - lenh con"
 // node harness/cli/harness.mjs --flat         -> index phang nhu cu (<=25 domain)
 // node harness/cli/harness.mjs <nhom> | --group <nhom> -> domain cua nhom (domain trung ten nhom: domain uu tien)
 // node harness/cli/harness.mjs <domain>       -> index cua domain do
@@ -53,21 +53,21 @@ export function loadRegistryInfo(root) {
 export function loadDomains(root) { return loadRegistryInfo(root).doms; }
 
 // Nhom = vung (thu muc cap 1 duoi harness/) chua file domain, suy tu duong dan registry; khong hardcode ten domain.
-const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', legacy: 'Chay (play, plugins/tools/hooks)' };
+const GROUP_LABELS = { observe: 'Quan sat', constrain: 'Han che', evolve: 'Tien hoa', build: 'Build', cli: 'CLI', run: 'Chay (play, tools, hooks)' };
 const MAIN_GROUPS = ['observe', 'constrain', 'evolve']; // luon in tieu de, ke ca rong
-const LEGACY_ZONES = new Set(['plugins', 'tools', 'hooks']);
+const RUN_ZONES = new Set(['plugins', 'tools', 'hooks']);
 export const INDEX_MAX_LINES = 40;
 
 export function groupOf(d) {
   if (d.ext) return String(d.ext).split('/')[0]; // domain tu extRoot (vd <root>/): nhom rieng theo goc
   const seg = String(d.script || '').split('/');
   const z = seg[0] === 'harness' ? seg[1] : null;
-  if (!z) return 'legacy';
-  return LEGACY_ZONES.has(z) ? 'legacy' : z;
+  if (!z) return 'run';
+  return RUN_ZONES.has(z) ? 'run' : z;
 }
 
 function groupOrder(doms) {
-  const seen = [...MAIN_GROUPS, ...GROUP_ZONES.filter((z) => !MAIN_GROUPS.includes(z)), 'cli', 'legacy'];
+  const seen = [...MAIN_GROUPS, ...GROUP_ZONES.filter((z) => !MAIN_GROUPS.includes(z)), 'cli', 'run'];
   for (const d of Object.values(doms)) { const g = groupOf(d); if (!seen.includes(g)) seen.push(g); }
   return seen;
 }
