@@ -40,15 +40,16 @@ function scanUi(m, domains) {
     if (!raw) return { error: 'commands phai la mang/object' };
     for (const c of raw) {
       if (!c || typeof c.name !== 'string' || !c.name) return { error: 'commands[]: thieu name' };
-      if (c.mode !== undefined && !MODES.includes(c.mode)) return { error: `commands.${c.name}: mode phai thuoc ${MODES.join('|')}` };
+      if (!MODES.includes(c.mode)) return { error: `commands.${c.name}: mode phai thuoc ${MODES.join('|')}` };
       if (c.args !== undefined && !(Array.isArray(c.args) && c.args.every((a) => typeof a === 'string'))) return { error: `commands.${c.name}: args phai la mang string` };
-      cmds.push({ name: c.name, mode: c.mode || 'read', args: c.args || [] });
+      cmds.push({ name: c.name, mode: c.mode, args: c.args || [] });
     }
   }
   const views = [];
   if (m.views !== undefined) {
     if (!Array.isArray(m.views)) return { error: 'views phai la mang' };
-    for (const [i, v] of m.views.entries()) {
+    if (m.views.length && m.commands === undefined) return { error: 'manifest co views nhung thieu commands: them commands (name, mode read|confirm|tty) cho moi source/action' };
+    for (let [i, v] of m.views.entries()) {
       if (!v || !KINDS.includes(v.kind)) return { error: `views[${i}]: kind phai thuoc ${KINDS.join('|')}` };
       if (typeof v.source !== 'string' || !v.source.trim()) return { error: `views[${i}]: thieu source` };
       const t = v.source.trim().split(/\s+/), name = domains.includes(t[0]) && t.length > 1 ? t[1] : t[0];
@@ -56,6 +57,14 @@ function scanUi(m, domains) {
       if (!c) return { error: `views[${i}]: source '${v.source}' khong khai bao trong commands` };
       if (c.mode !== 'read') return { error: `views[${i}]: source '${name}' phai o mode read (dang ${c.mode})` };
       if (v.actions !== undefined && !(Array.isArray(v.actions) && v.actions.every((a) => a && typeof a.label === 'string' && typeof a.cmd === 'string' && (a.mode === undefined || MODES.includes(a.mode))))) return { error: `views[${i}]: actions sai (label, cmd, mode)` };
+      if (v.actions) v = { ...v, actions: v.actions.map((a) => ({ ...a })) };
+      for (const [j, a] of (v.actions || []).entries()) {
+        const at = a.cmd.trim().split(/\s+/), an = domains.includes(at[0]) && at.length > 1 ? at[1] : at[0];
+        const ac = cmds.find((x) => x.name === an);
+        if (!ac) return { error: `views[${i}].actions[${j}]: cmd '${a.cmd}' khong khai bao trong commands (action)` };
+        if (a.mode !== undefined && MODES.indexOf(a.mode) < MODES.indexOf(ac.mode)) return { error: `views[${i}].actions[${j}]: mode '${a.mode}' yeu hon command '${an}' (${ac.mode})` };
+        a.mode = ac.mode;
+      }
       views.push(v);
     }
   }
@@ -183,13 +192,13 @@ export function list(opts = {}) {
 
 /** verify: lech/thieu => exit 1 (va nghia la CHAN chay cho toi `ext approve`). */
 export function verify(opts = {}) {
-  let entries; try { ({ entries } = readEntries(opts)); } catch (e) { return { code: 1, text: `ext verify: ${e.message}` }; }
+  let entries, ws; try { ({ entries, ws } = readEntries(opts)); } catch (e) { return { code: 1, text: `ext verify: ${e.message}` }; }
   let bad = 0; const L = [];
   for (const e of entries) {
     const s = extensionStatus(e.id, opts);
     if (s.status !== 'ok') { bad++; L.push(`${e.id}: ${s.status} (ghim ${hash8(s.pinned)}${s.current ? `, hien tai ${hash8(s.current)}` : ''}) -> BI CHAN; chay: harness ext approve ${e.id}`); }
     else {
-      const sc = scanManifest(path.resolve(readEntries(opts).ws, e.root));
+      const sc = scanManifest(path.resolve(ws, e.root));
       if (sc.error) { bad++; L.push(`${e.id}: manifest sai: ${sc.error}`); } else L.push(`${e.id}: ok (${hash8(e.hash)})`);
     }
   }

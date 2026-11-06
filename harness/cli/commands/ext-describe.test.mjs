@@ -58,3 +58,30 @@ test('list --json la JSON that; text mac dinh khong doi', async () => {
   expect(j[0].id).toBe('demo'); expect(j[0].status).toBe('ok');
   expect((await main(['list'], opts)).text).toContain('demo\text/demo');
 });
+
+test('commands: mode bat buoc (thieu -> loi)', async () => {
+  const { opts } = setup({ commands: [{ name: 'runs' }], views: undefined });
+  const r = await R.register('ext/demo', opts);
+  expect(r.code).toBe(2); expect(r.text).toMatch(/mode/);
+});
+
+test('actions: cmd phai khai bao, khong yeu hon command, describe bao mode cua command', async () => {
+  for (const [actions, re] of [
+    [[{ label: 'X', cmd: 'demo zzz' }], /action.*khong khai bao/],
+    [[{ label: 'X', cmd: 'demo go', mode: 'read' }], /yeu hon/],
+  ]) {
+    const { opts } = setup({ views: [{ kind: 'list', source: 'demo runs', actions }] });
+    const r = await R.register('ext/demo', opts);
+    expect(r.code).toBe(2); expect(r.text).toMatch(re);
+  }
+  const { opts } = setup({ views: [{ kind: 'list', source: 'demo runs', actions: [{ label: 'G', cmd: 'demo go' }] }] });
+  expect((await R.register('ext/demo', opts)).code).toBe(0);
+  const j = JSON.parse((await main(['describe', 'demo', '--json'], opts)).text);
+  expect(j.views[0].actions[0].mode).toBe('confirm');
+});
+
+test('views khong co commands -> loi bao them commands', async () => {
+  const { opts } = setup({ commands: undefined });
+  const r = await R.register('ext/demo', opts);
+  expect(r.code).toBe(2); expect(r.text).toMatch(/them commands/);
+});
