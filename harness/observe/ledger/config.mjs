@@ -6,8 +6,8 @@ export const DEFAULTS = Object.freeze({
   repeatedErrorThreshold: 3,    // so lan lap toi thieu
   repeatedErrorDays: 7,         // cua so ngay
   repeatedErrorMinSessions: 2,  // so phien toi thieu (1 phien = retry/guard chan, khong phai loi lap)
-  // Regex (khong phan biet hoa thuong) khop sample -> loi do guard chan co chu dich, bo qua.
-  repeatedErrorExclude: Object.freeze(['Khong doc tho knowledge', 'is isolated in the worktree']),
+  // Regex (khong phan biet hoa thuong) khop sample -> bo qua. Mac dinh RONG: loi guard lap qua nhieu phien la hanh vi sai that cua agent.
+  repeatedErrorExclude: Object.freeze([]),
 });
 
 const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== '' && v !== null ? Number(v) : d);

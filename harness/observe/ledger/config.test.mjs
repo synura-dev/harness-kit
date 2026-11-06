@@ -22,7 +22,7 @@ test('mac dinh: khop mac dinh trong code, JSON luat khop', () => {
   assert.equal(run(cfg, [c({ count: 2 })]).length, 0);
   assert.equal(run(cfg, [c({ sessions: 1 })]).length, 0);
   assert.equal(run(cfg, [c({ last_ts: '2026-10-20T00:00:00Z' })]).length, 0);
-  assert.equal(run(cfg, [c({ sample: 'exit: thoat 2 Khong doc tho knowledge/; dung harness' })]).length, 0);
+  assert.equal(run(cfg, [c({ sample: 'exit: thoat 2 Khong doc tho knowledge/; dung harness' })]).length, 1);
   fs.rmSync(dir, { recursive: true, force: true });
 });
 
