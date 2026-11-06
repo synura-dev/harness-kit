@@ -34,6 +34,7 @@ export function validateDef(d) {
   if (d.group_by != null && !Array.isArray(d.group_by)) e.push('group_by phai la mang');
   if (d.cooldown_hours != null && !(Number(d.cooldown_hours) >= 0)) e.push('cooldown_hours phai la so >= 0');
   if (d.min_sessions != null && !(Number(d.min_sessions) >= 0)) e.push('min_sessions phai la so >= 0');
+  if (d.exclude != null && !(Array.isArray(d.exclude) && d.exclude.every((x) => typeof x === 'string'))) e.push('exclude phai la mang string (regex)');
   if (d.allow_paths != null && !(Array.isArray(d.allow_paths) && d.allow_paths.every((x) => typeof x === 'string'))) e.push('allow_paths phai la mang string (glob tuong doi goc hub)');
   return e;
 }
@@ -201,6 +202,7 @@ export function evaluate(def, inputs = {}, ctx = {}) {
   } else if (def.source === 'candidates') {
     for (const c of inputs.candidates || []) {
       if (!c || !inWin(c.last_ts)) continue;
+      if (Array.isArray(def.exclude) && def.exclude.some((p) => { try { return new RegExp(p, 'i').test(String(c.sample || '')); } catch { return false; } })) continue; // loi guard chan co chu dich
       const get = (k) => c[k];
       if (!matchFilter(get, def.filter, ctx)) continue;
       const key = gb ? gb.map((k) => String(get(k) ?? '-')).join('|') : c.fp;

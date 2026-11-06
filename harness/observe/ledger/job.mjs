@@ -11,6 +11,7 @@ import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { loadDefinitions, evaluateAll } from './engine.mjs';
+import { loadLedgerConfig, applyLedgerConfig } from './config.mjs';
 import { readLedger, updateLedger, applyFindings, ledgerFile, mergeState, recordJobError, JOB, jobDue } from './ledger.mjs';
 export { JOB, jobDue };
 
@@ -50,7 +51,8 @@ export async function runJob(opts = {}) {
   const nowMs = opts.nowMs || Date.now();
   const hubDir = opts.hubDir || workspaceRoot();
   const t0 = Date.now();
-  const { defs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, hubDir, ...(opts.trusted ? { trusted: opts.trusted } : {}), ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
+  const { defs: rawDefs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, hubDir, ...(opts.trusted ? { trusted: opts.trusted } : {}), ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
+  const defs = applyLedgerConfig(rawDefs, opts.ledgerConfig || loadLedgerConfig());
   const days = Math.max(1, ...defs.filter((d) => d.source !== 'ledger').map((d) => Number(d.days) || 7));
   const ev = opts.events ? { events: opts.events, truncated: null } : await readEvents({ days, nowMs, timeoutMs: opts.timeoutMs || JOB.timeoutS * 1000 });
   const nowIso = new Date(nowMs).toISOString();
