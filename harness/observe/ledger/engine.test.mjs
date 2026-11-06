@@ -46,6 +46,13 @@ test('nguon candidates: kind + nguong count, message mau', () => {
   assert.equal(f.length, 1); assert.equal(f[0].fp, 'f1'); assert.match(f[0].message, /3 lan\/2 phien: .*boom/);
 });
 
+test('repeated-error: loi lap trong 1 phien (retry/guard chan) khong canh bao; >=2 phien van canh bao', () => {
+  const [def] = loadDefinitions({ evolveDir: null }).defs.filter((d) => d.id === 'repeated-error');
+  const c = (o) => ({ id: 'i', kind: 'error', fp: 'f1', count: 13, sessions: 1, first_ts: '2026-11-02T00:00:00Z', last_ts: '2026-11-05T00:00:00Z', sample: 'boom', ...o });
+  assert.equal(evaluateAll([def], { candidates: [c({})] }, ctx).length, 0);
+  assert.equal(evaluateAll([def], { candidates: [c({ count: 3, sessions: 2 })] }, ctx).length, 1);
+});
+
 test('metric sessions / sum:cost_ms', () => {
   const evs = [ev({ sid: 'a', duration_ms: 400 }), ev({ sid: 'b', duration_ms: 700 })];
   assert.equal(evaluate({ id: 't', source: 'audit', filter: {}, metric: 'sessions', threshold: 2, action: 'log' }, { events: evs }, ctx).length, 1);
