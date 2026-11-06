@@ -94,7 +94,7 @@ export async function buildReport(opts = {}) {
   const inventory = opts.inventory !== undefined ? opts.inventory : await loadInventory(hubDir);
   const has = opts.has || ((kind, name) => (kind === 'ext' ? hasExt(hubDir, name) : true));
   // chi spawn khi co muc can task_done_rate
-  const needTasks = sections.some((d) => JSON.stringify(d.metric).includes('task_done_rate'));
+  const needTasks = sections.some((d) => JSON.stringify(d.metric ?? "").includes('task_done_rate'));
   const tl = opts.tasks !== undefined ? { tasks: opts.tasks, truncated: opts.tasksTruncated || null } : needTasks && has('ext', 'projects') ? loadTasks(hubDir, { run: opts.runTasks || spawnSync, timeoutMs: opts.timeoutMs }) : undefined;
   const tasks = tl ? tl.tasks : undefined;
   const all = { tasks, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,

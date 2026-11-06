@@ -221,7 +221,7 @@ export function renderSection(res) {
 
 /** Toan bao cao -> markdown. results: evaluateSection[]. */
 export function renderReport(results, { days = 7, nowMs = Date.now(), truncated = null, baseline = null, errors = [] } = {}) {
-  const L = [`# Bao cao harness ${winNames(days).title} ${new Date(nowMs).toISOString().slice(0, 10)} (${days} ngay)`,
+  const L = [`# Bao cao harness ${winNames(days).title} ${((d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`)(new Date(nowMs))} (${days} ngay)`,
     baseline ? `baseline: ${baseline.date}` : 'baseline: chua chot (harness observe report --baseline)'];
   if (truncated) L.push(`truncated: ${truncated}`);
   if (errors.length) L.push(`loi dinh nghia: ${errors.join('; ')}`);

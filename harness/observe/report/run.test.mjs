@@ -147,3 +147,15 @@ test('resolveReport doc tu file config (HARNESS_CONFIG_DIR/report/default.json),
   assert.deepEqual(resolveReport({ avgOf: 2 }, o), { avgOf: 2, compare: 'prev' });
   fs.rmSync(c, { recursive: true, force: true });
 });
+
+test('buildReport: section thieu metric + guard tat khong crash', async () => {
+  const sections = [{ id: 'applied', source: 'ledger', format: 'list', window_days: 7 }, { id: 'x', source: 'audit', metric: 'count', window_days: 7, format: 'kpi' }];
+  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, sections, hubDir: os.tmpdir(), has: () => true });
+  assert.equal(r.results.length, 2);
+});
+
+test('avg n=0 ky hop le: nhan tb 0/K, gia tri -, khong NaN', async () => {
+  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, projectDir: null, hubDir: os.tmpdir(), days: 1, has: () => true, tasks: [], compare: 'avg', avgOf: 3 };
+  const r = await buildReport(base);
+  assert.match(r.markdown, /tb 0\/3 ngay truoc/); assert.doesNotMatch(r.markdown, /NaN/);
+});
