@@ -35,5 +35,15 @@ export function guardConfigHealth(opts = {}) {
       if (!j || typeof j !== 'object' || Array.isArray(j)) bad.push({ file: f, problem: 'goc khong phai object' });
     } catch { bad.push({ file: f, problem: 'JSON hong' }); }
   }
+  // Registry co the bi tach: primary (id <ten>@<mkt>) va legacy (<ten>) cung co config nhung khac nhau.
+  try {
+    const repoDir = opts.repoDir || opts.hubRoot;
+    if (isPluginMode(repoDir)) {
+      const d = pluginLayerDirs({ env: opts.env || process.env, repoDir });
+      const ls = (x) => { try { return fs.readdirSync(path.join(x, 'config'), { recursive: true }).sort().join('|'); } catch { return null; } };
+      const a = ls(d.primaryDir), b = ls(d.legacyDir);
+      if (a !== null && b !== null && d.primaryDir !== d.legacyDir && path.dirname(d.primaryDir) === path.dirname(d.legacyDir) && a !== b) bad.push({ file: d.legacyDir, problem: `registry co the bi tach (config khac ${d.primaryDir})` });
+    }
+  } catch { /* bo qua */ }
   return bad;
 }
