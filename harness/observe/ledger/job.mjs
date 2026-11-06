@@ -11,6 +11,7 @@ import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { loadDefinitions, evaluateAll } from './engine.mjs';
+import { loadLedgerConfig, applyLedgerConfig } from './config.mjs';
 import { readLedger, updateLedger, applyFindings, ledgerFile, mergeState, recordJobError, JOB, jobDue } from './ledger.mjs';
 export { JOB, jobDue };
 
@@ -50,12 +51,15 @@ export async function runJob(opts = {}) {
   const nowMs = opts.nowMs || Date.now();
   const hubDir = opts.hubDir || workspaceRoot();
   const t0 = Date.now();
-  const { defs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, hubDir, ...(opts.trusted ? { trusted: opts.trusted } : {}), ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
+  const { defs: rawDefs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, hubDir, ...(opts.trusted ? { trusted: opts.trusted } : {}), ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
+  const lcfg = opts.ledgerConfig || loadLedgerConfig();
+  const cfgWarn = new Set(lcfg.warnings || []); // job chay nen stdio ignore -> luu vao state (cfgWarnings), khong console.error
+  const defs = applyLedgerConfig(rawDefs, lcfg);
   const days = Math.max(1, ...defs.filter((d) => d.source !== 'ledger').map((d) => Number(d.days) || 7));
   const ev = opts.events ? { events: opts.events, truncated: null } : await readEvents({ days, nowMs, timeoutMs: opts.timeoutMs || JOB.timeoutS * 1000 });
   const nowIso = new Date(nowMs).toISOString();
   let candidates = failureCandidates(ev.events, nowIso);
-  const ctx = { hubDir, nowMs };
+  const ctx = { hubDir, nowMs, warn: (w) => cfgWarn.add(String(w)) };
   for (const src of opts.candidateSources || []) { try { candidates = candidates.concat(await src(ev.events, nowIso, { ...ctx, defs, dryRun: !!opts.dryRun })); } catch {} } // pattern (repeated-pattern) + prune (deprecate|cap)
   const file = ledgerFile(opts.dataOpts);
   const f1 = evaluateAll(defs, { events: ev.events, candidates }, ctx, ['audit', 'candidates']);
@@ -71,7 +75,7 @@ export async function runJob(opts = {}) {
   if (opts.dryRun) merge(readLedger(file));
   else if (!updateLedger(file, merge, { lock: { retries: 200, waitMs: 25 } }).ok) { recordJobError(opts.dataOpts, 'lock', 'khong khoa duoc so', nowMs); return { defs: defs.length, errors, events: ev.events.length, findings: f1.length, entries: 0, truncated: 'lock', ms: Date.now() - t0 }; }
   // Ghi state moi (xoa loi cu); chay xong nhung bi cat theo timeout -> van ghi lastRun + lastError=timeout (hien o observe/doctor).
-  if (!opts.dryRun) { mergeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length, lastError: undefined, lastErrorAt: undefined, errWarnedAt: undefined, ...(truncated === 'timeout' ? { lastError: 'timeout: doc audit bi cat, du lieu mot phan', lastErrorAt: nowMs } : {}) }); }
+  if (!opts.dryRun) { mergeState(opts.dataOpts, { lastRun: nowMs, ms: Date.now() - t0, findings: f1.length + f2.length, truncated, defs: defs.length, errors: errors.length, cfgWarnings: [...cfgWarn].map((w) => w.replace(/\s+/g, ' ').slice(0, 160)).slice(0, 5), lastError: undefined, lastErrorAt: undefined, errWarnedAt: undefined, ...(truncated === 'timeout' ? { lastError: 'timeout: doc audit bi cat, du lieu mot phan', lastErrorAt: nowMs } : {}) }); }
   return { defs: defs.length, errors, events: ev.events.length, findings: f1.length + f2.length, entries: entries.length, truncated, ms: Date.now() - t0 };
 }
 

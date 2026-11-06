@@ -34,6 +34,7 @@ export function validateDef(d) {
   if (d.group_by != null && !Array.isArray(d.group_by)) e.push('group_by phai la mang');
   if (d.cooldown_hours != null && !(Number(d.cooldown_hours) >= 0)) e.push('cooldown_hours phai la so >= 0');
   if (d.min_sessions != null && !(Number(d.min_sessions) >= 0)) e.push('min_sessions phai la so >= 0');
+  if (d.exclude != null && !(Array.isArray(d.exclude) && d.exclude.every((x) => typeof x === 'string'))) e.push('exclude phai la mang string (regex)');
   if (d.allow_paths != null && !(Array.isArray(d.allow_paths) && d.allow_paths.every((x) => typeof x === 'string'))) e.push('allow_paths phai la mang string (glob tuong doi goc hub)');
   return e;
 }
@@ -199,8 +200,11 @@ export function evaluate(def, inputs = {}, ctx = {}) {
         `${rec.tool || ''} ${String(rec.target || '').split('\n')[0].slice(0, 120)}`.trim(), null, `${def.id}:${hash(key)}`);
     }
   } else if (def.source === 'candidates') {
+    // Bien dich 1 lan; regex sai -> warning, bo qua mau do (fail-open: van canh bao).
+    const exRe = (Array.isArray(def.exclude) ? def.exclude : []).flatMap((p) => { try { return [new RegExp(p, 'i')]; } catch { (ctx.warn || console.error)(`ledger: ${def.id}: regex exclude sai, bo: ${String(p).slice(0, 60)}`); return []; } });
     for (const c of inputs.candidates || []) {
       if (!c || !inWin(c.last_ts)) continue;
+      if (exRe.some((re) => re.test(String(c.sample || '')))) continue; // loai tru khai bao (mac dinh rong)
       const get = (k) => c[k];
       if (!matchFilter(get, def.filter, ctx)) continue;
       const key = gb ? gb.map((k) => String(get(k) ?? '-')).join('|') : c.fp;

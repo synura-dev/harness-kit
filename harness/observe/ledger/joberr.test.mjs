@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { handle, kickJob } from './hook.mjs';
 import { runJob } from './job.mjs';
+const NOCFG = { values: {}, base: {}, warnings: [] }; // cach ly khoi config may that
 import { render } from './cli.mjs';
 import { spawnBackground } from '../../core/runtime/proc.mjs';
 import { readState, writeState, recordJobError, jobHealth, ledgerDir, JOB } from './ledger.mjs';
@@ -48,7 +49,7 @@ test('lan kick truoc khong ghi lastRun (job chet/timeout cung) -> unfinished', (
 
 test('runJob chay tron ghi lastRun va xoa loi cu', async () => {
   const d = mk(); const env = { HUB_DATA_DIR: d }; const dataOpts = { env };
-  const base = { dataOpts, nowMs: NOW, events: [], hubDir: d, projectDir: null };
+  const base = { dataOpts, nowMs: NOW, events: [], hubDir: d, projectDir: null, ledgerConfig: NOCFG };
   recordJobError(dataOpts, 'exit', 'cu', NOW - 5000);
   const r = await runJob({ ...base });
   assert.equal(r.truncated, null);
@@ -120,7 +121,7 @@ test('updateState: khoa dang bi giu -> fail-open (false, khong ghi, khong nem)',
 test('runJob chay tron reset errWarnedAt de loi moi sau do van duoc bao', async () => {
   const d = mk(); const env = { HUB_DATA_DIR: d }; const dataOpts = { env };
   writeState(dataOpts, { lastRun: 1, errWarnedAt: 777, lastError: 'x', lastErrorAt: 5 });
-  await runJob({ dataOpts, nowMs: NOW, events: [], hubDir: d, projectDir: null });
+  await runJob({ dataOpts, nowMs: NOW, events: [], hubDir: d, projectDir: null, ledgerConfig: NOCFG });
   assert.equal(readState(dataOpts).errWarnedAt, undefined);
   recordJobError(dataOpts, 'exit', 'moi', NOW + 1000);
   assert.match(jobErrorLine(dataOpts, NOW + 2000), /job lo that bai/);

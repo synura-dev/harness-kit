@@ -5,6 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { applyFindings, claimDue, resolveOutcome, readLedger, writeLedger, ledgerFile, readState } from './ledger.mjs';
 import { runJob } from './job.mjs';
+const NOCFG = { values: {}, base: {}, warnings: [] }; // cach ly khoi config may that
 
 const H = 3600e3;
 const T0 = Date.parse('2026-11-05T00:00:00Z');
@@ -70,13 +71,13 @@ test('runJob: audit gia -> so, doc/ghi qua HUB_DATA_DIR tam, job lan 2 khong nha
   const err = (i) => ({ ts: iso, sid: 'claude-x' + (i % 2), tool: 'Bash', ok: false, event: 'PostToolUseFailure', actor: 'main', project: 'p', data: { tool: 'Bash', error: 'ENOENT boom thing' }, target: 'x' });
   const events = [err(0), err(1), err(2), err(3)];
   const hubDir = 'E:/hub';
-  const r1 = await runJob({ events, nowMs: T0 + H, hubDir, dataOpts, projectDir: null });
+  const r1 = await runJob({ events, nowMs: T0 + H, hubDir, dataOpts, projectDir: null, ledgerConfig: NOCFG });
   assert.equal(r1.errors.length, 0);
   const file = ledgerFile(dataOpts);
   const a = readLedger(file);
   assert.ok(a.some((e) => e.rule === 'repeated-error' && e.due));
   assert.ok(readState(dataOpts).lastRun);
-  await runJob({ events, nowMs: T0 + 2 * H, hubDir, dataOpts, projectDir: null });
+  await runJob({ events, nowMs: T0 + 2 * H, hubDir, dataOpts, projectDir: null, ledgerConfig: NOCFG });
   assert.equal(readLedger(file).filter((e) => e.rule === 'repeated-error').length, 1);
   writeLedger(file, []); fs.rmSync(dir, { recursive: true, force: true });
 });
