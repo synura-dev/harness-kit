@@ -1,13 +1,16 @@
 // pluginLayerDirs: CLI (khong env) va hook (CLAUDE_PLUGIN_DATA=<plugin>-<mkt>) phai ra CUNG thu muc may.
-import { test, expect } from 'bun:test';
+import { test, expect, afterAll } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pluginLayerDirs } from './config.mjs';
 import { guardConfigHealth } from './guard-health.mjs';
 
+const tmps = [];
+afterAll(() => { for (const d of tmps) fs.rmSync(d, { recursive: true, force: true }); });
+const reg = (d) => { fs.mkdirSync(path.join(d, 'config', 'ext'), { recursive: true }); fs.writeFileSync(path.join(d, 'config', 'ext', 'local.json'), '{"extensions":{}}'); };
 const mk = () => {
-  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'pdid-'));
+  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'pdid-')); tmps.push(t);
   const repo = path.join(t, 'plugins', 'cache', 'mkt', 'harness-kit', '1.0.0');
   fs.mkdirSync(path.join(repo, '.claude-plugin'), { recursive: true });
   fs.writeFileSync(path.join(repo, '.claude-plugin', 'plugin.json'), JSON.stringify({ name: 'harness-kit' }));
@@ -30,8 +33,15 @@ test('env primary (rong) -> CUNG machineDir voi khong env (bug goc)', () => {
   expect(b).toBe(path.join(m.legacy, 'config'));
 });
 
-test('primary co config -> dung primary, co hoac khong env', () => {
-  const m = mk(); cfg(m.legacy); cfg(m.primary);
+test('primary config RONG + legacy co registry -> legacy, co hoac khong env', () => {
+  const m = mk(); reg(m.legacy); cfg(m.primary);
+  const want = path.join(m.legacy, 'config');
+  expect(pluginLayerDirs({ env: env0(), repoDir: m.repo }).machineDir).toBe(want);
+  expect(pluginLayerDirs({ env: env0({ CLAUDE_PLUGIN_DATA: m.primary }), repoDir: m.repo }).machineDir).toBe(want);
+});
+
+test('primary co ext/local.json -> dung primary, co hoac khong env', () => {
+  const m = mk(); reg(m.legacy); reg(m.primary);
   const want = path.join(m.primary, 'config');
   expect(pluginLayerDirs({ env: env0(), repoDir: m.repo }).machineDir).toBe(want);
   expect(pluginLayerDirs({ env: env0({ CLAUDE_PLUGIN_DATA: m.primary }), repoDir: m.repo }).machineDir).toBe(want);
@@ -49,9 +59,14 @@ test('repoDir ngoai cache -> hanh vi cu (~/.claude/plugins/data/<name>)', () => 
     .toBe(path.join(os.homedir(), '.claude', 'plugins', 'data', 'zz-kit', 'config'));
 });
 
-test('health: ca primary va legacy co config khac nhau -> canh bao tach registry', () => {
-  const m = mk(); cfg(m.legacy); cfg(m.primary);
-  fs.mkdirSync(path.join(m.legacy, 'config', 'ext'), { recursive: true });
+test('health: legacy con registry ma may dung primary -> canh bao tach', () => {
+  const m = mk(); reg(m.legacy); reg(m.primary);
   const r = guardConfigHealth({ hubRoot: m.repo, env: env0(), repoDir: m.repo });
-  expect(r.some((x) => /tach|split/i.test(x.problem))).toBe(true);
+  expect(r.some((x) => x.split && /tach/.test(x.problem))).toBe(true);
+});
+
+test('health: legacy dang duoc dung (primary rong) -> khong canh bao', () => {
+  const m = mk(); reg(m.legacy); cfg(m.primary);
+  const r = guardConfigHealth({ hubRoot: m.repo, env: env0(), repoDir: m.repo });
+  expect(r.some((x) => x.split)).toBe(false);
 });

@@ -112,13 +112,15 @@ export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) 
   const pd = typeof env.CLAUDE_PLUGIN_DATA === 'string' && env.CLAUDE_PLUGIN_DATA.trim();
   let pname = 'harness-kit'; try { pname = JSON.parse(fs.readFileSync(path.join(repoDir, '.claude-plugin', 'plugin.json'), 'utf8')).name || pname; } catch { /* mac dinh */ }
   // Claude Code dat CLAUDE_PLUGIN_DATA = <plugins>/data/<ten>@<mkt> (ky tu ngoai [A-Za-z0-9_-] -> '-'); CLI khong co env nen suy id tu duong dan cache de hook va CLI cung thu muc.
+  // repoDir ngoai cache (HARNESS_PLUGIN_DIR / pluginRoot / --plugin-dir) -> quay ve thu muc chi theo ten nhu cu.
   const m = path.resolve(repoDir).split(path.sep);
   const ci = m.length >= 6 && m[m.length - 4] === 'cache' && m[m.length - 5] === 'plugins' ? m.length - 4 : -1;
+  if (ci > 0) pname = m[ci + 2];
   const dataRoot = ci > 0 ? path.join(m.slice(0, ci).join(path.sep) || path.sep, ['da', 'ta'].join('')) : path.join(os.homedir(), '.claude', 'plugins', ['da', 'ta'].join(''));
   const primaryDir = pd ? pd : path.join(dataRoot, ci > 0 ? `${pname}@${m[ci + 1]}`.replace(/[^A-Za-z0-9_-]/g, '-') : pname);
   const legacyDir = path.join(dataRoot, pname);
-  // Registry cu (ten khong marketplace) con, primary chua co config -> dung legacy (khong di chuyen, hook khong ghi).
-  const useLegacy = ci > 0 && !fs.existsSync(path.join(primaryDir, 'config')) && fs.existsSync(path.join(legacyDir, 'config'));
+  // Registry cu (ten khong marketplace) con, primary chua co registry ext (file duoc guard bao ve; mkdir config rong khong lat duoc) -> legacy (khong di chuyen, hook khong ghi).
+  const useLegacy = ci > 0 && !fs.existsSync(path.join(primaryDir, 'config', 'ext', 'local.json')) && fs.existsSync(path.join(legacyDir, 'config'));
   const machineDir = path.join(useLegacy ? legacyDir : primaryDir, 'config');
   let projectDir = null; try { projectDir = path.join(workspaceRoot({ env, repoDir }), '.harness', 'config'); } catch { /* khong co */ }
   return { machineDir, projectDir, primaryDir, legacyDir };

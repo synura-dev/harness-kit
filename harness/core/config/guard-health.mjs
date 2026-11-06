@@ -40,9 +40,12 @@ export function guardConfigHealth(opts = {}) {
     const repoDir = opts.repoDir || opts.hubRoot;
     if (isPluginMode(repoDir)) {
       const d = pluginLayerDirs({ env: opts.env || process.env, repoDir });
-      const ls = (x) => { try { return fs.readdirSync(path.join(x, 'config'), { recursive: true }).sort().join('|'); } catch { return null; } };
-      const a = ls(d.primaryDir), b = ls(d.legacyDir);
-      if (a !== null && b !== null && d.primaryDir !== d.legacyDir && path.dirname(d.primaryDir) === path.dirname(d.legacyDir) && a !== b) bad.push({ file: d.legacyDir, problem: `registry co the bi tach (config khac ${d.primaryDir})` });
+      const n = (x) => (process.platform === 'win32' ? x.toLowerCase() : x);
+      const legacyCfg = path.join(d.legacyDir, 'config');
+      // Cung thu muc cha (data root) de pd ngoai cache khong bao gia; split = registry legacy con nhung may dang dung thu muc khac.
+      if (n(path.dirname(d.primaryDir)) === n(path.dirname(d.legacyDir)) && n(d.machineDir) !== n(legacyCfg) && fs.existsSync(path.join(legacyCfg, 'ext', 'local.json'))) {
+        bad.push({ file: path.join(legacyCfg, 'ext', 'local.json'), problem: `ext registry bi tach: ${legacyCfg} con registry nhung dang dung ${d.machineDir}`, split: true });
+      }
     }
   } catch { /* bo qua */ }
   return bad;
