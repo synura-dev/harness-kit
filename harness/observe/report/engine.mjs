@@ -10,6 +10,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS_DIR = path.join(HERE, 'defaults');
 export const LIMITS = Object.freeze({ timeoutMs: 5000, maxDefs: 50, maxFileBytes: 32768, maxRows: 200 });
 export const SOURCES = Object.freeze(['audit', 'candidates', 'ledger', 'inventory']);
+export const AVG_WINDOWS = 7;
 export const FORMATS = Object.freeze(['table', 'kpi', 'list']);
 const DAY = 86400000;
 
@@ -100,6 +101,7 @@ function colValue(col, A, M, win) {
     case 'per_1000': return win.events ? (cnt / win.events) * 1000 : null;
     case 'sum': return M.reduce((s, r) => s + (numField(r.get, arg) || 0), 0);
     case 'last': { let best = null; for (const r of M) { const v = r.get(arg); const x = Array.isArray(v) ? v[v.length - 1] : v; if (x != null && (best == null || String(x) > String(best))) best = x; } return best; }
+    case 'task_done_rate': { const t = (win.projTasks || []).filter((x) => x && x.status !== 'cancelled'); return t.length ? t.filter((x) => x.status === 'completed').length / t.length : null; } // task tu ext projects, trong cua so theo modified
     case 'rate': { if (!M.length) return null; return M.filter((r) => matchFilter(r.get, col.rate_filter || {}, win.ctx)).length / M.length; }
     default: return null;
   }
@@ -113,7 +115,7 @@ export function computeSection(def, inputs, ctx = {}) {
   const events = (inputs.events || []);
   const win = { audit: def.source === 'audit', ctx, events: events.length,
     sessions: new Set(events.map((r) => r && (r.sid || r.session_id)).filter(Boolean)).size,
-    tasks: new Set(events.map((r) => r && taskOf(r)).filter(Boolean)).size };
+    tasks: new Set(events.map((r) => r && taskOf(r)).filter(Boolean)).size, projTasks: inputs.projTasks };
   const cols = columns(def);
   const groups = new Map();
   for (const r of recs) {
@@ -141,27 +143,34 @@ export function windowInputs(def, all, from, to, nowIso) {
   // HookRun khong phai tool call: bo khoi moi so lieu (ke ca mau so per_1000).
   const events = (days0 ? (all.events || []) : (all.events || []).filter((e) => e && inWin(e.ts, from, to))).filter((e) => !isHookRun(e));
   const inputs = { events, inventory: all.inventory };
+  if (all.tasks) inputs.projTasks = days0 ? all.tasks : all.tasks.filter((t) => inWin(t && t.modified, from, to));
   if (def.source === 'candidates') inputs.candidates = all.candidatesFn ? all.candidatesFn(events, nowIso) : (all.candidates || []).filter((c) => days0 || inWin(c.last_ts, from, to));
   if (def.source === 'ledger') inputs.ledger = days0 ? all.ledger || [] : (all.ledger || []).filter((e) => inWin(e.last_seen, from, to));
   return inputs;
 }
 
+/** Ten cot/tieu de theo do dai cua so: 1 ngay, 7 tuan, khac N ngay. */
+export const winNames = (w, k = AVG_WINDOWS) => (w === 1 ? { prev: 'hom qua', avg: `tb ${k} ngay truoc`, title: 'ngay' } : w === 7 ? { prev: 'tuan truoc', avg: `tb ${k} tuan truoc`, title: 'tuan' } : { prev: `${w} ngay truoc`, avg: `tb ${k}x${w} ngay truoc`, title: `${w} ngay` });
 const R = (v) => (v == null ? '-' : typeof v === 'number' ? (Number.isInteger(v) ? String(v) : v.toFixed(2)) : Array.isArray(v) ? v.join(',') : String(v).slice(0, 40));
 const dlt = (v, p) => (typeof v === 'number' && typeof p === 'number' ? (p === 0 ? (v === 0 ? '0%' : '+new') : `${v >= p ? '+' : ''}${(((v - p) / Math.abs(p)) * 100).toFixed(0)}%`) : '-');
 
 /** Danh gia 1 muc -> {def, result, prev, base, note}. all: {events, ledger, candidates|candidatesFn, inventory, baseline}. */
-export function evaluateSection(def, all, { nowMs = Date.now(), ctx = {} } = {}) {
+export function evaluateSection(def, all, { nowMs = Date.now(), ctx = {}, avgOf = AVG_WINDOWS, compare = "all" } = {}) {
   const w = def.window_days > 0 ? def.window_days : 0;
   const to = nowMs; const from = w ? nowMs - w * DAY : 0;
   const nowIso = new Date(nowMs).toISOString();
   const cur = computeSection(def, windowInputs(def, all, from, to, nowIso), { ...ctx, nowMs });
-  const out = { def, ...cur, prev: null, base: null, note: null };
-  if (def.compare === 'prev_window' && w) {
-    const p = computeSection(def, windowInputs(def, all, from - w * DAY, from, nowIso), { ...ctx, nowMs });
-    out.prev = Object.fromEntries(p.rows.map((r) => [r.key, r.vals[0]]));
+  const out = { def, ...cur, prev: null, avg: null, w, k: avgOf, base: null, note: null };
+  if (def.compare === "prev_window" && w && ["all", "prev", "avg"].includes(compare)) {
+    // prev = cua so lien truoc; avg = trung binh AVG_WINDOWS cua so truoc (giam dao dong khi cua so ngan)
+    const ws = [];
+    for (let k = 1; k <= (compare === "prev" ? 1 : avgOf); k++) ws.push(Object.fromEntries(computeSection(def, windowInputs(def, all, from - k * w * DAY, from - (k - 1) * w * DAY, nowIso), { ...ctx, nowMs }).rows.map((r) => [r.key, r.vals[0]])));
+    if (compare !== "avg") out.prev = ws[0];
+    if (compare !== "prev") out.avg = {};
+    for (const key of compare === "prev" ? [] : new Set(ws.flatMap(Object.keys))) { const v = ws.map((x) => (typeof x[key] === 'number' ? x[key] : 0)); out.avg[key] = v.reduce((a, b) => a + b, 0) / v.length; }
   }
   const b = all.baseline && all.baseline.kpis && all.baseline.kpis[def.id];
-  if (def.compare && b) out.base = b;
+  if (def.compare && b && ["all", "baseline"].includes(compare)) out.base = b;
   if (!cur.rows.length) out.note = def.empty_note || 'khong co du lieu';
   else if (cur.cols.length && cur.rows.every((r) => r.vals.every((v) => v == null || v === 0)) && def.source === 'audit') out.note = 'field thieu trong audit (chua co du lieu)';
   return out;
@@ -174,33 +183,34 @@ export function renderSection(res) {
   const { def } = res; const fmt = def.format || 'table';
   const L = [`## ${def.title || def.id}`];
   if (!res.rows.length) { L.push(`_${res.note}_`, ''); return L.join('\n'); }
-  const cmp = !!(res.prev || res.base);
+  const nm = winNames(res.w || 7, res.k);
   if (fmt === 'list') {
     for (const r of res.rows) L.push(`- ${r.key}${r.vals.length && r.vals[0] != null ? ' (' + r.vals.map(R).join(', ') + ')' : ''}`);
     L.push(''); return L.join('\n');
   }
   if (fmt === 'kpi') {
     const r = res.rows[0];
-    r.vals.forEach((v, i) => L.push(`- **${res.cols[i]}**: ${R(v)}${i === 0 && res.prev ? ` (tuan truoc ${R(res.prev[r.key])}, ${dlt(v, res.prev[r.key])})` : ''}${i === 0 && res.base ? ` (baseline ${R(res.base[r.key])}, ${dlt(v, res.base[r.key])})` : ''}`));
+    r.vals.forEach((v, i) => L.push(`- **${res.cols[i]}**: ${R(v)}${i === 0 && res.prev ? ` (${nm.prev} ${R(res.prev[r.key])}, ${dlt(v, res.prev[r.key])})` : ''}${i === 0 && res.avg ? ` (${nm.avg} ${R(res.avg[r.key])}, ${dlt(v, res.avg[r.key])})` : ''}${i === 0 && res.base ? ` (baseline ${R(res.base[r.key])}, ${dlt(v, res.base[r.key])})` : ''}`));
     if (res.note) L.push(`_${res.note}_`);
     L.push(''); return L.join('\n');
   }
-  const head = ['nhom', ...res.cols, ...(res.prev ? ['tuan truoc', 'doi'] : []), ...(res.base ? ['baseline', 'doi'] : [])];
+  const head = ['nhom', ...res.cols, ...(res.prev ? [nm.prev, 'doi'] : []), ...(res.avg ? [nm.avg, 'doi'] : []), ...(res.base ? ['baseline', 'doi'] : [])];
   L.push(`| ${head.join(' | ')} |`, `|${head.map(() => '---').join('|')}|`);
   for (const r of res.rows) {
     const cells = [r.key, ...r.vals.map(R)];
     if (res.prev) cells.push(R(res.prev[r.key]), dlt(r.vals[0], res.prev[r.key]));
+    if (res.avg) cells.push(R(res.avg[r.key]), dlt(r.vals[0], res.avg[r.key]));
     if (res.base) cells.push(R(res.base[r.key]), dlt(r.vals[0], res.base[r.key]));
     L.push(`| ${cells.join(' | ')} |`);
   }
   if (res.total > res.rows.length) L.push(`_... ${res.total - res.rows.length} nhom nua (limit)_`);
   if (res.note) L.push(`_${res.note}_`);
-  void cmp; L.push(''); return L.join('\n');
+  L.push(''); return L.join('\n');
 }
 
 /** Toan bao cao -> markdown. results: evaluateSection[]. */
 export function renderReport(results, { days = 7, nowMs = Date.now(), truncated = null, baseline = null, errors = [] } = {}) {
-  const L = [`# Bao cao harness tuan ${new Date(nowMs).toISOString().slice(0, 10)} (${days} ngay)`,
+  const L = [`# Bao cao harness ${winNames(days).title} ${new Date(nowMs).toISOString().slice(0, 10)} (${days} ngay)`,
     baseline ? `baseline: ${baseline.date}` : 'baseline: chua chot (harness observe report --baseline)'];
   if (truncated) L.push(`truncated: ${truncated}`);
   if (errors.length) L.push(`loi dinh nghia: ${errors.join('; ')}`);

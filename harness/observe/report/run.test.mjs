@@ -53,3 +53,47 @@ test('KPI2: co dong pattern (findPatterns) ben canh loi lap', async () => {
   const k2 = r.results.find((x) => x.def.id === 'kpi-repeats');
   assert.ok(k2.rows.some((x) => x.key === 'pattern'), JSON.stringify(k2.rows));
 });
+
+import { writeReportFile } from './run.mjs';
+test('writeReportFile: days=1 ghi harness-daily-YYYY-MM-DD, khong de len file tuan', () => {
+  const d = mk(); const o = { env: { HUB_DATA_DIR: d } };
+  const w = writeReportFile('W', { dataOpts: o, nowMs: NOW });
+  const dd = writeReportFile('D', { dataOpts: o, nowMs: NOW, days: 1 });
+  assert.match(path.basename(w), /^harness-weekly-/); assert.equal(path.basename(dd), 'harness-daily-2026-11-05.md');
+  assert.equal(fs.readFileSync(w, 'utf8'), 'W');
+  fs.rmSync(d, { recursive: true, force: true });
+});
+
+test('buildReport: task tu ext projects (tiem), thieu ext -> khong co nguon', async () => {
+  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, projectDir: null, hubDir: os.tmpdir() };
+  const tasks = [{ status: 'completed', modified: new Date(NOW - 3600e3).toISOString() }, { status: 'needs-action', modified: new Date(NOW - 3600e3).toISOString() }];
+  const ok = await buildReport({ ...base, tasks, has: () => true });
+  assert.match(ok.markdown, /task done\*\*: 0\.50/);
+  const miss = await buildReport({ ...base, tasks, has: () => false });
+  assert.match(miss.markdown, /thieu ext:projects/);
+});
+
+import { resolveReport, REPORT_DEFAULTS } from './run.mjs';
+import { parseArgs } from './cli.mjs';
+test('tham so tinh toan: mac dinh, ghi de flag/env, gia tri sai -> mac dinh', () => {
+  const o = { root: mk(), env: {} };
+  assert.deepEqual(resolveReport({}, o), { avgOf: 7, compare: 'all' });
+  assert.deepEqual(resolveReport({ avgOf: 3, compare: 'avg' }, o), { avgOf: 3, compare: 'avg' });
+  assert.equal(resolveReport({}, { ...o, env: { HARNESS_REPORT_AVG_OF: '5' } }).avgOf, 5);
+  assert.deepEqual(resolveReport({ avgOf: -2, compare: 'zz' }, o), { avgOf: 7, compare: 'all' });
+  assert.equal(resolveReport({ avgOf: 999 }, o).avgOf, REPORT_DEFAULTS.avgOfMax);
+});
+
+test('cli: --avg-of / --compare parse, compare sai -> loi', () => {
+  const o = parseArgs(['report', '--avg-of', '3', '--compare=prev']);
+  assert.equal(o.avgOf, 3); assert.equal(o.compare, 'prev');
+  assert.throws(() => parseArgs(['report', '--compare', 'x']));
+});
+
+test('buildReport: --compare prev chi cot truoc, --avg-of doi nhan', async () => {
+  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, projectDir: null, hubDir: os.tmpdir(), days: 1, has: () => true, tasks: [] };
+  const prev = await buildReport({ ...base, compare: 'prev' });
+  assert.match(prev.markdown, /hom qua/); assert.doesNotMatch(prev.markdown, /tb \d+ ngay truoc/);
+  const avg = await buildReport({ ...base, compare: 'avg', avgOf: 3 });
+  assert.match(avg.markdown, /tb 3 ngay truoc/); assert.doesNotMatch(avg.markdown, /hom qua/);
+});
