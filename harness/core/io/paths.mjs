@@ -1,4 +1,4 @@
-// Nguon duy nhat cho hub root. Thu tu: env HUB_DIR > config/paths.local.json {"hubDir"} > thu muc chua repo (tinh tu vi tri file).
+// Nguon duy nhat cho hub root + goc du lieu. Thu tu hub: env HUB_DIR > config/paths.local.json {"hubDir"} > thu muc chua repo. Du lieu (dataDir): HUB_DATA_DIR > workspace co dau hieu (workspaceMarker) => <ws>/data > plugin mode => <ws>/.harness/data > <hub>/data.
 // Node built-ins only, KHONG nem loi. Moi script (sync, doctor, hook adapter) import tu day.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -35,14 +35,18 @@ export const hubDir = (opts) => resolveHub(opts).hubDir;
 export const workspaceRoot = (opts) => resolveHub(opts).hubDir;
 export const codeRoot = () => REPO_DIR;
 
-// Goc du lieu: env HUB_DATA_DIR > <hubDir()>/data; them /<kind> neu co. Mac dinh trung vi tri cu (<hub>/data/<kind>).
+// Goc du lieu, thu tu: env HUB_DATA_DIR > workspace co dau hieu (workspaceMarker) => <ws>/data > plugin mode => <ws>/.harness/data
+// > (ma sao chep thay .harness/data co san => do) > <hub>/data; them /<kind> neu co.
+// Quy tac dau hieu nam O LOI: moi noi nap loi (ke ca ext chay thang, khong qua wrapper) ra cung ket qua. Co dau hieu thi KHONG BAO GIO chon .harness/data, ke ca khi thu muc do da ton tai.
 export function dataDir(kind, opts = {}) {
   const env = opts.env || process.env;
   const e = env.HUB_DATA_DIR;
   const r = resolveHub(opts);
   const plug = path.join(r.hubDir, '.harness', 'data');
-  // Mot goc cho cung workspace: hook plugin ghi <ws>/.harness/data; CLI (ma sao chep, khong plugin.json) thay thu muc do thi dung chung. Hub goc khong co .harness -> giu data/.
-  const base = typeof e === 'string' && e.trim() ? path.resolve(e.trim()) : r.source === 'plugin' || (r.source === 'default' && fs.existsSync(plug)) ? plug : path.join(r.hubDir, 'data');
+  let base;
+  if (typeof e === 'string' && e.trim()) base = path.resolve(e.trim());
+  else if (workspaceMarker(r.hubDir)) base = path.join(r.hubDir, 'data');
+  else base = r.source === 'plugin' || (r.source === 'default' && fs.existsSync(plug)) ? plug : path.join(r.hubDir, 'data');
   return kind ? path.join(base, String(kind)) : base;
 }
 
@@ -55,7 +59,9 @@ export function ensureDataIgnore(opts = {}) {
     const d = path.join(r.hubDir, '.harness');
     // HUB_DATA_DIR tro ra ngoai <du an>/.harness (vd hub: <du an>/data) -> khong tao .harness rac.
     const e = (opts.env || process.env).HUB_DATA_DIR;
-    if (typeof e === 'string' && e.trim() && !(path.resolve(e.trim()) + path.sep).startsWith(d + path.sep)) return false;
+    const hasEnv = typeof e === 'string' && e.trim();
+    if (hasEnv && !(path.resolve(e.trim()) + path.sep).startsWith(d + path.sep)) return false;
+    if (!hasEnv && workspaceMarker(r.hubDir)) return false; // workspace co dau hieu: du lieu o <ws>/data, khong tao .harness
     const f = path.join(d, '.gitignore');
     if (fs.existsSync(f)) {
       const cur = fs.readFileSync(f, 'utf8');
@@ -156,6 +162,7 @@ export function workspaceMarker(projectDir) {
   for (const m of WORKSPACE_MARKERS) { const f = path.join(p, m); try { if (fs.statSync(f).isFile()) return f; } catch { /* khong co */ } }
   return null;
 }
+// Tuong thich wrapper: loi (dataDir/loadConfig) da tu ap dau hieu; ham nay chi dat san env cho tien trinh con (ket qua giong nhau co/khong qua wrapper).
 // Co dau hieu -> HUB_DATA_DIR=<du an>/data, HARNESS_CONFIG_DIR=<du an>/config; KHONG ghi de bien da dat (sua env tai cho). Tra {marker, set:[bien da dat]}.
 export function applyWorkspaceEnv(env, projectDir) {
   const marker = workspaceMarker(projectDir);

@@ -1,4 +1,4 @@
-// harness/data/data.mjs - domain `data`: ls [domain] | stat | clean [--yes] [--days N] | scan | adopt [--yes] | inbox ls|rm|restore|prune | (prune/sizes: dung observe data-prune|sizes).
+// harness/data/data.mjs - domain `data`: ls [domain] | stat | clean [--yes] [--days N] | scan | adopt [--yes] [--legacy-harness] | inbox ls|rm|restore|prune | (prune/sizes: dung observe data-prune|sizes).
 // Chi thao tac trong data/ (dataRoot()). clean/adopt mac dinh dry-run. Moi lenh ghi vet vao data/audit/date=D/type=data-access/data-cli.jsonl.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -8,7 +8,7 @@ import { loadNodeHook, hookNodes as hookNodesCore } from '../../core/io/node-hoo
 import { orphanWorkspaces } from './workspaces.mjs';
 import { spawnSync } from '../../core/runtime/proc.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
-import { dataRoot, workspaceRoot, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
+import { dataRoot, workspaceRoot, workspaceMarker, isInside, samePath, isPluginMode, codeRoot } from '../../core/io/paths.mjs';
 import { readJson, readJsonl, appendJsonl, dataPath, dataPathFor, today } from '../../core/io/storage.mjs';
 import { REPO_ROOT_FILES } from '../../core/config/constants.mjs';
 import { isStdRootFile } from './std-root.mjs';
@@ -16,7 +16,7 @@ import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, class
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
-const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | tree [...] | adopt [--yes] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes]  (--json --raw --timeout-s N)';
+const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | tree [...] | adopt [--yes] [--legacy-harness] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes]  (--json --raw --timeout-s N)';
 
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
 /** Registry hop nhat do loader chung o core (registry.json + config/data/workspaces/*.json, mode Q5 qua HARNESS_DATA_ENFORCE). */
@@ -209,6 +209,42 @@ export function adopt({ root = dataRoot(), reg = loadRegistry(), yes = false } =
   return { dryRun: !yes, dest, moved };
 }
 
+
+/** Gom du lieu lac <ws>/.harness/data vao dataRoot (chi khi workspace co dau hieu). jsonl: noi dong chua co; file khac: chuyen neu dich chua co, neu co -> _inbox/<ngay>/legacy-harness/. Dry-run mac dinh. */
+export function adoptLegacyHarness({ ws = workspaceRoot(), root = dataRoot(), yes = false, maxFiles = LIMITS.maxFiles, timeoutS = LIMITS.timeoutS, now = new Date() } = {}) {
+  const res = { dryRun: !yes, applicable: !!workspaceMarker(ws), appended: [], moved: [], inbox: [], removed: false, truncated: null };
+  const src = path.join(ws, '.harness', 'data');
+  if (!res.applicable || !fs.existsSync(src)) return res;
+  const w = walk(src, { maxFiles, deadline: Date.now() + timeoutS * 1000 });
+  res.truncated = w.truncated || null;
+  const inbox = path.join(root, '_inbox', today(now), 'legacy-harness');
+  const deadline = Date.now() + timeoutS * 1000;
+  for (const f of w.files) {
+    if (Date.now() > deadline) { res.truncated = 'timeout'; break; }
+    const rel = path.relative(src, f.p); const to = path.join(root, rel); const relP = rel.replace(/\\/g, '/');
+    try {
+      if (rel.endsWith('.jsonl')) {
+        const have = new Set(fs.existsSync(to) ? fs.readFileSync(to, 'utf8').split(/\r?\n/) : []);
+        const add = []; for (const l of fs.readFileSync(f.p, 'utf8').split(/\r?\n/)) if (l.trim() && !have.has(l)) { have.add(l); add.push(l); }
+        res.appended.push({ file: relP, lines: add.length });
+        if (yes) { if (add.length) { fs.mkdirSync(path.dirname(to), { recursive: true }); const cur = fs.existsSync(to) ? fs.readFileSync(to, 'utf8') : ''; fs.appendFileSync(to, (cur && !cur.endsWith('\n') ? '\n' : '') + add.join('\n') + '\n'); } fs.unlinkSync(f.p); }
+      } else if (!fs.existsSync(to)) {
+        res.moved.push(relP);
+        if (yes) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.renameSync(f.p, to); }
+      } else {
+        res.inbox.push(relP);
+        if (yes) { const d = path.join(inbox, rel); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.renameSync(f.p, d); }
+      }
+    } catch { /* bo qua file loi, giu nguyen nguon */ }
+  }
+  if (yes && !res.truncated) {
+    // Xoa .harness neu chi con thu muc rong + .gitignore
+    const left = []; const rec = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) rec(p); else left.push(p); } };
+    const hd = path.join(ws, '.harness');
+    try { rec(hd); if (left.every((p) => path.relative(hd, p) === '.gitignore')) { fs.rmSync(hd, { recursive: true, force: true }); res.removed = true; } } catch { /* giu lai */ }
+  }
+  return res;
+}
 
 // ---- inbox: quan ly _inbox/<YYYY-MM-DD>/<muc> ----
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -413,6 +449,12 @@ export async function run(argv = process.argv.slice(2)) {
       const c = clean({ root, reg, yes, days, opts });
       logAccess('clean', r, { removed: c.removed.length, yes });
       return { code: 0, ...emit({ summary: `${c.dryRun ? 'dry-run: se xoa' : 'da xoa'} ${c.removed.length} file (${fmtB(c.bytes)})${c.dryRun ? ' - them --yes de xoa' : ''}\n${c.removed.slice(0, 20).join('\n')}`, data: c, truncated: c.truncated }, o) };
+    }
+    if (cmd === 'adopt' && r.includes('--legacy-harness')) {
+      const a = adoptLegacyHarness({ yes, timeoutS: o.timeoutS || LIMITS.timeoutS });
+      logAccess('adopt', r, { legacyHarness: true, appended: a.appended.length, moved: a.moved.length, inbox: a.inbox.length, yes });
+      if (!a.applicable) return { code: 1, ...emit({ summary: 'adopt --legacy-harness: workspace khong co dau hieu (config/workspace|hub/default.json), khong lam gi', data: a }, o) };
+      return { code: 0, ...emit({ summary: `${a.dryRun ? 'dry-run: se gom' : 'da gom'} .harness/data: noi ${a.appended.length} jsonl, chuyen ${a.moved.length}, vao _inbox ${a.inbox.length}${a.removed ? ', da xoa .harness' : ''}${a.dryRun ? ' (them --yes)' : ''}`, data: a, truncated: a.truncated }, o) };
     }
     if (cmd === 'adopt') {
       const a = adopt({ root, reg, yes });

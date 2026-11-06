@@ -3,6 +3,9 @@
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
 ## 0.3.6
+## Unreleased
+- Sua loi du lieu lac `<ws>/.harness/data`: quy tac workspace co dau hieu (config/workspace|hub/default.json => data `<ws>/data`, config `<ws>/config`) nay nam o loi (`dataDir`, `ensureDataIgnore`, `loadConfig`), khong chi o wrapper; them `harness data adopt --legacy-harness` + canh bao `harness doctor`.
+
 - Sua loi ext-guard: stdin khong toi ext (ext-host spawnSync khong co input, ext-supervisor dat stdin 'ignore') nen ext guard nhan JSON rong va exit 2 cho moi tool. Hop dong: `harness <ext> ...` voi env HARNESS_STDIN_FORWARD=1 (ext-guard dat) chuyen NGUYEN stdin (toi da 1MB) toi ext qua ext-host -> ext-supervisor -> ext-runner; ext doc process.stdin. Khong co env thi stdin ext rong nhu cu (khong treo). Test tich hop ext-guard -> bin/harness -> ext tam.
 
 ## 0.3.5
