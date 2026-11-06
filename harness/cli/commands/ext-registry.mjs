@@ -26,7 +26,51 @@ function scanManifest(rootAbs, coreDomains = new Set()) {
     if (!g) return { error: 'guard khai bao sai (can event=PreToolUse, matcher regex hop le, args mang string)' };
     guard = { ...g, domain: domains[0] };
   }
-  return { id: m.id, domains, guard };
+  const ui = scanUi(m, domains);
+  if (ui.error) return { error: ui.error };
+  return { id: m.id, domains, guard, commands: ui.commands, views: ui.views };
+}
+
+const MODES = ['read', 'confirm', 'tty'], KINDS = ['graph', 'timeline', 'system', 'list'];
+/** commands (mang {name,mode,args} hoac object ten->{mode,args}) + views: chuan hoa va kiem. Khong co -> []. */
+function scanUi(m, domains) {
+  const cmds = [];
+  if (m.commands !== undefined) {
+    const raw = Array.isArray(m.commands) ? m.commands : (m.commands && typeof m.commands === 'object' ? Object.entries(m.commands).map(([name, v]) => ({ name, ...(v && typeof v === 'object' ? v : {}) })) : null);
+    if (!raw) return { error: 'commands phai la mang/object' };
+    for (const c of raw) {
+      if (!c || typeof c.name !== 'string' || !c.name) return { error: 'commands[]: thieu name' };
+      if (c.mode !== undefined && !MODES.includes(c.mode)) return { error: `commands.${c.name}: mode phai thuoc ${MODES.join('|')}` };
+      if (c.args !== undefined && !(Array.isArray(c.args) && c.args.every((a) => typeof a === 'string'))) return { error: `commands.${c.name}: args phai la mang string` };
+      cmds.push({ name: c.name, mode: c.mode || 'read', args: c.args || [] });
+    }
+  }
+  const views = [];
+  if (m.views !== undefined) {
+    if (!Array.isArray(m.views)) return { error: 'views phai la mang' };
+    for (const [i, v] of m.views.entries()) {
+      if (!v || !KINDS.includes(v.kind)) return { error: `views[${i}]: kind phai thuoc ${KINDS.join('|')}` };
+      if (typeof v.source !== 'string' || !v.source.trim()) return { error: `views[${i}]: thieu source` };
+      const t = v.source.trim().split(/\s+/), name = domains.includes(t[0]) && t.length > 1 ? t[1] : t[0];
+      const c = cmds.find((x) => x.name === name);
+      if (!c) return { error: `views[${i}]: source '${v.source}' khong khai bao trong commands` };
+      if (c.mode !== 'read') return { error: `views[${i}]: source '${name}' phai o mode read (dang ${c.mode})` };
+      if (v.actions !== undefined && !(Array.isArray(v.actions) && v.actions.every((a) => a && typeof a.label === 'string' && typeof a.cmd === 'string' && (a.mode === undefined || MODES.includes(a.mode))))) return { error: `views[${i}]: actions sai (label, cmd, mode)` };
+      views.push(v);
+    }
+  }
+  return { commands: cmds, views };
+}
+
+/** describe <id>: tu manifest dang ky (khong doc du lieu); chi doc manifest khi hash con khop. */
+export function describe(id, opts = {}) {
+  let entries, ws; try { ({ entries, ws } = readEntries(opts)); } catch (e) { return { code: 2, text: `ext describe: ${e.message}` }; }
+  const e = entries.find((x) => x.id === id);
+  if (!e) return { code: 2, text: `ext describe: ${id || '?'} chua dang ky` };
+  const s = extensionStatus(id, opts), abs = path.resolve(ws, e.root);
+  const out = { id, path: e.root, hash: e.hash, status: s.status, domains: [], commands: [], views: [] };
+  if (s.status === 'ok') { const sc = scanManifest(abs); if (!sc.error) Object.assign(out, { domains: sc.domains, commands: sc.commands, views: sc.views }); else out.error = sc.error; }
+  return { code: 0, text: JSON.stringify(out) };
 }
 
 const fmtG = (g) => `${g.event} matcher=${g.matcher} args=[${(g.args || []).join(' ')}] domain=${g.domain}`;
@@ -132,6 +176,7 @@ export function remove(id, opts = {}) {
 
 export function list(opts = {}) {
   let entries; try { ({ entries } = readEntries(opts)); } catch (e) { return { code: 2, text: `ext list: ${e.message}` }; }
+  if (opts.json) return { code: 0, text: JSON.stringify(entries.map((e) => ({ id: e.id, path: e.root, hash: e.hash, status: extensionStatus(e.id, opts).status }))) };
   const lines = entries.map((e) => { const s = extensionStatus(e.id, opts); return `${e.id}\t${e.root}\t${hash8(e.hash)}\t${s.status}`; });
   return { code: 0, text: lines.length ? lines.join('\n') : '(chua co extension dang ky)' };
 }
@@ -143,7 +188,10 @@ export function verify(opts = {}) {
   for (const e of entries) {
     const s = extensionStatus(e.id, opts);
     if (s.status !== 'ok') { bad++; L.push(`${e.id}: ${s.status} (ghim ${hash8(s.pinned)}${s.current ? `, hien tai ${hash8(s.current)}` : ''}) -> BI CHAN; chay: harness ext approve ${e.id}`); }
-    else L.push(`${e.id}: ok (${hash8(e.hash)})`);
+    else {
+      const sc = scanManifest(path.resolve(readEntries(opts).ws, e.root));
+      if (sc.error) { bad++; L.push(`${e.id}: manifest sai: ${sc.error}`); } else L.push(`${e.id}: ok (${hash8(e.hash)})`);
+    }
   }
   return { code: bad ? 1 : 0, text: L.length ? L.join('\n') : '(chua co extension dang ky)' };
 }
