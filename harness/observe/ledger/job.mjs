@@ -52,7 +52,9 @@ export async function runJob(opts = {}) {
   const hubDir = opts.hubDir || workspaceRoot();
   const t0 = Date.now();
   const { defs: rawDefs, errors, truncated: dt } = loadDefinitions({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? null, hubDir, ...(opts.trusted ? { trusted: opts.trusted } : {}), ...(opts.defaultsDir ? { defaultsDir: opts.defaultsDir } : {}) });
-  const defs = applyLedgerConfig(rawDefs, opts.ledgerConfig || loadLedgerConfig());
+  const lcfg = opts.ledgerConfig || loadLedgerConfig();
+  for (const w of lcfg.warnings || []) { try { console.error(w); } catch { /* khong log duoc */ } }
+  const defs = applyLedgerConfig(rawDefs, lcfg);
   const days = Math.max(1, ...defs.filter((d) => d.source !== 'ledger').map((d) => Number(d.days) || 7));
   const ev = opts.events ? { events: opts.events, truncated: null } : await readEvents({ days, nowMs, timeoutMs: opts.timeoutMs || JOB.timeoutS * 1000 });
   const nowIso = new Date(nowMs).toISOString();

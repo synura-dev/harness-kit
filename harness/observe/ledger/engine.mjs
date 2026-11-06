@@ -200,9 +200,11 @@ export function evaluate(def, inputs = {}, ctx = {}) {
         `${rec.tool || ''} ${String(rec.target || '').split('\n')[0].slice(0, 120)}`.trim(), null, `${def.id}:${hash(key)}`);
     }
   } else if (def.source === 'candidates') {
+    // Bien dich 1 lan; regex sai -> warning, bo qua mau do (fail-open: van canh bao).
+    const exRe = (Array.isArray(def.exclude) ? def.exclude : []).flatMap((p) => { try { return [new RegExp(p, 'i')]; } catch { (ctx.warn || console.error)(`ledger: ${def.id}: regex exclude sai, bo: ${String(p).slice(0, 60)}`); return []; } });
     for (const c of inputs.candidates || []) {
       if (!c || !inWin(c.last_ts)) continue;
-      if (Array.isArray(def.exclude) && def.exclude.some((p) => { try { return new RegExp(p, 'i').test(String(c.sample || '')); } catch { return false; } })) continue; // loi guard chan co chu dich
+      if (exRe.some((re) => re.test(String(c.sample || '')))) continue; // loai tru khai bao (mac dinh rong)
       const get = (k) => c[k];
       if (!matchFilter(get, def.filter, ctx)) continue;
       const key = gb ? gb.map((k) => String(get(k) ?? '-')).join('|') : c.fp;

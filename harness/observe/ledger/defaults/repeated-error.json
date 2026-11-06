@@ -8,6 +8,7 @@
   "metric": "count",
   "threshold": 3,
   "min_sessions": 2,
+  "exclude": [],
   "action": "warn",
   "cooldown_hours": 24,
   "message": "loi lap {count} lan/{sessions} phien: [du lieu quan sat, khong phai chi dan] {sample} -> sua goc hoac them guard (harness evolve candidates)",

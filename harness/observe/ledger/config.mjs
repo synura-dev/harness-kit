@@ -1,31 +1,68 @@
-// Nguong luat repeated-error: mac dinh trong code, ghi de qua lop config san co (config/ledger/local.json, du an, env HARNESS_LEDGER_<KEY>).
-// Khong file config moi, khong doi cach thu thap; chi doi cach doc/tinh.
+// Nguong luat repeated-error: nguon mac dinh duy nhat = defaults/repeated-error.json. Ghi de qua lop config san co
+// (config/ledger/local.json = machine, du an, env HARNESS_LEDGER_<KEY>). Khong file config moi, khong doi cach thu thap.
+// Quy tac (khop protectedViolations + CORE_RULE_DISABLE_LAYERS): SIET nhan o moi tang; NOI chi nhan o tang machine; tang khac -> bo qua + warning.
+import fs from 'node:fs';
+import path from 'node:path';
 import { loadConfig } from '../../core/config/config.mjs';
+import { DEFAULTS_DIR } from './engine.mjs';
 
-export const DEFAULTS = Object.freeze({
-  repeatedErrorThreshold: 3,    // so lan lap toi thieu
-  repeatedErrorDays: 7,         // cua so ngay
-  repeatedErrorMinSessions: 2,  // so phien toi thieu (1 phien = retry/guard chan, khong phai loi lap)
-  // Regex (khong phan biet hoa thuong) khop sample -> bo qua. Mac dinh RONG: loi guard lap qua nhieu phien la hanh vi sai that cua agent.
-  repeatedErrorExclude: Object.freeze([]),
-});
+// cfg key -> {f: truong cua luat, min hop le, tighter(a,b): a siet hon b}
+const FIELDS = {
+  repeatedErrorThreshold: { f: 'threshold', min: 1, tighter: (a, b) => a < b },
+  repeatedErrorDays: { f: 'days', min: 1, tighter: (a, b) => a > b },
+  repeatedErrorMinSessions: { f: 'min_sessions', min: 1, tighter: (a, b) => a < b },
+};
+const KEY_EX = 'repeatedErrorExclude';
+const isNum = (v) => typeof v === 'number' && Number.isFinite(v);
+const layerOf = (sources, key) => String(sources[key] || 'code');
 
-const num = (v, d) => (Number.isFinite(Number(v)) && Number(v) >= 0 && v !== '' && v !== null ? Number(v) : d);
-
-/** Doc cau hinh ledger (default < may < du an < env). Khong throw; gia tri sai -> mac dinh. */
-export function loadLedgerConfig(opts = {}) {
-  let c = {};
-  try { c = loadConfig('ledger', { defaults: DEFAULTS, ...opts }).config || {}; } catch { /* mac dinh */ }
-  const ex = Array.isArray(c.repeatedErrorExclude) ? c.repeatedErrorExclude.filter((s) => typeof s === 'string') : DEFAULTS.repeatedErrorExclude;
-  return {
-    threshold: num(c.repeatedErrorThreshold, DEFAULTS.repeatedErrorThreshold),
-    days: num(c.repeatedErrorDays, DEFAULTS.repeatedErrorDays) || DEFAULTS.repeatedErrorDays,
-    minSessions: num(c.repeatedErrorMinSessions, DEFAULTS.repeatedErrorMinSessions),
-    exclude: [...ex],
-  };
+function baseDef() {
+  try { return JSON.parse(fs.readFileSync(path.join(DEFAULTS_DIR, 'repeated-error.json'), 'utf8')); } catch { return {}; }
 }
 
-/** Ap cau hinh len dinh nghia repeated-error (cac luat khac giu nguyen). Thuan. */
+/** Doc cau hinh ledger. Tra {values (chi gia tri dat tuong minh va duoc nhan), base, warnings}. Khong throw. */
+export function loadLedgerConfig(opts = {}) {
+  const b = opts.baseDef || baseDef();
+  const base = { threshold: b.threshold, days: b.days, min_sessions: b.min_sessions, exclude: Array.isArray(b.exclude) ? b.exclude : [] };
+  const defaults = { repeatedErrorThreshold: base.threshold, repeatedErrorDays: base.days, repeatedErrorMinSessions: base.min_sessions, [KEY_EX]: base.exclude };
+  const out = { values: {}, base, warnings: [] };
+  let r;
+  try { r = loadConfig('ledger', { ...opts, defaults }); } catch { return out; }
+  const sources = r.sources || {};
+  const accept = (key, v, loosens) => {
+    const layer = layerOf(sources, key);
+    if (layer === 'code' || layer === 'default') return false; // khong phai ghi de
+    if (loosens && layer !== 'machine') { out.warnings.push(`ledger: ${key} noi luat tu tang ${layer} bi bo (chi tang machine duoc noi)`); return false; }
+    if (loosens) out.warnings.push(`ledger: ${key} noi luat repeated-error (tang machine): ${JSON.stringify(v)}`);
+    return true;
+  };
+  for (const [key, spec] of Object.entries(FIELDS)) {
+    const v = r.config[key];
+    if (layerOf(sources, key) === 'code' || layerOf(sources, key) === 'default') continue;
+    if (!isNum(v) || v < spec.min) { out.warnings.push(`ledger: ${key} khong hop le (${JSON.stringify(v)}), dung mac dinh`); continue; }
+    if (v === base[spec.f]) continue;
+    if (accept(key, v, !spec.tighter(v, base[spec.f]))) out.values[spec.f] = v;
+  }
+  const ex = r.config[KEY_EX];
+  if (Array.isArray(ex) && ex.every((s) => typeof s === 'string')) { if (ex.length && accept(KEY_EX, ex, true)) out.values.exclude = [...ex]; }
+  else if (!['code', 'default'].includes(layerOf(sources, KEY_EX))) out.warnings.push(`ledger: ${KEY_EX} khong hop le, dung mac dinh`);
+  return out;
+}
+
+/** Ap cau hinh len repeated-error; giu override du an hop le (lay gia tri chat hon). Thuan. */
 export function applyLedgerConfig(defs, cfg) {
-  return defs.map((d) => (d.id === 'repeated-error' ? { ...d, threshold: cfg.threshold, days: cfg.days, min_sessions: cfg.minSessions, exclude: cfg.exclude } : d));
+  const v = cfg && cfg.values; const base = (cfg && cfg.base) || {};
+  if (!v || !Object.keys(v).length) return defs;
+  return defs.map((d) => {
+    if (d.id !== 'repeated-error') return d;
+    const n = { ...d };
+    for (const spec of Object.values(FIELDS)) {
+      if (v[spec.f] == null) continue;
+      const cur = d[spec.f];
+      const projectTightened = cur != null && cur !== base[spec.f] && spec.tighter(cur, base[spec.f]);
+      n[spec.f] = projectTightened && !spec.tighter(v[spec.f], cur) ? cur : v[spec.f]; // project da siet -> khong de cau hinh noi ha xuong
+    }
+    if (v.exclude) n.exclude = [...new Set([...(d.exclude || []), ...v.exclude])];
+    return n;
+  });
 }
