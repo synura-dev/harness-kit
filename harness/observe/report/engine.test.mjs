@@ -144,3 +144,20 @@ test('task_done_rate: doc task ext projects (completed / khong tinh cancelled), 
   assert.equal(evaluateSection(def, { events: [ev({})], tasks }, { nowMs: NOW }).rows[0].vals[1], 0.5);
   assert.equal(evaluateSection(def, { events: [ev({})] }, { nowMs: NOW }).rows[0].vals[1], null);
 });
+
+test('avg: bo ky rong/ngoai dai du lieu khoi mau so, ghi n/K', () => {
+  const def = { id: 'm', source: 'audit', metric: 'count', window_days: 1, compare: 'prev_window', format: 'kpi' };
+  // du lieu chi co hom nay + 3 ngay truoc (moi ngay 2 su kien); avgOf 7 -> chi 3 ky dung
+  const events = [ev({ ts: ago(0.1) })];
+  for (let d = 1; d <= 3; d++) events.push(ev({ ts: ago(d + 0.5) }), ev({ ts: ago(d + 0.5) }));
+  const r = evaluateSection(def, { events }, { nowMs: NOW });
+  assert.equal(r.n, 3); assert.equal(r.avg.all, 2);
+  assert.match(renderSection(r), /tb 3\/7 ngay truoc 2/);
+});
+
+test('avg: ky giua rong (khong su kien) khong keo trung binh ve 0', () => {
+  const def = { id: 'm', source: 'audit', metric: 'count', window_days: 1, compare: 'prev_window', format: 'kpi' };
+  const events = [ev({ ts: ago(0.1) }), ev({ ts: ago(1.5) }), ev({ ts: ago(1.5) }), ev({ ts: ago(5.5) }), ev({ ts: ago(5.5) })];
+  const r = evaluateSection(def, { events }, { nowMs: NOW, avgOf: 5 });
+  assert.equal(r.n, 2); assert.equal(r.avg.all, 2);
+});

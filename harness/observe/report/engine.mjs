@@ -162,12 +162,23 @@ export function evaluateSection(def, all, { nowMs = Date.now(), ctx = {}, avgOf 
   const cur = computeSection(def, windowInputs(def, all, from, to, nowIso), { ...ctx, nowMs });
   const out = { def, ...cur, prev: null, avg: null, w, k: avgOf, base: null, note: null };
   if (def.compare === "prev_window" && w && ["all", "prev", "avg"].includes(compare)) {
-    // prev = cua so lien truoc; avg = trung binh AVG_WINDOWS cua so truoc (giam dao dong khi cua so ngan)
+    // prev = cua so lien truoc; avg = trung binh toi da avgOf cua so truoc. Ky rong / ngoai dai du lieu da doc / gia tri null bi bo khoi mau so.
+    const tsList = (all.events || []).map((e) => Date.parse(e && e.ts)).filter(Number.isFinite);
+    const dataStart = tsList.length ? tsList.reduce((a, b) => Math.min(a, b)) : null;
     const ws = [];
-    for (let k = 1; k <= (compare === "prev" ? 1 : avgOf); k++) ws.push(Object.fromEntries(computeSection(def, windowInputs(def, all, from - k * w * DAY, from - (k - 1) * w * DAY, nowIso), { ...ctx, nowMs }).rows.map((r) => [r.key, r.vals[0]])));
-    if (compare !== "avg") out.prev = ws[0];
-    if (compare !== "prev") out.avg = {};
-    for (const key of compare === "prev" ? [] : new Set(ws.flatMap(Object.keys))) { const v = ws.map((x) => (typeof x[key] === 'number' ? x[key] : 0)); out.avg[key] = v.reduce((a, b) => a + b, 0) / v.length; }
+    for (let k = 1; k <= (compare === "prev" ? 1 : avgOf); k++) {
+      const a = from - k * w * DAY; const b = from - (k - 1) * w * DAY;
+      const rows = computeSection(def, windowInputs(def, all, a, b, nowIso), { ...ctx, nowMs }).rows;
+      ws.push({ map: Object.fromEntries(rows.map((r) => [r.key, r.vals[0]])), ok: rows.length > 0 && (dataStart == null || b > dataStart) });
+    }
+    if (compare !== "avg") out.prev = ws[0].map;
+    if (compare !== "prev") {
+      const used = ws.filter((x) => x.ok); out.avg = {}; out.n = used.length;
+      for (const key of new Set(used.flatMap((x) => Object.keys(x.map)))) {
+        const v = used.map((x) => (key in x.map ? x.map[key] : 0)).filter((x) => typeof x === 'number');
+        if (v.length) out.avg[key] = v.reduce((p, c) => p + c, 0) / v.length;
+      }
+    }
   }
   const b = all.baseline && all.baseline.kpis && all.baseline.kpis[def.id];
   if (def.compare && b && ["all", "baseline"].includes(compare)) out.base = b;
@@ -183,7 +194,7 @@ export function renderSection(res) {
   const { def } = res; const fmt = def.format || 'table';
   const L = [`## ${def.title || def.id}`];
   if (!res.rows.length) { L.push(`_${res.note}_`, ''); return L.join('\n'); }
-  const nm = winNames(res.w || 7, res.k);
+  const nm = winNames(res.w || 7, res.n != null && res.n < res.k ? `${res.n}/${res.k}` : res.k);
   if (fmt === 'list') {
     for (const r of res.rows) L.push(`- ${r.key}${r.vals.length && r.vals[0] != null ? ' (' + r.vals.map(R).join(', ') + ')' : ''}`);
     L.push(''); return L.join('\n');
