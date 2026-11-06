@@ -98,7 +98,7 @@ export function load(files = configFiles(), opts = {}) {
   const env = opts.env || process.env;
   const hubRoot = opts.hubRoot || HUB_ROOT;
   // File config guard hong KHONG am tham thanh rong: canh bao ro (handle ghi audit + stderr; doctor bao ERROR). Hook van fail-open.
-  for (const b of guardConfigHealth({ hubRoot, env, repoDir: opts.repoDir })) warnings.push('config-broken: ' + b.file + ' (' + b.problem + ') - config guard hong, protectedPaths va luat tu file nay mat hieu luc');
+  for (const b of guardConfigHealth({ hubRoot, env, repoDir: opts.repoDir })) warnings.push(b.split ? 'ext-registry-split: ' + b.problem : 'config-broken: ' + b.file + ' (' + b.problem + ') - config guard hong, protectedPaths va luat tu file nay mat hieu luc');
   let cfg = { ...DEFAULTS };
   let deny = [], allow = [], aliases = [], names = [], paths = [];
   const pile = (c) => {
