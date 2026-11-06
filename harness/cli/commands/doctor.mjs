@@ -8,10 +8,14 @@ import { ver } from '../../core/runtime/proc-list.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks, isPluginMode, workspaceMarker } from '../../core/io/paths.mjs';
 
-const t = setTimeout(() => { console.error('timeout'); process.exit(2); }, 20000);
 // --json: gom cac dong `[level] name - detail` thanh {checks:[{level,name,detail}]}; khoi hook mau (khong co tien to) bo qua.
 const JSON_MODE = process.argv.includes('--json');
 const jsonChecks = [];
+const t = setTimeout(() => {
+  console.error('timeout');
+  if (JSON_MODE) process.stdout.write(JSON.stringify({ checks: jsonChecks, exit_code: 2, error: 'timeout' }, null, 2) + '\n');
+  process.exit(2);
+}, Number(process.env.HARNESS_DOCTOR_TIMEOUT_MS) || 20000);
 if (JSON_MODE) {
   console.log = (...a) => {
     for (const ln of a.join(' ').split('\n')) {
