@@ -8,7 +8,24 @@ import { ver } from '../../core/runtime/proc-list.mjs';
 import { parseCommon, emit } from '../../core/io/out.mjs';
 import { workspaceRoot, resolveHub, isInside, REPO_DIR, findBadLinks, findBadHookCommands, walkAgyHooks, isPluginMode, workspaceMarker } from '../../core/io/paths.mjs';
 
-const t = setTimeout(() => { console.error('timeout'); process.exit(2); }, 20000);
+// --json: gom cac dong `[level] name - detail` thanh {checks:[{level,name,detail}]}; khoi hook mau (khong co tien to) bo qua.
+const JSON_MODE = process.argv.includes('--json');
+const jsonChecks = [];
+const t = setTimeout(() => {
+  console.error('timeout');
+  if (JSON_MODE) process.stdout.write(JSON.stringify({ checks: jsonChecks, exit_code: 2, error: 'timeout' }, null, 2) + '\n');
+  process.exit(2);
+}, Number(process.env.HARNESS_DOCTOR_TIMEOUT_MS) || 20000);
+if (JSON_MODE) {
+  console.log = (...a) => {
+    for (const ln of a.join(' ').split('\n')) {
+      const m = /^\[([^\]]+)\]\s*(.*)$/.exec(ln);
+      if (!m) continue;
+      const i = m[2].indexOf(' - ');
+      jsonChecks.push({ level: m[1] === '--' ? 'na' : m[1].toLowerCase(), name: i < 0 ? m[2] : m[2].slice(0, i), detail: i < 0 ? '' : m[2].slice(i + 3) });
+    }
+  };
+}
 const groupWarn = {};
 const warn = (group, ...m) => { groupWarn[group] = (groupWarn[group] || 0) + 1; console.log('[warn]', ...m); };
 const line = (ok, label, extra = '') => { if (ok === false) process.exitCode = 1; console.log(`${ok === true ? '[OK]  ' : ok === false ? '[MISS]' : '[--]  '} ${label}${extra ? ' - ' + extra : ''}`); };
@@ -233,3 +250,4 @@ try {
 } catch (e) { console.log('[warn] data/config check loi:', e.message); }
 
 clearTimeout(t);
+if (JSON_MODE) process.stdout.write(JSON.stringify({ checks: jsonChecks, exit_code: process.exitCode || 0 }, null, 2) + '\n');

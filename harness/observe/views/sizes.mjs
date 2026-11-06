@@ -38,6 +38,8 @@ function dirSizes(root, { timeoutMs = 10000, maxFiles = 50000 } = {}) {
 
 /** Tra ma thoat (0 ok, 2 loi tham so/ngoai hub); khong goi process.exit de caller giu ma. */
 export function sizesMain(a) {
+  const json = a.includes('--json');
+  a = a.filter((x) => x !== '--json');
   const num = (f, d) => { const i = a.indexOf(f); return i >= 0 ? Number(a[i + 1]) || d : d; };
   const pos = a.filter((x, i) => !x.startsWith('-') && !(i > 0 && a[i - 1].startsWith('--')));
   const hub = workspaceRoot();
@@ -45,6 +47,10 @@ export function sizesMain(a) {
   if (!isInside(dir, hub)) { console.error('observe sizes: thu muc nam ngoai hub'); return 2; }
   const r = dirSizes(dir, { timeoutMs: num('--timeout-s', 10) * 1000, maxFiles: num('--max-files', 50000) });
   r.rows.sort((x, y) => y.bytes - x.bytes);
+  if (json) {
+    console.log(JSON.stringify({ items: r.rows.map((x) => ({ zone: x.name, bytes: x.bytes })), total_bytes: r.rows.reduce((s, x) => s + x.bytes, 0), files: r.files, truncated: r.truncated }, null, 2));
+    return 0;
+  }
   for (const x of r.rows) console.log(`${String(x.bytes).padStart(12)}  ${x.name}`);
   console.log(`total: ${r.rows.reduce((s, x) => s + x.bytes, 0)} bytes, ${r.files} files`);
   if (r.truncated) console.log(`truncated: ${r.truncated}`);
