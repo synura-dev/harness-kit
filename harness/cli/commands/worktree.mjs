@@ -100,7 +100,7 @@ function main(argv) {
   const root = workspaceRoot();
   const { rows, truncated } = inspectAll(root, opts);
   if (cmd === 'list') {
-    if (json) console.log(JSON.stringify({ rows, truncated }, null, 2));
+    if (json) console.log(JSON.stringify({ items: rows.map((r) => ({ source: r.source, branch: r.branch, state: r.state, unmerged: r.unmerged, path: r.path })), total: rows.length, truncated }, null, 2));
     else {
       console.log(['source', 'branch', 'state', 'unmerged', 'path'].join('\t'));
       for (const r of rows) console.log([r.source, r.branch, r.state, r.unmerged ?? '-', r.path].join('\t'));

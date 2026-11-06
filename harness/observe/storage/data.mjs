@@ -367,7 +367,8 @@ export async function run(argv = process.argv.slice(2)) {
       const s = stat(root, reg, opts);
       logAccess('stat', r);
       const tot = s.rows.reduce((a, x) => a + x.bytes, 0);
-      return { code: 0, ...emit({ summary: `${s.rows.length} muc, ${s.rows.reduce((a, x) => a + x.files, 0)} file, ${fmtB(tot)}; ngoai registry: ${s.rows.filter((x) => !x.registered).length}`, data: s, truncated: s.truncated }, o) };
+      const nFiles = s.rows.reduce((a, x) => a + x.files, 0); const outside = s.rows.filter((x) => !x.registered).length;
+      return { code: 0, ...emit({ summary: `${s.rows.length} muc, ${nFiles} file, ${fmtB(tot)}; ngoai registry: ${outside}`, data: { items: s.rows, files: nFiles, bytes: tot, outside_registry: outside, truncated: s.truncated }, truncated: s.truncated }, o) };
     }
     if (cmd === 'scan' || cmd === 'clean' || cmd === 'adopt') regUsable(reg, cmd);
     if (cmd === 'scan') {
