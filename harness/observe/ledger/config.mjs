@@ -28,6 +28,8 @@ export function loadLedgerConfig(opts = {}) {
   const out = { values: {}, base, warnings: [] };
   let r;
   try { r = loadConfig('ledger', { ...opts, defaults }); } catch { return out; }
+  // shortcut: HARNESS_CONFIG_DIR (env) co the tro machineDir sang thu muc khac, va regex exclude khong chan ReDoS; ca hai la nguon tin cay (user/machine), chap nhan.
+  for (const w of r.warnings || []) out.warnings.push(`ledger: config: ${String(w).slice(0, 120)}`); // local.json hong/qua lon...
   const sources = r.sources || {};
   const accept = (key, v, loosens) => {
     const layer = layerOf(sources, key);

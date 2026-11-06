@@ -57,6 +57,15 @@ export function kickJob(dataOpts, ctx = {}, nowMs = Date.now()) {
   } catch (e) { recordJobError(dataOpts, 'kick', e && e.message, nowMs); return false; }
 }
 
+/** Dong canh bao cau hinh ledger (job ghi state.cfgWarnings); hien 1 lan cho moi bo canh bao (dedupe theo noi dung, cfgWarnedKey). */
+export function cfgWarnLine(dataOpts) {
+  try {
+    let w = null;
+    updateState(dataOpts, (st) => { const a = Array.isArray(st.cfgWarnings) ? st.cfgWarnings : []; const key = a.join('|'); if (!a.length || key === st.cfgWarnedKey) return null; w = a; return { ...st, cfgWarnedKey: key }; });
+    return w ? `ledger[cfg]: ${w.join('; ')}` : null;
+  } catch { return null; }
+}
+
 /** Dong canh bao loi job (1 lan / errWarnHours, ghi errWarnedAt vao state). null neu khong co loi hoac dang cooldown. */
 export function jobErrorLine(dataOpts, nowMs = Date.now()) {
   try {
@@ -89,7 +98,8 @@ export async function handle(event, input, ctx = {}) {
     if (event === 'SessionStart' && bg && cfg.kick !== false) { kickJob(dataOpts, ctx, nowMs); if (cfg.reportKick !== false) kickReport(dataOpts, { spawnReport: ctx.spawnReport || (ctx.spawnJob ? () => {} : undefined) }, nowMs); }
     const errLine = event === 'SessionStart' ? jobErrorLine(dataOpts, nowMs) : null;
     const inj = event === 'SessionStart' && cfg.inject !== false ? readInject(dataOpts) : [];
-    const all = [...(errLine ? [frameLine(errLine)] : []), ...r.lines.map(frameLine), ...inj];
+    const cfgLine = event === 'SessionStart' ? cfgWarnLine(dataOpts) : null;
+    const all = [...(errLine ? [frameLine(errLine)] : []), ...(cfgLine ? [frameLine(cfgLine)] : []),...r.lines.map(frameLine), ...inj];
     return all.length ? { additionalContext: all.join('\n') } : {};
   } catch { return {}; }
 }

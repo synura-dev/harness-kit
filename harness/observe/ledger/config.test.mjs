@@ -5,6 +5,10 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadLedgerConfig, applyLedgerConfig } from './config.mjs';
 import { loadDefinitions, evaluateAll } from './engine.mjs';
+import { runJob } from './job.mjs';
+import { readState } from './ledger.mjs';
+import { cfgWarnLine } from './hook.mjs';
+import { render } from './cli.mjs';
 
 const NOW = Date.parse('2026-11-05T12:00:00Z');
 const c = (o) => ({ id: 'i', kind: 'error', fp: 'f1', count: 3, sessions: 2, first_ts: '2026-11-02T00:00:00Z', last_ts: '2026-11-05T00:00:00Z', sample: 'boom', ...o });
@@ -79,4 +83,18 @@ test('(d) nhieu candidate cung fp: cong sessions/count qua nguong', () => {
   const f = run(cfg, [c({ count: 2, sessions: 1 }), c({ count: 2, sessions: 1 })]);
   assert.equal(f.length, 1); assert.equal(f[0].count, 4); assert.equal(f[0].sessions, 2);
   assert.equal(run(cfg, [c({ count: 2, sessions: 1 })]).length, 0);
+});
+
+test('job chay nen: canh bao cau hinh (machine noi + regex sai) luu state, doc lai duoc, hook hien 1 lan', async () => {
+  const dir = tmp(); const dataOpts = { env: { HUB_DATA_DIR: dir } };
+  const ledgerConfig = load({}, machine({ repeatedErrorThreshold: 10, repeatedErrorExclude: ['(unclosed'] }));
+  const job = () => runJob({ events: [], nowMs: NOW, hubDir: 'E:/hub', dataOpts, projectDir: null, ledgerConfig });
+  await job(); await job(); // chay lai: khong nhan doi
+  const st = readState(dataOpts);
+  assert.equal(st.cfgWarnings.length, 3); // noi threshold + noi exclude + regex sai
+  assert.ok(st.cfgWarnings.some((w) => /noi luat/.test(w)) && st.cfgWarnings.some((w) => /regex exclude sai/.test(w)));
+  assert.match(render({ limit: 5 }, path.join(dir, 'none.jsonl'), st).summary, /\[warn\] ledger: .*noi luat/);
+  assert.match(cfgWarnLine(dataOpts), /^ledger\[cfg\]:/);
+  assert.equal(cfgWarnLine(dataOpts), null); // dedupe: khong lap lai
+  fs.rmSync(dir, { recursive: true, force: true });
 });
