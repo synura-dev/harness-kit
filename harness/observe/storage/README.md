@@ -27,6 +27,7 @@ Muc dich: du lieu tool theo NUT (du an/repo) nhom vao WORKSPACE (nhieu nut co th
 - `data clean` xoa file cu hon retentionDays (mtime); `null` = giu. `enforce` trong registry.json chi dieu khien che do chan ghi (off|warn|enforce), KHONG lien quan tu xoa; tu xoa luon bat qua hook data-check.
 - `data scan` tim muc la (ngoai registry, tru reserved `README.md`, `_inbox`, `.state`).
 - `data adopt` chuyen muc la vao `data/_inbox/<date>/`.
+- `data adopt --legacy-harness [--yes]`: chi khi workspace co dau hieu (config/workspace|hub/default.json). Gom `<ws>/.harness/data/**` (du lieu lac) vao data/: `.jsonl` noi dong chua co; file khac chuyen neu dich chua co, neu co -> `_inbox/<ngay>/legacy-harness/`; xoa `.harness` neu chi con rong + `.gitignore`. Dry-run mac dinh, co timeout/gioi han (`truncated: timeout`). `harness doctor` canh bao khi con `<ws>/.harness/data`.
 - `data inbox ls [--limit N]` liet ke `_inbox/<ngay>/<muc>` (file, size).
 - `data inbox rm <ngay>/<muc> [--yes]` xoa 1 muc trong _inbox (dry-run mac dinh; tu choi rong, `..`, tuyet doi, chinh `_inbox`; dung API fs cua Node).
 - `data inbox restore <ngay>/<muc> [--yes]` chuyen nguoc ve goc data neu chua ton tai (khong ghi de).

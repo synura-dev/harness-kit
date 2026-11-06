@@ -46,6 +46,8 @@ const hub = resolveHub();
 console.log(`[info] hubDir = ${hub.hubDir} (nguon: ${hub.source})`);
 if (BARE) console.log('[skip] hubDir/arch/adapter manifest: du an thuong (khong dau hieu hub), bo kiem gia dinh hub');
 else if (!isInside(REPO_DIR, hub.hubDir)) console.log(`[warn] repo (${REPO_DIR}) nam ngoai hubDir; kiem tra HUB_DIR/config/paths.local.json`);
+// workspace co dau hieu ma con <ws>/.harness/data (du lieu lac do code nap loi khong qua wrapper, truoc fix) -> canh bao 1 dong + lenh sua
+if (workspaceMarker(HUB_ROOT) && fs.existsSync(path.join(HUB_ROOT, '.harness', 'data'))) console.log(`[warn] ${path.join(HUB_ROOT, '.harness', 'data')} ton tai nhung du lieu workspace nam o <ws>/data - sua: harness data adopt --legacy-harness [--yes]`);
 for (const b of findBadLinks(path.join(HUB_ROOT, '.claude', 'skills'), HUB_ROOT)) {
   line(false, `link .claude/skills/${b.name} ${b.problem === 'hong' ? 'hong' : 'tro ngoai hubDir'}`, `${b.target}`);
 }

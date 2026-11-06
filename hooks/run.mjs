@@ -3,7 +3,7 @@
 // Quy tac (chi dat khi bien CHUA co):
 //   - HARNESS_PLUGIN_DIR = CLAUDE_PLUGIN_ROOT | goc plugin (tinh tu vi tri file nay).
 //   - Du an co dau hieu workspace tuy bien (core/io/paths.mjs WORKSPACE_MARKERS: config/workspace/default.json | config/hub/default.json)
-//     -> HUB_DATA_DIR=<du an>/data, HARNESS_CONFIG_DIR=<du an>/config. Du an thuong: mac dinh plugin mode (<du an>/.harness/...).
+//     -> HUB_DATA_DIR=<du an>/data, HARNESS_CONFIG_DIR=<du an>/config (loi dataDir/loadConfig cung tu ap quy tac nay: ket qua giong nhau khi khong qua wrapper). Du an thuong: mac dinh plugin mode (<du an>/.harness/...).
 // Loi: fail-open (`{}` exit 0; WorktreeCreate exit 1) nhung LUON ghi mot dong `HKERR {...}` ra stderr (HK-HOOK-001/002).
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
