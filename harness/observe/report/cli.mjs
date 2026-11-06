@@ -1,16 +1,16 @@
 #!/usr/bin/env node
-// harness observe report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--json] [--raw] [--timeout-s N]
+// harness observe report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt } from '../../core/io/out.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { buildReport, saveBaseline, putObsidian, markRun, writeReportFile, REPORT } from './run.mjs';
 
-const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--json] [--raw] [--timeout-s N]';
+const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
-  const o = { json: c.json, raw: c.raw, maxBytes: c.maxBytes, timeoutS: c.timeoutS, days: null, out: '-', dryRun: false, baseline: false, weekly: false };
+  const o = { json: c.json, raw: c.raw, maxBytes: c.maxBytes, timeoutS: c.timeoutS, days: null, out: '-', dryRun: false, baseline: false, weekly: false, avgOf: null, compare: null };
   const r = c.rest;
   for (let i = 0; i < r.length; i++) {
     const a = r[i];
@@ -18,6 +18,8 @@ export function parseArgs(argv) {
     const val = () => (inline !== null ? inline : r[++i]);
     if (k === '--days') o.days = posInt(val()) || null;
     else if (k === '--out') { o.out = val(); if (!['-', 'obsidian'].includes(o.out)) throw new Error('out phai la - hoac obsidian'); }
+    else if (k === '--avg-of') o.avgOf = posInt(val()) || null;
+    else if (k === '--compare') { o.compare = val(); if (!['all', 'prev', 'avg', 'baseline'].includes(o.compare)) throw new Error('compare phai la all|prev|avg|baseline'); }
     else if (k === '--dry-run') o.dryRun = true;
     else if (k === '--baseline') o.baseline = true;
     else if (k === '--weekly') { o.weekly = true; o.out = 'obsidian'; }
@@ -30,15 +32,15 @@ export async function main(argv = process.argv.slice(2)) {
   bgDoneOnExit();
   try {
     const o = parseArgs(argv);
-    const res = await buildReport({ days: o.days, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
+    const res = await buildReport({ days: o.days, avgOf: o.avgOf, compare: o.compare, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
     const notes = [];
     if (o.baseline) { const b = saveBaseline(res, { dryRun: o.dryRun }); notes.push(o.dryRun ? `baseline (dry-run, khong ghi): ${b.baseline.date}` : b.ok ? `baseline da chot: ${b.baseline.date}` : 'baseline: khong ghi duoc'); }
     let md = res.markdown;
     // Luon ghi file .md (theo tuan) vao thu muc du lieu harness = nguon that; Obsidian chi day them, loi day khong lam hong bao cao.
-    const file = o.dryRun ? null : writeReportFile(res.markdown, { nowMs: res.nowMs });
+    const file = o.dryRun ? null : writeReportFile(res.markdown, { nowMs: res.nowMs, days: o.days || 7 });
     if (!o.dryRun) notes.push(file ? 'bao cao: ' + file : 'khong ghi duoc file bao cao');
     if (o.out === 'obsidian' && !o.dryRun) {
-      const p = putObsidian(md);
+      const p = putObsidian(md, { days: o.days || 7 });
       if (p.ok) { notes.push('da put them vao Obsidian'); md = null; }
       else notes.push(`khong day them Obsidian (${p.reason})${file ? '' : ' - in stdout de hub tu put'}`);
     }
