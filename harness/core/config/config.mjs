@@ -134,7 +134,7 @@ export function loadConfig(tool, opts = {}) {
     // Plugin mode (3 lop): plugin (<codeRoot>/config, doc) < may (CLAUDE_PLUGIN_DATA | ~/.claude/plugins/<x>/<ten>/config) < du an (<du an>/.harness/config). Lop du an KHONG tat/ha luat loi (protect).
     let cfgEnv = typeof env.HARNESS_CONFIG_DIR === 'string' && env.HARNESS_CONFIG_DIR.trim() ? env.HARNESS_CONFIG_DIR : '';
     // Workspace co dau hieu (paths.mjs workspaceMarker) ma khong qua wrapper: thu muc config du an = <ws>/config (giong wrapper dat HARNESS_CONFIG_DIR).
-    if (!cfgEnv && !o.root && !o.configDir && isPluginMode(o.repoDir || REPO_DIR)) { try { const ws = workspaceRoot({ env, repoDir: o.repoDir || REPO_DIR }); if (workspaceMarker(ws)) cfgEnv = path.join(ws, 'config'); } catch { /* bo qua */ } }
+    if (!cfgEnv && !o.configDir && isPluginMode(o.repoDir || REPO_DIR)) { try { const ws = o.root || workspaceRoot({ env, repoDir: o.repoDir || REPO_DIR }); if (workspaceMarker(ws)) cfgEnv = path.join(ws, 'config'); } catch { /* bo qua */ } }
     const plug = !cfgEnv && isPluginMode(o.repoDir || REPO_DIR);
     let machineDir = null, projectDir = null;
     if (plug) { const d = pluginLayerDirs({ env, repoDir: o.repoDir || REPO_DIR }); machineDir = d.machineDir; projectDir = d.projectDir; root = o.repoDir || REPO_DIR; }

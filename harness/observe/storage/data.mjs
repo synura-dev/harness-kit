@@ -15,7 +15,7 @@ import { isStdRootFile } from './std-root.mjs';
 import { ZONES, CLASSES, CLASS_DEFAULTS, SCAN_CACHE_REL, loadDataRegistry, classRetention, formatWarn, writeAtomic } from '../../core/registry/data-registry.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
+export const LIMITS = { maxFiles: 20000, timeoutS: 20, autoMaxFiles: 500, autoMaxBytes: 200000000, legacyJsonlMaxBytes: 52428800, tailMaxLines: 200, tailMaxBytes: 1048576, tailFieldMax: 300 };
 const USAGE = 'usage: data ls [domain] | stat | clean [--yes] [--days N] | clean --auto [--yes] (chi log/cache qua han, tran 500 file/200MB/20s) | scan [--json] | query <ws|node> <tool> [--node X] [--last [N]] [--status S] [--since ISO] (doc runs.jsonl) | tree [...] | adopt [--yes] [--legacy-harness] | tail <domain> [--n N] [--type T] [--since 1d] | inbox ls [--limit N] | inbox rm <ngay>/<muc> [--yes] | inbox restore <ngay>/<muc> [--yes] | inbox prune [--days N] [--yes]  (--json --raw --timeout-s N)';
 
 const REPO_ROOT = path.resolve(HERE, '..', '..', '..');
@@ -210,38 +210,76 @@ export function adopt({ root = dataRoot(), reg = loadRegistry(), yes = false } =
 }
 
 
-/** Gom du lieu lac <ws>/.harness/data vao dataRoot (chi khi workspace co dau hieu). jsonl: noi dong chua co; file khac: chuyen neu dich chua co, neu co -> _inbox/<ngay>/legacy-harness/. Dry-run mac dinh. */
-export function adoptLegacyHarness({ ws = workspaceRoot(), root = dataRoot(), yes = false, maxFiles = LIMITS.maxFiles, timeoutS = LIMITS.timeoutS, now = new Date() } = {}) {
-  const res = { dryRun: !yes, applicable: !!workspaceMarker(ws), appended: [], moved: [], inbox: [], removed: false, truncated: null };
+/** Gom du lieu lac <ws>/.harness/data vao dataRoot (chi khi workspace co dau hieu). jsonl: noi dong chua co (dich doc 1 lan; qua tran kich thuoc -> _inbox);
+ * file khac: chuyen neu dich chua co, neu co -> _inbox/<ngay>/legacy-harness/ (them hau to .N, khong bao gio ghi de). sqlite/db + -wal/-shm/-journal = mot nhom: dich co db thi ca nhom vao _inbox.
+ * Tu choi khi dataRoot trung/long .harness/data. Loi tung file -> errors[] (khong xoa .harness). Dry-run mac dinh. */
+const DB_FAMILY = /\.(sqlite3?|db)(-wal|-shm|-journal)?$/;
+const dbKey = (rel) => (DB_FAMILY.test(rel) ? rel.replace(/-(wal|shm|journal)$/, '') : rel);
+function moveNew(from, to) {
+  for (let n = 0; n < 1000; n++) {
+    const t = n ? `${to}.${n}` : to;
+    try { fs.copyFileSync(from, t, fs.constants.COPYFILE_EXCL); } catch (e) { if (e.code === 'EEXIST') continue; throw e; } // copy EXCL + unlink: khong ghi de, chay duoc qua o dia khac (EXDEV)
+    try { fs.unlinkSync(from); } catch (e) { try { fs.unlinkSync(t); } catch { /* giu ca hai */ } throw e; }
+    return t;
+  }
+  throw new Error('EEXIST: het hau to .N');
+}
+// Cha dich (hoac to tien gan nhat con ton tai) phai nam trong realpath(root): chan symlink/junction dan ra ngoai.
+function insideRoot(target, realRoot) {
+  let d = path.dirname(target);
+  while (!fs.existsSync(d)) { const up = path.dirname(d); if (up === d) return false; d = up; }
+  return isInside(fs.realpathSync(d), realRoot);
+}
+export function adoptLegacyHarness({ ws = workspaceRoot(), root = dataRoot(), yes = false, maxFiles = LIMITS.maxFiles, timeoutS = LIMITS.timeoutS, maxJsonlBytes = LIMITS.legacyJsonlMaxBytes, now = new Date() } = {}) {
+  const res = { dryRun: !yes, applicable: !!workspaceMarker(ws), appended: [], moved: [], inbox: [], errors: [], removed: false, truncated: null };
   const src = path.join(ws, '.harness', 'data');
   if (!res.applicable || !fs.existsSync(src)) return res;
-  const w = walk(src, { maxFiles, deadline: Date.now() + timeoutS * 1000 });
-  res.truncated = w.truncated || null;
-  const inbox = path.join(root, '_inbox', today(now), 'legacy-harness');
+  if (isInside(root, src) || isInside(src, root)) { res.errors.push({ file: '.', error: 'dataRoot trung/long .harness/data (vd HUB_DATA_DIR=<ws>/.harness/data): khong lam gi' }); return res; }
   const deadline = Date.now() + timeoutS * 1000;
+  const w = walk(src, { maxFiles, deadline });
+  res.truncated = w.truncated || null;
+  let realRoot; try { realRoot = fs.realpathSync(fs.existsSync(root) ? root : path.dirname(root)); } catch { realRoot = path.resolve(root); }
+  const inbox = path.join(root, '_inbox', today(now), 'legacy-harness');
+  const toInbox = new Map(); // dbKey -> quyet dinh nhom, chot truoc khi chuyen bat ky file nao cua nhom
+  const err = (file, e) => res.errors.push({ file, error: String(e && e.message || e) });
   for (const f of w.files) {
     if (Date.now() > deadline) { res.truncated = 'timeout'; break; }
-    const rel = path.relative(src, f.p); const to = path.join(root, rel); const relP = rel.replace(/\\/g, '/');
+    const rel = path.relative(src, f.p); const relP = rel.replace(/\\/g, '/');
     try {
-      if (rel.endsWith('.jsonl')) {
-        const have = new Set(fs.existsSync(to) ? fs.readFileSync(to, 'utf8').split(/\r?\n/) : []);
-        const add = []; for (const l of fs.readFileSync(f.p, 'utf8').split(/\r?\n/)) if (l.trim() && !have.has(l)) { have.add(l); add.push(l); }
-        res.appended.push({ file: relP, lines: add.length });
-        if (yes) { if (add.length) { fs.mkdirSync(path.dirname(to), { recursive: true }); const cur = fs.existsSync(to) ? fs.readFileSync(to, 'utf8') : ''; fs.appendFileSync(to, (cur && !cur.endsWith('\n') ? '\n' : '') + add.join('\n') + '\n'); } fs.unlinkSync(f.p); }
-      } else if (!fs.existsSync(to)) {
-        res.moved.push(relP);
-        if (yes) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.renameSync(f.p, to); }
-      } else {
-        res.inbox.push(relP);
-        if (yes) { const d = path.join(inbox, rel); fs.mkdirSync(path.dirname(d), { recursive: true }); fs.renameSync(f.p, d); }
+      if (fs.lstatSync(f.p).isSymbolicLink()) { err(relP, 'symlink, bo qua'); continue; }
+      const to = path.join(root, rel);
+      let goInbox = false;
+      if (DB_FAMILY.test(rel)) { const k = dbKey(rel); if (!toInbox.has(k)) toInbox.set(k, fs.existsSync(path.join(root, k))); goInbox = toInbox.get(k); }
+      else if (!rel.endsWith('.jsonl')) goInbox = fs.existsSync(to);
+      if (rel.endsWith('.jsonl') && !goInbox) {
+        if (!insideRoot(to, realRoot)) { err(relP, 'dich ra ngoai dataRoot (symlink/junction)'); continue; }
+        const dstSize = fs.existsSync(to) ? fs.statSync(to).size : 0;
+        if (fs.statSync(f.p).size > maxJsonlBytes || dstSize > maxJsonlBytes) goInbox = true;
+        else {
+          const cur = dstSize ? fs.readFileSync(to, 'utf8') : '';
+          const have = new Set(cur.split(/\r?\n/));
+          const add = []; for (const l of fs.readFileSync(f.p, 'utf8').split(/\r?\n/)) if (l.trim() && !have.has(l)) { have.add(l); add.push(l); }
+          if (yes) {
+            if (add.length) { fs.mkdirSync(path.dirname(to), { recursive: true }); fs.appendFileSync(to, (cur && !cur.endsWith('\n') ? '\n' : '') + add.join('\n') + '\n'); }
+            fs.unlinkSync(f.p);
+          }
+          res.appended.push({ file: relP, lines: add.length });
+          continue;
+        }
       }
-    } catch { /* bo qua file loi, giu nguyen nguon */ }
+      const dest = goInbox ? path.join(inbox, rel) : to;
+      if (!insideRoot(dest, realRoot)) { err(relP, 'dich ra ngoai dataRoot (symlink/junction)'); continue; }
+      if (yes) { fs.mkdirSync(path.dirname(dest), { recursive: true }); moveNew(f.p, dest); }
+      (goInbox ? res.inbox : res.moved).push(relP);
+    } catch (e) { err(relP, e); }
   }
-  if (yes && !res.truncated) {
-    // Xoa .harness neu chi con thu muc rong + .gitignore
-    const left = []; const rec = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) rec(p); else left.push(p); } };
+  if (yes && !res.truncated && !res.errors.length) {
+    // Kiem lai ngay truoc khi xoa: chi con .gitignore (khong con file/symlink khac) thi moi xoa .harness
     const hd = path.join(ws, '.harness');
-    try { rec(hd); if (left.every((p) => path.relative(hd, p) === '.gitignore')) { fs.rmSync(hd, { recursive: true, force: true }); res.removed = true; } } catch { /* giu lai */ }
+    try {
+      const left = []; const rec = (d) => { for (const e of fs.readdirSync(d, { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) rec(p); else left.push(p); } };
+      if (fs.lstatSync(hd).isDirectory()) { rec(hd); if (left.every((p) => path.relative(hd, p) === '.gitignore')) { fs.rmSync(hd, { recursive: true, force: true }); res.removed = true; } }
+    } catch (e) { err('.harness', e); }
   }
   return res;
 }
@@ -454,7 +492,7 @@ export async function run(argv = process.argv.slice(2)) {
       const a = adoptLegacyHarness({ yes, timeoutS: o.timeoutS || LIMITS.timeoutS });
       logAccess('adopt', r, { legacyHarness: true, appended: a.appended.length, moved: a.moved.length, inbox: a.inbox.length, yes });
       if (!a.applicable) return { code: 1, ...emit({ summary: 'adopt --legacy-harness: workspace khong co dau hieu (config/workspace|hub/default.json), khong lam gi', data: a }, o) };
-      return { code: 0, ...emit({ summary: `${a.dryRun ? 'dry-run: se gom' : 'da gom'} .harness/data: noi ${a.appended.length} jsonl, chuyen ${a.moved.length}, vao _inbox ${a.inbox.length}${a.removed ? ', da xoa .harness' : ''}${a.dryRun ? ' (them --yes)' : ''}`, data: a, truncated: a.truncated }, o) };
+      return { code: a.errors.length ? 1 : 0, ...emit({ summary: `${a.dryRun ? 'dry-run: se gom' : 'da gom'} .harness/data: noi ${a.appended.length} jsonl, chuyen ${a.moved.length}, vao _inbox ${a.inbox.length}${a.removed ? ', da xoa .harness' : ''}${a.dryRun ? ' (them --yes)' : ''}${a.errors.map((e) => `\nLOI ${e.file}: ${e.error}`).join('')}`, data: a, truncated: a.truncated }, o) };
     }
     if (cmd === 'adopt') {
       const a = adopt({ root, reg, yes });
