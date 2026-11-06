@@ -1,6 +1,6 @@
 {
   "name": "harness-kit",
-  "version": "0.3.6",
+  "version": "0.3.7",
   "license": "Apache-2.0",
   "description": "Lop rang buoc tat dinh cho agent: guard, data zone, audit, cong CLI, hook dispatcher.",
   "author": {

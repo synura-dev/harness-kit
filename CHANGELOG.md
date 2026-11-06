@@ -2,7 +2,7 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
-## Unreleased
+## 0.3.7
 - Sua loi du lieu lac `<ws>/.harness/data`: quy tac workspace co dau hieu (config/workspace|hub/default.json => data `<ws>/data`, config `<ws>/config`) nay nam o loi (`dataDir`, `ensureDataIgnore`, `loadConfig`), khong chi o wrapper; them `harness data adopt --legacy-harness` + canh bao `harness doctor`.
 
 ## 0.3.6
