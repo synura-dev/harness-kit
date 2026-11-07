@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.9
+- agy: harness-kit la plugin agy native (`.antigravity-plugin/plugin.json` + `hooks.json` o goc -> `harness/hooks/dispatch/agy-native.mjs`, workspace lay tu stdin `workspacePaths`). Cai global mot lan: `agy plugin install "<thu muc plugin Claude>"`; bat theo du an bang `enabledPlugins["harness-kit@synura"]: true` trong `.claude/settings.json` (khong bat -> hook cho qua, khong ghi gi). Bo shim `.agents/harness-agy-shim.mjs`, `.agents/hooks.json`, `harness agy init --legacy`, module agy-heal; khong sinh ban chep `.agents/skills`. `harness agy init` kiem cai global, lech version, du an da bat. Playbook co bien dung san `${harnessBin}` (`node ${harnessBin} <lenh>`).
+
 ## 0.3.8
 - Sua loi ext-guard fail-open trong phien that: hook nhan `CLAUDE_PLUGIN_DATA=<data>/<ten>-<marketplace>` con CLI (khong co bien nay) dung `<data>/<ten>`, nen hook doc registry ext rong va cho qua moi tool. `pluginLayerDirs` nay suy id `<ten>@<marketplace>` (ky tu ngoai `[A-Za-z0-9_-]` -> `-`) tu duong dan cache nhu Claude Code; dung thu muc cu `<data>/<ten>` khi primary chua co `config/ext/local.json` (CLI va hook cung mot thu muc, khong migrate). guard-health canh bao `ext-registry-split` khi thu muc cu con registry ma dang dung thu muc khac. Root ngoai cache (HARNESS_PLUGIN_DIR, --plugin-dir) giu hanh vi cu.
 
