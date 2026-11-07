@@ -6,7 +6,7 @@ const model = (i, inp, cr, out) => L({ step_index: i, source: 'MODEL', type: 'PL
 
 test('sumAgyUsage cong token buoc MODEL, shape sumUsage', () => {
   const r = sumAgyUsage([model(1, 100, 10, 5), model(2, 200, 20, 7)].join('\n'));
-  expect(r).toEqual({ input: 300, output: 12, cache_read: 30, cache_creation: 0, total_tokens: 312, msgs: 2, model: null });
+  expect(r).toEqual({ input: 300, output: 12, cache_read: 30, cache_creation: 0, total_tokens: 312, msgs: 2, model: null, tool_ms: 0, tool_steps: 0 });
 });
 
 test('dedupe theo step_index, lay output lon nhat', () => {
@@ -71,4 +71,24 @@ test('exitCodeOf / exitStatusOf', () => {
   expect(exitStatusOf('exit status 1')).toBe(1);
   expect(exitStatusOf('boom')).toBeNull();
   expect(exitStatusOf(undefined)).toBeNull();
+});
+
+test('sumAgyUsage: tool_ms/tool_steps tu dong GENERIC (khong am, khong tinh PLANNER), msgs chi dem buoc token', () => {
+  const t = [
+    gen(1, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:00Z')),
+    gen(2, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:01Z')),
+    gen(3, span('2026-10-29T01:00:05Z', '2026-10-29T01:00:00Z')),
+    gen(4, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:09Z'), 'PLANNER_RESPONSE'),
+    model(5, 10, 0, 2),
+  ].join('\n');
+  const r = sumAgyUsage(t);
+  expect(r.tool_ms).toBe(1000); expect(r.tool_steps).toBe(2); expect(r.msgs).toBe(1);
+  const only = sumAgyUsage(gen(1, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:02Z')));
+  expect(only.msgs).toBe(0); expect(only.tool_ms).toBe(2000);
+  expect(sumAgyUsage(model(1, 1, 1, 1)).tool_steps).toBe(0);
+});
+
+test('sumAgyUsage: dedupe GENERIC theo step_index', () => {
+  const g = gen(7, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:02Z'));
+  expect(sumAgyUsage([g, g].join('\n')).tool_steps).toBe(1);
 });

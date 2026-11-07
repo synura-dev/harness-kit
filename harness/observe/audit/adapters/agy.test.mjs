@@ -297,35 +297,24 @@ test('Stop: transcript 2MB < 1500ms', () => {
   expect(r).toBeDefined();
 });
 
-test('Post: dur tu transcript (duong dan suy tu conversationId), dur_src, exit code', () => {
+test('Post: KHONG doc transcript (agy ghi GENERIC sau hook): khong dur/exit tu transcript', () => {
   const root = mkRoot(); const home = mkRoot();
   const f = agyTranscriptPath('c1', home); fs.mkdirSync(path.dirname(f), { recursive: true });
   fs.writeFileSync(f, gen(4, 'Command exited with code 3.') + '\n');
   const r = call({ toolCall: { name: 'run_command', args: { CommandLine: 'x' } }, stepIdx: 4 }, { root, home });
-  expect(r.dur_ms).toBe(2000); expect(r.data.dur_src).toBe('transcript'); expect(r.data.exit_code).toBe(3);
+  expect(r.dur_ms == null).toBe(true); expect(r.data.dur_src).toBeUndefined(); expect(r.data.exit_code).toBeUndefined();
+  expect(r.ok).not.toBe(false);
 });
 
-test('Post: exit code khac 0 tu transcript -> ok:false/status error; exit 0 giu ok', () => {
-  const root = mkRoot(); const home = mkRoot();
-  const f = agyTranscriptPath('c1', home); fs.mkdirSync(path.dirname(f), { recursive: true });
-  fs.writeFileSync(f, gen(4, 'Command exited with code 3.') + '\n' + gen(5, 'Command exited with code 0.') + '\n');
-  const p = { toolCall: { name: 'run_command', args: { CommandLine: 'x' } }, error: '' };
-  const bad = call({ ...p, stepIdx: 4 }, { root, home });
-  expect(bad.ok).toBe(false); expect(bad.status).toBe('error'); expect(bad.data.exit_code).toBe(3);
-  const good = call({ ...p, stepIdx: 5 }, { root, home });
-  expect(good.ok).not.toBe(false); expect(good.status).not.toBe('error');
-});
-
-test('Post: conversationId co .. -> khong suy duong dan transcript', () => {
-  const root = mkRoot(); const home = mkRoot();
-  const f = path.join(home, '.gemini', 'antigravity-cli', 'brain', 'x', '.system_generated', 'logs', 'transcript_full.jsonl');
-  fs.mkdirSync(path.dirname(f), { recursive: true });
-  fs.writeFileSync(f, gen(1) + '\n');
-  for (const id of ['..', 'a/../b', '../brain/x']) {
-    const r = call({ conversationId: id, toolCall: { name: 'read_file', args: { Path: 'a' } }, stepIdx: 1 }, { root, home });
-    expect(r.dur_ms == null).toBe(true);
-  }
-  expect(call({ conversationId: 'x', toolCall: { name: 'read_file', args: { Path: 'a' } }, stepIdx: 1 }, { root, home }).dur_ms).toBe(2000);
+test('Stop: data.usage.tool_ms/tool_steps theo delta (lan hai chi buoc moi)', () => {
+  const root = mkRoot(); const f = path.join(root, 't.jsonl');
+  fs.writeFileSync(f, model(1, 1, 1, 0) + '\n' + gen(2) + '\n' + gen(3) + '\n');
+  const stop = { hookEventName: 'Stop', transcriptPath: fwd(f), terminationReason: 'NO_TOOL_CALL' };
+  const r1 = call(stop, { root });
+  expect(r1.data.usage.tool_ms).toBe(4000); expect(r1.data.usage.tool_steps).toBe(2);
+  fs.appendFileSync(f, gen(4) + '\n' + model(5, 1, 1, 0) + '\n');
+  const r2 = call(stop, { root });
+  expect(r2.data.usage.tool_ms).toBe(2000); expect(r2.data.usage.tool_steps).toBe(1);
 });
 
 test('Post: marker thang transcript; khong transcript -> fail-open', () => {
