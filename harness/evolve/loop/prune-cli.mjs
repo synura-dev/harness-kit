@@ -1,4 +1,5 @@
 // evolve scan deprecate [--days N] [--json] [--record]: giu harness gon (tran + deprecate theo muc dung).
+import fs from 'node:fs';
 import path from 'node:path';
 import { workspaceRoot, dataDir } from '../../core/io/paths.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
@@ -7,8 +8,31 @@ import { auditRoot } from '../../core/audit/audit-write.mjs';
 import { capLines } from '../../core/io/out.mjs';
 import { pruneCandidates, readState, writeState, wireDefaults } from './prune.mjs';
 import { listRegistered } from '../../core/ext/ext-trust.mjs';
+import { acquireLock } from '../../core/runtime/lockfile.mjs';
+import { isAlive } from '../../core/runtime/proc.mjs';
+
+const LOCK_MS = 600000;
+const lockInfo = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+
+// Quet day du chay duoi khoa canh cache (transcripts.lock: pid + ts). Khoa song (pid con + < 10 phut) -> {busy: pid}; cu/pid chet -> don va lay. Luon nha trong finally.
+export async function withScanLock(dir, fn) {
+  const base = path.join(dir, 'transcripts'), lf = `${base}.lock`;
+  const cur = lockInfo(lf);
+  if (cur && Number.isInteger(cur.pid) && isAlive(cur.pid) && Date.now() - cur.ts < LOCK_MS) return { busy: cur.pid };
+  if (cur) { try { fs.unlinkSync(lf); } catch { /* da mat */ } }
+  const release = acquireLock(base, { staleMs: LOCK_MS, retries: 0 });
+  if (!release) return { busy: lockInfo(lf)?.pid ?? '?' };
+  try { return { value: await fn() }; } finally { release(); }
+}
 
 export async function runPrune(o = {}) {
+  const evo0 = path.resolve(o.dataRoot || (dataReadRoots('evolve')[0] || dataPathFor('evolve')));
+  const lockDir = o.transcriptCache ? path.dirname(path.resolve(o.transcriptCache)) : evo0;
+  const L = await withScanLock(lockDir, () => runPruneInner(o));
+  return L.busy !== undefined ? { code: 0, summary: `busy: pid ${L.busy} (dang quet transcript; thu lai sau)`, data: { busy: L.busy }, truncated: false } : L.value;
+}
+
+async function runPruneInner(o) {
   const hub = path.resolve(o.hubRoot || process.env.CLAUDE_PROJECT_DIR || workspaceRoot());
   const evo = path.resolve(o.dataRoot || (dataReadRoots('evolve')[0] || dataPathFor('evolve')));
   const auditDirs = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);

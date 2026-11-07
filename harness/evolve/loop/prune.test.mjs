@@ -335,3 +335,12 @@ test('integ: usage_detail co channels, sessions, ids day du, projects cho --deta
   const d = r.usage_detail['skill:old'];
   assert.equal(d.count, 1); assert.deepEqual(d.channels, { tool: 1 }); assert.deepEqual(d.ids, ['superpowers:old']); assert.deepEqual(d.session_ids, ['s1']);
 });
+
+test('cache-only (job nen): khong co cache -> khong doc transcript, skill insufficient_window, khong tao cache', async () => {
+  const t = ISO(NOW - DAY);
+  const cf = path.join(tmp(), 'tc.jsonl');
+  const nc = await integ({ tr: asst(t, 's1', [skillUse('t1', 'old')]), opts: { transcriptCache: cf, transcriptCacheOnly: true, gateWindow: true, auditDay: ISO(NOW - 40 * DAY).slice(0, 10) } });
+  assert.equal(nc.r.sources.transcript, undefined);
+  assert.equal(nc.dep('old').status, 'insufficient_window');
+  assert.equal(fs.existsSync(cf), false);
+});

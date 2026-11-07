@@ -78,7 +78,11 @@ function saveCache(file, m) { // tmp theo pid: job SessionStart + CLI chay dong 
   } catch { try { fs.rmSync(tmp, { force: true }); } catch { /* bo qua */ } }
 }
 
-export async function readTranscripts({ roots = [path.join(os.homedir(), '.claude', 'projects')], fromMs = 0, nowMs = Date.now(), limits = {}, cacheFile = null } = {}) {
+// Goc transcript mac dinh theo env cua chinh Claude (CLAUDE_CONFIG_DIR) -> test/tien trinh phu co the cach ly bang thu muc tam.
+export const defaultTranscriptRoot = () => path.join(process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude'), 'projects');
+
+// cacheOnly: KHONG parse file nao (files_parsed=0), chi dung entry cache (ke ca entry cu), khong ghi cache. Cho job nen.
+export async function readTranscripts({ roots = [defaultTranscriptRoot()], fromMs = 0, nowMs = Date.now(), limits = {}, cacheFile = null, cacheOnly = false } = {}) {
   const cache = cacheFile ? loadCache(cacheFile, limits.cacheMaxBytes ?? TRANSCRIPTS.limits.cacheMaxBytes) : null;
   const cold = !!cache && cache.size === 0; // khong co entry hop le -> tran lon de lan dau (hoac doi dinh dang) khong bi cat
   const L = { ...(cold ? TRANSCRIPTS.coldLimits : TRANSCRIPTS.limits), ...limits };
@@ -110,7 +114,8 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
       const rel = path.relative(root, f).split(path.sep);
       const project = rel.length > 1 ? rel[0] : '';
       const hit = cache?.get(f);
-      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) { cache_hits++; mergeSess(hit.sess, project); for (const r of hit.records) add(r); continue; }
+      if (hit && (cacheOnly || (hit.mtimeMs === st.mtimeMs && hit.size === st.size))) { cache_hits++; mergeSess(hit.sess, project); for (const r of hit.records) add(r); continue; }
+      if (cacheOnly) continue;
       if (files_parsed >= L.maxFiles) { truncated = 'max_files'; break outer; }
       if (bytes_parsed + st.size > L.maxBytes) { truncated = 'max_bytes'; break outer; }
       bytes_parsed += st.size; files_parsed++;
@@ -139,7 +144,7 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
       if (cache) fresh.set(f, { v: CACHE_V, file: f, mtimeMs: st.mtimeMs, size: st.size, records: mine, sess });
     }
   }
-  if (cache) {
+  if (cache && !cacheOnly) {
     // giu entry cu con ton tai + trong cua so (ke ca file chua tham do vi bi cat); entry moi ghi de
     const out = new Map();
     for (const [f, e] of cache) {

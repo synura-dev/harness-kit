@@ -15,3 +15,4 @@
 - `--cost`: chi phi = desc_tokens x so phien co nap + body_tokens x so lan dung. `--by-project`: dem theo du an. `--detail kind:id[,kind:id]`: kenh, ids, phien, mau su kien.
 - Transcript `~/.claude/projects/**/*.jsonl` doc tang dan, cache `data/evolve/transcripts-cache.jsonl`; cold (cache rong) tran 4GB/120s, warm 512MB/20s, qua tran -> `truncated`.
 - `harness doctor` them `skill-drift`: ban sao skill (.claude/skills, .agents/skills, plugin cache) lech hash -> warn, thieu -> info.
+- Job nen (pruneSource) chi doc cache transcript (cacheOnly, khong parse); chua co cache -> bo qua transcript, skill = insufficient_window. CLI quet day du chay duoi khoa `transcripts.lock` canh cache (song -> `busy: pid X`). Goc transcript theo `CLAUDE_CONFIG_DIR`.
