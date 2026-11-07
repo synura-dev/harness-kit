@@ -60,14 +60,16 @@ test('verdictOf: metric phu te hon >= 30% -> side, verdict khong doi', () => {
 test('computeWindow: dem dung, loai HookRun', () => {
   const stop = (ts, sid, ti, to) => ({ v: 2, ts, type: 'session', event: 'Stop', sid, ok: true, tokens_in: ti, tokens_out: to, data: {} });
   const sig = (ts, sid, s) => ev(ts, sid, { data: { signal: s } });
+  // correction that su nam tren UserPromptSubmit (audit.mjs:189-192)
+  const prompt = (ts, sid, s) => ({ v: 2, ts, type: 'prompt', event: 'UserPromptSubmit', sid, ok: true, data: { signal: s } });
   day('2026-10-29', 's1', 20, 3, [{ v: 2, ts: '2026-10-29T03:00:00Z', type: 'hook', event: 'HookRun', sid: 's1', ok: false, data: { error: 'cannot find module foo' } },
-    stop('2026-10-29T04:00:00Z', 's1', 600, 400), sig('2026-10-29T05:00:00Z', 's1', 'correction'), sig('2026-10-29T05:01:00Z', 's1', 'interrupt'), sig('2026-10-29T05:02:00Z', 's1', 'revert')]);
+    stop('2026-10-29T04:00:00Z', 's1', 300, 200), stop('2026-10-29T04:30:00Z', 's1', 300, 200), prompt('2026-10-29T05:00:00Z', 's1', 'correction'), sig('2026-10-29T05:01:00Z', 's1', 'interrupt'), sig('2026-10-29T05:02:00Z', 's1', 'revert')]);
   day('2026-10-28', 's2', 10, 0, [stop('2026-10-28T04:00:00Z', 's2', 1000, 0)]);
   day('2026-10-10', 's3', 50, 5); // ngoai cua so
   const r = computeWindow(audit, FP, NOW - 7 * DAY, NOW, opts());
   expect(r.target_count).toBe(3);
-  expect(r.tool_calls).toBe(20 + 3 + 3 + 10); // 20 ok + 3 loi + 3 ev tin hieu + 10; HookRun/Stop khong tinh
-  expect(r.rate_per_1000).toBeCloseTo((3 * 1000) / 36, 5);
+  expect(r.tool_calls).toBe(20 + 3 + 2 + 10); // 20 ok + 3 loi + interrupt/revert (tool) + 10; HookRun/Stop/prompt khong tinh
+  expect(r.rate_per_1000).toBeCloseTo((3 * 1000) / 35, 5);
   expect(r.sessions).toBe(2);
   expect(r.tokens_per_session).toBe(1000);
   expect(r.corrections_per_session).toBe(1);
@@ -108,5 +110,35 @@ test('measureDue: khong baseline -> tinh bu tu audit neu con trong cua so, khong
   expect(x.effect.baseline).toMatchObject({ target_count: 4, tool_calls: 204 });
   expect(x.effect.verdict).toBe('better');
   const [y] = measureDue([prop('old', { effect: undefined, applied_at: '2026-09-01T00:00:00Z' })], NOW, opts());
-  expect(y.effect).toMatchObject({ verdict: 'insufficient', reason: 'no_baseline' });
+  expect(y.effect).toMatchObject({ verdict: 'inconclusive', reason: 'no_baseline', action: 'keep' }); // qua 21 ngay -> chot, khong doc lai mai
+});
+
+test('measureDue: nhom chi 1 loi trong cua so after van dem la 1 (khong bias better)', () => {
+  day('2026-10-27', 's1', 300, 1);
+  const [x] = measureDue([prop('a', { effect: { baseline: base({ target_count: 3, rate_per_1000: 3 }) } })], NOW, opts());
+  expect(x.effect.after.target_count).toBe(1);
+  expect(x.effect.verdict).toBe('unchanged');
+});
+
+test('nhom fp on dinh khi bien the co mfp nho hon xuat hien', () => {
+  const msgs = ['cannot find module foo', 'cannot find module bar'];
+  const m = msgs.map((s) => messageFingerprint(extractErrorDetails(errEv('2026-10-29T00:00:00Z', 's', s)), 'Bash'));
+  const big = m[0] > m[1] ? 0 : 1; // fp cua proposal = mfp lon hon; bien the kia nho hon -> _fp cua nhom doi
+  write('2026-10-29', 's1', [errEv('2026-10-29T01:00:00Z', 's1', msgs[big]), errEv('2026-10-29T02:00:00Z', 's1', msgs[1 - big]), errEv('2026-10-29T03:00:00Z', 's1', msgs[1 - big])]);
+  const r = computeWindow(audit, m[big], NOW - 7 * DAY, NOW, opts());
+  expect(r.target_count).toBe(3);
+});
+
+test('measureDue: truncated luon insufficient ke ca qua 21 ngay', () => {
+  day('2026-10-26', 's1', 300, 1); day('2026-10-27', 's1', 300, 1);
+  const [x] = measureDue([prop('a', { applied_at: '2026-10-01T00:00:00Z' })], NOW, opts({ limits: { query_max_rows: 10 } }));
+  expect(x.effect).toMatchObject({ verdict: 'insufficient', reason: 'truncated', action: 'none' });
+});
+
+test('measureDue: effect.ver; applied_at lay tu applied.jsonl khi proposal thieu; override limits tung truong', () => {
+  day('2026-10-26', 's1', 300, 1); day('2026-10-27', 's1', 300, 1);
+  const evo = path.join(tmp, 'evo'); fs.mkdirSync(evo, { recursive: true });
+  fs.writeFileSync(path.join(evo, 'applied.jsonl'), JSON.stringify({ ts: '2026-10-20T00:00:00Z', op: 'apply', ok: true, id: 'a' }) + '\n');
+  const [x] = measureDue([prop('a', { applied_at: undefined, ver: 'v9' })], NOW, opts({ dataRoot: evo, limits: { query_max_bytes: 0 } }));
+  expect(x.effect).toMatchObject({ verdict: 'better', ver: 'v9' });
 });
