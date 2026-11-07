@@ -15,7 +15,7 @@ export const TOP_DIRS = Object.freeze(['core', 'cli', 'hooks', 'tools', 'tests',
 export const GROUP_ZONES = Object.freeze(['observe', 'constrain', 'evolve', 'build']);
 export const TOP_FILES = Object.freeze(['README.md']);
 /** File duoc phep o goc repo (TOP_FILES chi cho harness/); scan dung de bao repo-clutter. File mo rong (vd TASKS.md cua hub) lay tu config workspace khoa repoRootFiles. Dotfile va *.code-workspace luon duoc phep. */
-export const REPO_ROOT_FILES = Object.freeze(['README.md', 'AGENTS.md', 'CLAUDE.md', 'package.json', 'skills-lock.json', 'LICENSE']);
+export const REPO_ROOT_FILES = Object.freeze(['README.md', 'AGENTS.md', 'CLAUDE.md', 'package.json', 'skills-lock.json', 'LICENSE', 'hooks.json']); // hooks.json: manifest hook plugin agy native (bat buoc o goc plugin)
 
 
 /** Thu tu cau hinh tu thap -> cao (D3): default < may < du an < env < flag. */
