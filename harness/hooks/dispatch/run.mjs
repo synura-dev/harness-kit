@@ -123,7 +123,6 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
       state.fc.has(m.id) && (state.fc.get(m.id).done = true);
       if (!kind && validateHookResult(res).length) kind = 'bad-result';
-      if (kind && m.mod.failClosedOnMatch && state.fc.get(m.id)?.ctx?.guardMatched) { state.items.push({ id: m.id, result: { decision: 'deny', reason: `dispatch[${m.id}]: ${kind} (fail-closed)` } }); state.denied = true; }
       state.timings.push({ id: m.id, ms: Date.now() - t0, ...(kind ? { err: kind } : {}) });
       if (kind) {
         trace(m.id, kind);
@@ -145,8 +144,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
     const left = Math.max(50, budget + extra - (Date.now() - startedAt));
     const w = await Promise.race([work().then(() => null), new Promise((res) => { const t = setTimeout(() => res(TIMEOUT), left); t.unref(); })]);
     if (w === TIMEOUT) timedOut = true;
-  } catch { for (const [id, f] of state.fc) if (f.ctx?.guardMatched) state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: dispatch-error (fail-closed)` } }); state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
-  if (timedOut) for (const [id, f] of state.fc) if (!f.done && f.ctx?.guardMatched) { state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: budget-timeout (fail-closed)` } }); state.traces.push(traceRec('module-error', `${id}: budget-timeout fail-closed`)); }
+  } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
   if (timedOut) { state.traces.push(traceRec('module-error', 'dispatch: budget-timeout')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'budget-timeout')); }
   const merged = mergeResults(state.items);
   const out = profile.render(ev, merged);
