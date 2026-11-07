@@ -1,6 +1,7 @@
 # harness (lop dung chung cho moi CLI)
 
 - `harness` la lop dung chung cho moi CLI agent; Claude va agy dung chung du lieu (audit, kho tri thuc, du an/task), khong dung chung cau hinh.
+- Neu `harness` khong co tren PATH thi dung `node <goc plugin>/bin/harness <domain> <lenh>`.
 - Goi `harness <domain> <lenh>`. Lenh co san tren PATH (plugin dua `bin/` vao PATH). Tra cuu: `harness` (liet ke domain), `harness doctor` (kiem moi truong).
 - Lenh doc tu chay duoc khong can duyet: `harness doctor`, `harness data ls|stat|scan`, `harness observe usage|report`, `harness knowledge search|get|fact|role`, `harness projects list|get|tasks`.
   Viet MOT lenh don, khong pipe/`&&`/redirect/quote; lenh khac (ghi, `ext`, `install`, co `--apply|--yes|--force`) can nguoi duyet.

@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from '../runtime/proc.mjs';
 import { isPluginMode, REPO_DIR } from '../io/paths.mjs';
 import { pluginLayerDirs } from '../config/config.mjs';
+import { readRoots, rootsFile, defaultShimDir } from '../runtime/user-shim.mjs';
 
 const HASH_LIMITS = Object.freeze({ maxFiles: 5000, maxBytes: 32 * 1024 * 1024 });
 // Chi bo .git. node_modules DUOC hash: code import tu node_modules chay voi quyen extension, bo qua thi doi noi dung khong lech.
@@ -77,7 +78,7 @@ export function machineFile(opts = {}) {
 export function readAll(opts) {
   const f = machineFile(opts);
   let txt;
-  try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return { extensions: {} }; throw new Error(`dang ky extension khong doc duoc (${e && e.code}): ${f}`); }
+  try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return { extensions: {} }; throw new Error(`dang ky extension khong doc duoc (${e && e.code}): ${f}. CHAN (fail-closed). Nguoi dung chay \`harness ext approve <id>\` o terminal de dong bo dang ky vao thu muc du lieu cua CLI nay.`); }
   const broken = () => new Error(`dang ky extension hong (JSON loi/sai kieu): ${f}. KHONG ghi de; moi external bi CHAN. Nguoi dung sua tay hoac khoi phuc file (hoac xoa de dang ky lai tu dau) roi chay lai.`);
   let j; try { j = JSON.parse(txt.replace(/^﻿/, '')); } catch { throw broken(); }
   if (!j || typeof j !== 'object' || Array.isArray(j)) throw broken();
@@ -87,7 +88,24 @@ export function readAll(opts) {
 }
 export function writeAll(opts, j) {
   const f = machineFile(opts); fs.mkdirSync(path.dirname(f), { recursive: true });
-  const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(j, null, 2) + '\n'); fs.renameSync(t, f);
+  const text = JSON.stringify(j, null, 2) + '\n';
+  const atomic = (file) => { const t = `${file}.${process.pid}.tmp`; try { fs.writeFileSync(t, text); fs.renameSync(t, file); } catch (e) { try { fs.unlinkSync(t); } catch { /* khong co */ } throw e; } };
+  atomic(f);
+  // Sao nguyen van sang thu muc du lieu cua CLI khac (roots.json `data`), de CLI do (agy khong doc duoc ~/.claude) doc ban cua chinh no.
+  // Day chi la ban chep quyet dinh cua nguoi dung (hash ghim van kiem luc chay). Chi chay trong writeAll (CLI TTY); mot ban loi -> canh bao, giu ban chinh.
+  const underTest = process.env.NODE_ENV === 'test' || !!process.env.BUN_TEST;
+  if (!opts.shimDir && (underTest || opts.machineFile)) return; // test / duong tiem tay: khong cham home that
+  let roots; try { roots = readRoots(rootsFile(opts.shimDir || defaultShimDir({ env: opts.env || process.env }))); } catch { return; }
+  const self = path.resolve(f);
+  for (const [tool, ent] of Object.entries(roots)) {
+    if (!ent || typeof ent.data !== 'string' || !ent.data) continue;
+    const dest = path.join(path.resolve(ent.data), 'config', 'ext', 'local.json');
+    if (dest === self) continue;
+    try {
+      if (!fs.existsSync(ent.data)) continue;
+      fs.mkdirSync(path.dirname(dest), { recursive: true }); atomic(dest);
+    } catch (e) { console.error(`ext: canh bao: khong sao chep dang ky sang ${tool} (${dest}): ${e && e.code || e && e.message}`); }
+  }
 }
 export const findKey = (all, ws) => Object.keys(all.extensions).find((k) => sameWs(k, ws));
 

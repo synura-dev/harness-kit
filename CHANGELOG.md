@@ -2,6 +2,14 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.1
+### Added
+- agy dung duoc extension da duyet: `harness ext approve|register|remove` (TTY) ghi dang ky vao thu muc du lieu cua CLI hien tai va sao nguyen van sang moi thu muc `data` da dang ky trong `roots.json` (SessionStart moi CLI ghi `data` cua minh). agy doc `plugin_data/<ten>` canh `plugins/`, khong cham `~/.claude`; thieu/khong doc duoc -> fail-closed, thong bao chay `harness ext approve` o terminal. Hash ghim van kiem luc chay.
+- Guard `ext-config-protect` chan them `plugin_data/<ten>/config/` va `bin/roots.json`.
+- `rules/AGENTS.md`: neu `harness` khong co tren PATH thi dung `node <goc plugin>/bin/harness`.
+### Migration
+- Nguoi dung chay lai `harness ext approve <id>` o terminal mot lan de dong bo dang ky sang agy.
+
 ## 0.4.0
 ### Added
 - agy chi can `agy plugin install <goc plugin>`: agy dua `bin/` cua plugin vao PATH va tu nap `rules/AGENTS.md`. Hook agy mac dinh bat, khong doc `.claude`; tat bang `HARNESS_AGY=0` hoac file `.harness/agy.off`.

@@ -32,7 +32,8 @@ const PLUGIN_PATH = String.raw`\.claude[\\/]+plugins[\\/]+(?:(?:installed_plugin
 const PLUGIN_CMD_RE = new RegExp(`${LAUNCHER_VERB}[^\\n;|&]*?${PLUGIN_PATH}|>>?\\s*["']?[^\\s"']*${PLUGIN_PATH}|(?:writeFile|appendFile|rename|unlink|rm|rmdir|copyFile|cp)(?:Sync)?\\s*\\([^)]*${PLUGIN_PATH}`, 'i');
 const PLUGIN_REASON = 'Cam sua so dang ky plugin (installed_plugins.json/known_marketplaces.json) va thu muc plugin guard; chi nguoi dung sua (claude plugin ...). / Plugin registry and guard plugin files are protected; the human changes them.';
 /** Bao ve cung (trong code, config/lop du an khong tat duoc): file dang ky extension lop may (config/ext/local.json) + lenh ext register/approve tu agent. */
-const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b/i;
+// Moi ban sao: config/ext/local.json (ca plugin_data cua agy), moi thu duoi plugin_data/ (thu muc du lieu plugin cua CLI khac), roots.json (truong `data` chi ban sao).
+const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b|(?:^|[^\w-])plugin_data[\\/]+[\w.@-]+[\\/]+config[\\/]|(?:^|[^\w-])bin[\\/]+roots\.json\b/i;
 // Chi chan lenh GHI/CHAY: `harness ext register|approve`; ext-cmd/ext-registry cung dong voi register|approve; chay ext-cmd bang node/bun/deno;
 // ghi/xoa/di chuyen file ext-cmd/ext-registry (LAUNCHER_VERB, redirect). Lenh chi doc (git diff/log/show, cat, rg, grep...) duoc qua (isReadOnlyCmd).
 const EXT_FILE = String.raw`ext-(?:cmd|registry)(?:\.mjs)?(?![\w.-])`;
