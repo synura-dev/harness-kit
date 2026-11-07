@@ -12,14 +12,11 @@ const FILES = [
   'constrain/bash-guard/adapters/agy.mjs', 'core/runtime/user-shim.mjs', 'core/agy/legacy.mjs',
   ...fs.readdirSync(path.join(H, 'observe', 'audit', 'adapters')).filter((f) => /^agy.*\.mjs$/.test(f) && !/\.test\./.test(f)).map((f) => 'observe/audit/adapters/' + f),
 ];
-// shortcut: T8 xoa `.claude` khoi core/runtime/user-shim.mjs (pluginCacheDir -> build/user-shim/claude-cache.mjs); T8 merge xong thi xoa muc nay.
-const PENDING_T8 = new Set(['core/runtime/user-shim.mjs']);
 
 for (const rel of FILES) {
   const f = path.join(H, rel);
   if (!fs.existsSync(f)) continue; // file khong ton tai (vd agy-harness.mjs) -> khong co gi de kiem
-  const t = PENDING_T8.has(rel) ? test.todo : test;
-  t(`agy-neutral: ${rel} khong chua .claude`, () => { expect(fs.readFileSync(f, 'utf8').includes('.claude')).toBe(false); });
+  test(`agy-neutral: ${rel} khong chua .claude`, () => { expect(fs.readFileSync(f, 'utf8').includes('.claude')).toBe(false); });
 }
 
 test('tuong thich nguoc: dong audit co truong la van doc/query duoc', () => {

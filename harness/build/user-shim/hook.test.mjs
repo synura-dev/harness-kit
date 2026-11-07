@@ -2,7 +2,9 @@ import { test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import hook, { handle } from './hook.mjs';
+import hook, { handle, load } from './hook.mjs';
+import { pluginCacheDir } from './claude-cache.mjs';
+import { rootsFile } from '../../core/runtime/user-shim.mjs';
 
 // KHONG ghi PATH that: luon tiem regPath + setUserPath gia, LOCALAPPDATA/home tam.
 let tmp; let plug; let inj; let calls;
@@ -49,6 +51,44 @@ test('file la o thu muc dich -> khong ghi de, bao lenh --force; loi -> fail-open
 test('duoi bun test (NODE_ENV=test) khong tiem IO -> khong dung may that', async () => {
   expect(process.env.NODE_ENV).toBe('test');
   expect(await handle('SessionStart', {}, { cfg, pluginRoot: plug })).toEqual({});
+});
+
+const shimDir = () => path.join(inj.home, process.platform === 'win32' ? '.harness-kit' : '.local', 'bin');
+const roots = () => JSON.parse(fs.readFileSync(rootsFile(shimDir()), 'utf8'));
+
+test('(i) claude: ghi khoa claude; claude-cache.pluginCacheDir suy tu pluginRoot trong cache, quet CLAUDE_CONFIG_DIR, null khi khong co', async () => {
+  await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
+  expect(Object.keys(roots())).toEqual(['claude']);
+  const cache = path.dirname(plug);
+  expect(pluginCacheDir(plug)).toBe(cache);
+  const src = path.join(tmp, 'src', 'harness-kit'); fs.mkdirSync(src, { recursive: true });
+  expect(pluginCacheDir(src, { env: { CLAUDE_CONFIG_DIR: path.join(tmp, 'claude') } })).toBe(cache);
+  expect(pluginCacheDir(path.join(tmp, 'src2'), { env: {}, home: path.join(tmp, 'emptyhome') })).toBe(null);
+});
+
+test('agy: tool agy khong can cache Claude, chi khoa agy; claude them khoa khong xoa agy', async () => {
+  const agyRoot = path.join(tmp, 'gem', 'harness-kit');
+  fs.mkdirSync(path.join(agyRoot, 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(agyRoot, 'bin', 'harness'), '');
+  const r = await handle('SessionStart', {}, { cfg, pluginRoot: agyRoot, tool: 'agy', inj });
+  expect(r.additionalContext).toContain('khoa agy');
+  expect(Object.keys(roots())).toEqual(['agy']);
+  await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
+  expect(Object.keys(roots()).sort()).toEqual(['agy', 'claude']);
+  // goc agy khong co bin/harness -> bo qua, khong ghi
+  expect(await handle('SessionStart', {}, { cfg, pluginRoot: path.join(tmp, 'khong-co'), tool: 'agy', inj })).toEqual({});
+});
+
+test('(g) HOOK_USER_SHIM_ENABLED=0 -> config tat, hook khong ghi gi', async () => {
+  const files = [path.join(tmp, 'none.json')];
+  const prev = process.env.HOOK_USER_SHIM_ENABLED;
+  process.env.HOOK_USER_SHIM_ENABLED = '0';
+  try {
+    const c = load(files).config;
+    expect(c.enabled).toBeFalsy(); // env 0 -> so 0
+    expect(await handle('SessionStart', {}, { cfg: c, pluginRoot: plug, tool: 'agy', inj })).toEqual({});
+    expect(fs.existsSync(shimDir())).toBe(false);
+  } finally { if (prev === undefined) delete process.env.HOOK_USER_SHIM_ENABLED; else process.env.HOOK_USER_SHIM_ENABLED = prev; }
 });
 
 test('META chuan HOOK_MODULE', () => {
