@@ -14,17 +14,17 @@ import { ctx, nestedDateDirs } from './loop.mjs';
 
 const DAY = 86400000;
 const EPS = 1e-9;
-export const EFFECT = Object.freeze({ windowDays: 7, better: 0.7, worse: 1.3, minToolCalls: 200, minBaselineErrors: 3, maxRecheckDays: 21, sidePct: 0.3 });
+export const EFFECT = Object.freeze({ windowDays: 7, better: 0.7, worse: 1.3, minToolCalls: 200, minBaselineErrors: 10, maxRecheckDays: 21, sidePct: 0.3, excludeDays: 30 }); // excludeDays: fp bi rollback vi worse khong bi de xuat lai trong N ngay (shortcut: co dinh, chua cau hinh)
 const FINAL = new Set(['better', 'worse', 'unchanged', 'inconclusive']);
 const SIDE = ['tokens_per_session', 'corrections_per_session'];
 const iso = (ms) => new Date(ms).toISOString();
 
-function limitsOf(o) {
-  let cfg = {};
-  try { cfg = loadAuditConfig().config; } catch {}
+export function limitsOf(o) {
+  let cfg = o.auditConfig; // inject (test hermetic); mac dinh doc audit-config that
+  if (!cfg) { cfg = {}; try { cfg = loadAuditConfig().config; } catch {} }
   const pick = (...v) => v.find((x) => x > 0); // tung truong mac dinh rieng: thieu/0 khong tat gioi han
   const c = cfg.limits || {}, u = o.limits || {};
-  return { retention_days: pick(cfg.retention_days, 30), timeout: pick(u.query_timeout_ms, c.query_timeout_ms, 30000), rows: pick(u.query_max_rows, c.query_max_rows, 100000), bytes: pick(u.query_max_bytes, c.query_max_bytes, 209715200) };
+  return { retention_days: pick(o.retentionDays, cfg.retention_days, 30), timeout: pick(u.query_timeout_ms, c.query_timeout_ms, o.bgTimeoutMs, 30000), rows: pick(u.query_max_rows, c.query_max_rows, 100000), bytes: pick(u.query_max_bytes, c.query_max_bytes, 209715200) };
 }
 
 /** Doc MOT luot cac su kien audit co ts trong [fromMs, toMs]. Tra {events, truncated: null|'timeout'|'max_rows'|'max_bytes'}. */
@@ -116,22 +116,39 @@ export function verdictOf(baseline, after, { ageDays = 0 } = {}) {
   let reason = null;
   if (!(baseline.target_count >= EFFECT.minBaselineErrors) || !(baseline.rate_per_1000 > 0)) reason = 'low_baseline';
   else if (!(after.tool_calls >= EFFECT.minToolCalls) || after.rate_per_1000 == null) reason = 'low_tool_calls';
-  if (reason) return { verdict: ageDays > EFFECT.maxRecheckDays ? 'inconclusive' : 'insufficient', reason, side };
   const b = baseline.rate_per_1000, a = after.rate_per_1000;
+  // worse can them >= minBaselineErrors loi o cua so after (tranh 1 do lech Poisson keo theo rollback + loai fp); thieu -> insufficient, do lai
+  if (!reason && a >= b * EFFECT.worse - EPS && a > b * EFFECT.better + EPS && !(after.target_count >= EFFECT.minBaselineErrors)) reason = 'low_after_errors';
+  if (reason) return { verdict: ageDays > EFFECT.maxRecheckDays ? 'inconclusive' : 'insufficient', reason, side };
   const verdict = a <= b * EFFECT.better + EPS ? 'better' : a >= b * EFFECT.worse - EPS ? 'worse' : 'unchanged';
   return { verdict, reason: `rate ${b.toFixed(2)} -> ${a.toFixed(2)} /1000`, side };
 }
 
-const ACTION = { better: 'keep', inconclusive: 'keep', unchanged: 'rollback', worse: 'rollback', insufficient: 'none' };
+const ACTION = { better: 'keep', inconclusive: 'keep', unchanged: 'keep', worse: 'rollback', insufficient: 'none' }; // chi worse moi rollback; unchanged = giu, verdict cuoi
 
+const APPLIED_TAIL = 1048576;
 function appliedMs(p, o) {
   const t = Date.parse(p.applied_at || (p.effect && p.effect.baseline && p.effect.baseline.to));
   if (Number.isFinite(t)) return t;
   try { // fallback: dong apply ok cuoi cung trong applied.jsonl
-    const lines = fs.readFileSync(path.join(ctx(o).evo, 'applied.jsonl'), 'utf8').split('\n').filter(Boolean);
-    for (let i = lines.length - 1; i >= 0; i--) { const r = JSON.parse(lines[i]); if (r.op === 'apply' && r.ok && r.id === p.id) return Date.parse(r.ts); }
+    // doc tail co tran (shortcut: dong apply cu hon tran -> NaN, proposal khong do)
+    const fd = fs.openSync(path.join(ctx(o).evo, 'applied.jsonl'), 'r');
+    let text = '';
+    try { const size = fs.fstatSync(fd).size, n = Math.min(size, APPLIED_TAIL); const b = Buffer.alloc(n); fs.readSync(fd, b, 0, n, size - n); text = b.toString('utf8'); } finally { fs.closeSync(fd); }
+    const lines = text.split('\n').filter(Boolean);
+    for (let i = lines.length - 1; i >= 0; i--) {
+      let r; try { r = JSON.parse(lines[i]); } catch { continue; } // dong hong/bi cat dau: bo qua
+      const t = r && r.op === 'apply' && r.ok && r.id === p.id ? Date.parse(r.ts) : NaN;
+      if (Number.isFinite(t)) return t;
+    }
   } catch {}
   return NaN;
+}
+
+/** Doc san cua so baseline cho nhieu apply: tra {events, truncated, fromMs, toMs} de truyen o.auditCache. */
+export function readBaselineCache(nowMs, o = {}) {
+  const fromMs = nowMs - EFFECT.windowDays * DAY;
+  return { ...readEvents(ctx(o).audits, fromMs, nowMs, o), fromMs, toMs: nowMs };
 }
 
 /** Baseline luc apply: 7 ngay truoc nowMs. Tra {baseline} hoac {baseline:null, reason}. Khong nem. */
@@ -139,7 +156,9 @@ export function captureBaseline(p, nowMs, o = {}) {
   try {
     const fp = p.evidence && p.evidence.fp;
     if (!fp) return { baseline: null, reason: 'no_fp' };
-    const w = computeWindow(ctx(o).audits, fp, nowMs - EFFECT.windowDays * DAY, nowMs, o);
+    const from = nowMs - EFFECT.windowDays * DAY, c = o.auditCache; // auditCache = ket qua readEvents doc san (autopilot doc MOT lan/lo)
+    const w = c && c.fromMs <= from && c.toMs >= nowMs ? { ...statsOf(c.events, groupEvents(c.idx ||= groupIndex(c.events, nowMs), fp), from, nowMs), truncated: c.truncated }
+      : computeWindow(ctx(o).audits, fp, from, nowMs, o);
     if (w.truncated) return { baseline: null, reason: 'truncated' };
     const { truncated, ...baseline } = w;
     return { baseline };
