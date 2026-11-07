@@ -38,7 +38,7 @@ export function main(argv, io = {}) {
   const base = { root, src: o.src, targets: o.targets, timeoutS: c.timeoutS };
   const srcDir = path.resolve(root, o.src || DEFAULT_SRC);
   if (!o.src && o.cmd !== 'prune' && !fs.existsSync(srcDir)) { // khong co nguon mac dinh: khong false-OK im lang, khong ghi gi
-    emit({ summary: `skills ${o.cmd}: không có nguồn skill tại ${srcDir}; ở chế độ plugin, Claude tự nạp skills/ của plugin, chỉ cần --src khi đồng bộ cho agy (.agents/skills)` }, out);
+    emit({ summary: `skills ${o.cmd}: không có nguồn skill tại ${srcDir}; ở chế độ plugin, Claude tự nạp skills/ của plugin, agy nạp skill từ plugin native (.agents/plugins/harness-kit); chỉ cần --src khi build thủ công` }, out);
     return 0;
   }
   if (o.cmd === 'build') {

@@ -24,7 +24,7 @@ export function native({ dir, inj = {} } = {}) {
   const project = fs.existsSync(path.join(pdir, '.antigravity-plugin', 'plugin.json'));
   let installed = null;
   let disabled = false;
-  if (!project) {
+  { // luon doc ban global: project + global cung bat = hook chay doi (canh bao)
     try {
       const out = inj.list ? inj.list() : spawnSync('agy', ['plugin', 'list', '--json'], { encoding: 'utf8', timeout: 15000, windowsHide: true, shell: process.platform === 'win32' }).stdout;
       const j = JSON.parse(String(out || ''));
@@ -35,13 +35,23 @@ export function native({ dir, inj = {} } = {}) {
       if (me && typeof me === 'object' && me.enabled === false) disabled = true;
     } catch { /* khong co agy / khong parse duoc */ }
   }
-  if (project) lines.push('[OK] plugin harness-kit da cai cho du an (.agents/plugins/harness-kit)', `-> cap nhat: git -C "${pdir}" pull`);
+  if (project) {
+    lines.push('[OK] plugin harness-kit da cai cho du an (.agents/plugins/harness-kit)', `-> cap nhat: git -C "${pdir}" pull`);
+    if (installed === true && !disabled) lines.push('[warn] harness-kit con bat o ban GLOBAL (agy plugin list) -> hook chay doi; tat 1 trong 2 (agy plugin disable harness-kit)');
+  }
   else if (installed === true && disabled) { code = 1; lines.push('[warn] plugin harness-kit (global) da cai nhung dang tat (enabled=false) -> hook khong chay', '-> chay: agy plugin enable harness-kit'); }
   else if (installed === true) lines.push('[OK] agy da cai plugin harness-kit (global)');
   else { code = 1; lines.push('[THIEU] chua cai plugin harness-kit cho du an', `-> chay: git clone ${CLONE_URL} "${pdir}"`, '-> them dong `plugins/` vao .agents/.gitignore', `-> cap nhat sau nay: git -C "${pdir}" pull`); }
-  const raw = read(path.join(dir, '.agents', 'hooks.json'));
-  if (raw && /"harness-kit"/.test(raw)) lines.push(`[warn] ${path.join(dir, '.agents', 'hooks.json')} con khoa "${HOOK_KEY}" cu -> hook chay doi khi plugin da cai; xoa khoa do (va .agents/harness-agy-shim.mjs, .agents/harness-agy.local.json) bang tay`);
+  const lw = legacyHooksWarn(dir);
+  if (lw) lines.push(lw);
   return { code, lines };
+}
+
+/** Canh bao khi .agents/hooks.json cu con khoa "harness-kit" (hook chay doi khi plugin da cai) -> chuoi | null. */
+export function legacyHooksWarn(dir) {
+  const f = path.join(dir, '.agents', 'hooks.json');
+  const raw = read(f);
+  return raw && /"harness-kit"/.test(raw) ? `[warn] ${f} con khoa "${HOOK_KEY}" cu -> hook chay doi khi plugin da cai; xoa khoa do (va .agents/harness-agy-shim.mjs, .agents/harness-agy.local.json) bang tay` : null;
 }
 
 export const agySettingsFile = (home = os.homedir()) => path.join(home, '.gemini', 'antigravity-cli', 'settings.json');
