@@ -62,6 +62,11 @@ export function agyTranscriptPath(convId, home) {
   return [home, '.gemini', 'antigravity-cli', 'brain', convId, '.system_generated', 'logs', 'transcript_full.jsonl'].join(sep);
 }
 
+/** convId hop le (chi [\w-]+) -> duong dan transcript; khong hop le -> null (chan path traversal). */
+export function safeTranscriptPath(convId, home) {
+  return typeof convId === 'string' && /^[\w-]+$/.test(convId) ? agyTranscriptPath(convId, home) : null;
+}
+
 /** "Command exited with code N." -> N | null */
 export function exitCodeOf(content) {
   const m = /Command exited with code (-?\d+)/.exec(String(content ?? ''));

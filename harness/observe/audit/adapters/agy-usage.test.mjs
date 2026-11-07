@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { sumAgyUsage, stepDurations, stepDuration, exitCodeOf, exitStatusOf } from './agy-usage.mjs';
+import { safeTranscriptPath, sumAgyUsage, stepDurations, stepDuration, exitCodeOf, exitStatusOf } from './agy-usage.mjs';
 
 const L = (o) => JSON.stringify(o);
 const model = (i, inp, cr, out) => L({ step_index: i, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-10-29T01:25:22Z', input_tokens: inp, cache_read_tokens: cr, output_tokens: out });
@@ -86,6 +86,12 @@ test('sumAgyUsage: tool_ms/tool_steps tu dong GENERIC (khong am, khong tinh PLAN
   const only = sumAgyUsage(gen(1, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:02Z')));
   expect(only.msgs).toBe(0); expect(only.tool_ms).toBe(2000);
   expect(sumAgyUsage(model(1, 1, 1, 1)).tool_steps).toBe(0);
+});
+
+test('safeTranscriptPath: convId xau -> null, hop le -> path dung dang', () => {
+  for (const id of ['..', 'a/../b', '../brain/x', '', 'a\\b', undefined, 5]) expect(safeTranscriptPath(id, 'hh')).toBeNull();
+  const p = safeTranscriptPath('abc-123_x', 'hh').replace(/\\/g, '/');
+  expect(p).toBe('hh/.gemini/antigravity-cli/brain/abc-123_x/.system_generated/logs/transcript_full.jsonl');
 });
 
 test('sumAgyUsage: dedupe GENERIC theo step_index', () => {

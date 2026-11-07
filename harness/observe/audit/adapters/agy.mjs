@@ -10,7 +10,7 @@ import { compile, redact, cut } from '../redact.mjs';
 import { fileURLToPath } from 'node:url';
 import * as audit from '../audit.mjs';
 import os from 'node:os';
-import { sumAgyUsage, exitStatusOf, agyTranscriptPath } from './agy-usage.mjs';
+import { sumAgyUsage, exitStatusOf, safeTranscriptPath } from './agy-usage.mjs';
 
 const STOP_BAD = /^(ERROR|MAX_)/;
 
@@ -143,9 +143,9 @@ export function handle(event, input, ctx = {}) {
       // transcript: payload (SessionStart/PostInvocation/Stop) hoac suy tu conversationId (Post tool khong co); file khong ton tai/loi -> bo
       try {
         let tPath = typeof inp.transcriptPath === 'string' && inp.transcriptPath.endsWith('.jsonl') ? inp.transcriptPath : null;
-        if (!tPath && typeof inp.conversationId === 'string' && /^[\w-]+$/.test(inp.conversationId)) {
-          const d = agyTranscriptPath(inp.conversationId, ctx.home || os.homedir());
-          if (fs.existsSync(d)) tPath = d;
+        if (!tPath) {
+          const d = safeTranscriptPath(inp.conversationId, ctx.home || os.homedir());
+          if (d && fs.existsSync(d)) tPath = d;
         }
         if (tPath) inp.transcript_path = tPath;
       } catch {}
