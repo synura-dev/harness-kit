@@ -1,4 +1,4 @@
-// Build skill tu nguon harness/skills/<ten>/ sang cac dich adapter (.claude/skills, .agents/skills).
+// Build skill tu nguon harness/skills/<ten>/ sang cac dich adapter (.claude/skills).
 // Copy (khong symlink), nhung {{include shared/<file>}} luc build, ghi marker .generated.json {generator, source, hash, builtAt}.
 // check: bao lech nguon / sua tay / chua build / mo coi / marker hong. prune: chi xoa dich CO marker hop le ma nguon khong con; mac dinh dry-run.
 // Skill dich KHONG co marker = lane installed: khong bao gio ghi/xoa. Marker hong/cua cong cu khac: khong dung, chi canh bao. Thuan Node.
@@ -9,7 +9,8 @@ import crypto from 'node:crypto';
 export const MARKER = '.generated.json';
 const GENERATOR = 'dev/skills';
 export const DEFAULT_SRC = 'harness/skills';
-const DEFAULT_TARGETS = Object.freeze(['.claude/skills', '.agents/skills']);
+// agy nap skill tu plugin native (<du an>/.agents/plugins/harness-kit/skills), khong sinh ban chep .agents/skills (--target van cho phep chi dinh tuy y).
+const DEFAULT_TARGETS = Object.freeze(['.claude/skills']);
 export const LIMITS = Object.freeze({ timeoutS: 60, maxFilesPerSkill: 200, maxFileBytes: 1024 * 1024, maxDepth: 8, maxDirsPerSkill: 100 });
 const SKIP_SRC = new Set(['shared']); // thu muc dung chung, khong phai skill
 const INCLUDE_RE = /\{\{include\s+shared\/([A-Za-z0-9._\/-]+)\s*\}\}/g;

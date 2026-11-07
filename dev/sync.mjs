@@ -43,7 +43,7 @@ function syncRoles({ root = ROOT, check = false } = {}) {
   return { tool: 'roles', changes, problems };
 }
 
-// Skill: nguon harness/skills -> .claude/skills + .agents/skills. Goi CLI skills (tools khong import build/); khong co nguon thi bo qua.
+// Skill: nguon harness/skills -> .claude/skills (agy nap skill tu plugin native). Goi CLI skills (tools khong import build/); khong co nguon thi bo qua.
 // check: `skills check` (lech/chua build/conflict = loi). Ghi: `skills build --apply --adopt` (adopt chi thay thu muc khong marker khi noi dung trung nguon).
 function syncSkills({ root = ROOT, check = false } = {}) {
   const res = { tool: 'skills', changes: [], problems: [] };
