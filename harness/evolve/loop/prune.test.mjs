@@ -105,3 +105,95 @@ test('writeState: atomic, khong de lai file tmp', async () => {
   expect(fs.readdirSync(pth.dirname(f)).filter((n) => n.endsWith('.tmp')).length).toBe(0);
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+// ---- u59 wire: countEvents, cua so trung thuc, transcript ----
+const emptyInv = { commands: [], hooks: [], skills: [{ type: 'skill', name: 'old' }], agents: [], rules: [] };
+const W = (e) => ({ skill: { earliest: e }, command: { earliest: e }, agent: { earliest: e }, hook: { earliest: e } });
+
+test('buildCandidates: cua so tre hon days -> insufficient_window, khong pending/propose_remove/state', () => {
+  const { usage } = countUsage([], emptyInv);
+  const young = new Date(NOW - 8 * DAY).toISOString();
+  const r = buildCandidates({ inv: emptyInv, usage, nowMs: NOW, window: W(young) });
+  const it = r.items.find((i) => i.id === 'skill:old');
+  assert.equal(it.status, 'insufficient_window'); assert.equal(it.window_days, 8);
+  assert.equal(it.pending_since, undefined); assert.deepEqual(r.state, {});
+  const ok = buildCandidates({ inv: emptyInv, usage, nowMs: NOW, window: W(new Date(NOW - 30 * DAY).toISOString()) });
+  assert.equal(ok.items.find((i) => i.id === 'skill:old').status, 'pending');
+});
+
+test('countUsage: sessions va last_ts that', () => {
+  const { usage } = countUsage([
+    { ts: '2026-11-05T01:00:00Z', sid: 's1', event: 'PreToolUse', tool: 'Skill', target: 'old' },
+    { ts: '2026-11-05T03:00:00Z', sid: 's2', event: 'PreToolUse', tool: 'Skill', target: 'old' },
+    { ts: '2026-11-05T02:00:00Z', sid: 's2', event: 'PreToolUse', tool: 'Skill', target: 'old' },
+  ], emptyInv);
+  const x = usage.skill.get('old');
+  assert.equal(x.count, 3); assert.equal(x.sessions, 2); assert.equal(x.last_ts, '2026-11-05T03:00:00Z');
+});
+
+const ISO = (ms) => new Date(ms).toISOString();
+const line = (o) => JSON.stringify(o) + '\n';
+const asst = (ts, sid, blocks) => line({ type: 'assistant', sessionId: sid, timestamp: ts, message: { role: 'assistant', content: blocks } });
+const user = (ts, sid, text) => line({ type: 'user', sessionId: sid, timestamp: ts, message: { role: 'user', content: text } });
+const skillUse = (id, name) => ({ type: 'tool_use', id, name: 'Skill', input: { skill: name } });
+const readUse = (id, f) => ({ type: 'tool_use', id, name: 'Read', input: { file_path: f } });
+async function integ({ tr, audit = '', opts = {} }) {
+  const proj = tmp(), auditDir = tmp(), trDir = tmp();
+  wr(path.join(proj, '.claude/skills/old/SKILL.md'), 'x'); wr(path.join(proj, '.claude/skills/other/SKILL.md'), 'x');
+  wr(path.join(trDir, 'p1', 's.jsonl'), tr);
+  const d = ISO(NOW).slice(0, 10);
+  if (audit) wr(path.join(auditDir, 'x', `date=${d}`, 'a.jsonl'), audit);
+  const r = await pruneCandidates({ pluginRoot: tmp(), projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], nowMs: NOW, order: {}, ...opts });
+  return { r, dep: (n) => r.items.find((i) => i.id === `skill:${n}`) };
+}
+
+test('integ: skill chi trong transcript (Skill tool) -> khong deprecate', async () => {
+  const t = ISO(NOW - DAY);
+  const { dep } = await integ({ tr: asst(t, 's1', [skillUse('t1', 'old')]) });
+  assert.equal(dep('old'), undefined); assert.ok(dep('other'));
+});
+
+test('integ: doc SKILL.md <5/turn tinh la dung; 20 doc / 1 turn = khong dung', async () => {
+  const t = ISO(NOW - DAY);
+  const one = user(t, 's1', 'hi') + asst(t, 's1', [readUse('r1', '/x/old/SKILL.md')]);
+  assert.equal((await integ({ tr: one })).dep('old'), undefined);
+  const many = user(t, 's1', 'hi') + asst(t, 's1', Array.from({ length: 20 }, (_, i) => readUse(`r${i}`, `/x/s${i}/SKILL.md`)).concat([readUse('rr', '/x/old/SKILL.md')]));
+  const m = await integ({ tr: many });
+  assert.ok(m.dep('old')); assert.equal(m.r.maintenance_dropped, 21);
+});
+
+test('integ: transcript bi cat -> truncated, khong co deprecate', async () => {
+  const { r } = await integ({ tr: asst(ISO(NOW - DAY), 's1', [skillUse('t1', 'old')]), opts: { transcriptLimits: { maxFiles: 0 } } });
+  assert.equal(r.truncated, 'max_files');
+  assert.equal(r.items.filter((i) => i.kind === 'deprecate').length, 0);
+});
+
+test('integ: record cu trong file moi (mtime moi) ngoai cua so -> khong dem', async () => {
+  const old = asst(ISO(NOW - 60 * DAY), 's0', [skillUse('t0', 'old')]);
+  const { r, dep } = await integ({ tr: old });
+  assert.ok(dep('old'));
+  assert.equal(r.sources.transcript.earliest, ISO(NOW - 60 * DAY)); // earliest truoc loc ts
+});
+
+test('integ: cung mot call o audit + transcript dem 1 lan', async () => {
+  const t = ISO(NOW - DAY);
+  const audit = line({ ts: t, sid: 's1', event: 'PreToolUse', tool: 'Skill', target: 'old', data: { skill: 'old', tool_use_id: 'T1' } });
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('T1', 'old')]), audit });
+  assert.equal(r.usage_counts.skill.old, 1); assert.equal(r.duplicates_dropped, 1);
+});
+
+test('integ: audit Skill khong co tool_use_id bi bo khi doc transcript (khong dem doi)', async () => {
+  const t = ISO(NOW - DAY);
+  const audit = line({ ts: t, sid: 's1', event: 'PreToolUse', tool: 'Skill', target: 'old', data: { skill: 'old' } });
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('T1', 'old')]), audit });
+  assert.equal(r.usage_counts.skill.old, 1);
+});
+
+test('integ: gateWindow: du lieu 8 ngay -> insufficient_window, khong pending; sources co earliest+window_days', async () => {
+  const t = ISO(NOW - 8 * DAY);
+  const audit = line({ ts: t, sid: 's1', event: 'PreToolUse', tool: 'Agent', data: { subagent_type: 'x' } });
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('T1', 'zzz')]), audit, opts: { gateWindow: true } });
+  assert.equal(r.sources.audit.window_days, 8);
+  assert.equal(r.items.filter((i) => i.status === 'pending' || i.status === 'propose_remove').length, 0);
+  assert.equal(r.items.find((i) => i.id === 'skill:old').status, 'insufficient_window');
+});

@@ -2,7 +2,7 @@
 // Moi nguon: async (events, nowIso, ctx{defs, hubDir, nowMs, dryRun}) -> candidate[]. Thieu luat tuong ung (tat/khong co) -> [] (khong chay).
 import path from 'node:path';
 import { detectPatterns, compileRegexList } from '../../evolve/loop/patterns.mjs';
-import { pruneCandidates, readState, writeState } from '../../evolve/loop/prune.mjs';
+import { pruneCandidates, readState, writeState, wireDefaults } from '../../evolve/loop/prune.mjs';
 import { dataReadRoots } from '../../core/registry/data-registry.mjs';
 import { dataPathFor } from '../../core/io/storage.mjs';
 import { auditRoot } from '../../core/audit/audit-write.mjs';
@@ -30,7 +30,7 @@ export async function pruneSource(events, nowIso, ctx = {}) {
   const evo = dataReadRoots('evolve')[0] || dataPathFor('evolve', { quiet: true });
   const stateFile = path.join(evo, 'prune-state.json');
   const auditDirs = dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()];
-  const r = await pruneCandidates({ auditDirs, projectDir: hub, extRoots: registeredExtRoots(hub), nowMs: ctx.nowMs, state: readState(stateFile) });
+  const r = await pruneCandidates({ auditDirs, projectDir: hub, extRoots: registeredExtRoots(hub), nowMs: ctx.nowMs, state: readState(stateFile), ...wireDefaults(evo) });
   if (!ctx.dryRun && !r.truncated) writeState(stateFile, r.state); // che do job luon --record (tru dry-run)
   return r.items;
 }

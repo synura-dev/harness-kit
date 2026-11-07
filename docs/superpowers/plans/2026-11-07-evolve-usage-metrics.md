@@ -22,10 +22,10 @@ Files: create `harness/evolve/usage/collect.mjs`, `collect.test.mjs`.
 
 ### Task 2: Wire counter into prune.mjs; honest window gating (RED/GREEN)
 Files: `harness/evolve/loop/prune.mjs`, `prune.test.mjs`, `prune-cli.mjs`.
-- [ ] Failing tests: (a) `buildCandidates` with `window.earliest` younger than `days` never yields `pending`/`propose_remove` for that kind: status `insufficient_window` with `window_days`, no `pending_since` written; (b) used components carry real `sessions`/`last_ts`; (c) `pruneCandidates` result has per-origin `sources.<name>.earliest` and `window_days`; (d) existing tests still pass.
-- [ ] Replace `Acc` in `countUsage` by the Task 1 counter (same signature); `hookrun_since` now gates the `hook` kind; pass `window` to `buildCandidates`; the pending clock starts only once window >= `days`.
-- [ ] CLI summary: replace "/ 30 ngay" with real window per source (`du lieu thuc: audit tu X (N ngay), transcript tu Y`); print `insufficient_window` items.
-- [ ] Run: `node --test harness/evolve/loop/prune.test.mjs`.
+- [x] Failing tests: (a) `buildCandidates` with `window.earliest` younger than `days` never yields `pending`/`propose_remove` for that kind: status `insufficient_window` with `window_days`, no `pending_since` written; (b) used components carry real `sessions`/`last_ts`; (c) `pruneCandidates` result has per-origin `sources.<name>.earliest` and `window_days`; (d) existing tests still pass.
+- [x] Replace `Acc` in `countUsage` by the Task 1 counter (same signature); `hookrun_since` now gates the `hook` kind; pass `window` to `buildCandidates`; the pending clock starts only once window >= `days`.
+- [x] CLI summary: replace "/ 30 ngay" with real window per source (`du lieu thuc: audit tu X (N ngay), transcript tu Y`); print `insufficient_window` items.
+- [x] Run: `node --test harness/evolve/loop/prune.test.mjs`.
 
 ### Task 3: Transcript reader, bounded (RED/GREEN)
 Files: create `harness/evolve/usage/transcripts.mjs`, `transcripts.test.mjs`.
@@ -59,9 +59,9 @@ Files: create `harness/evolve/usage/cost.mjs`, `cost.test.mjs`; edit `prune.mjs`
 
 ### Task 8: Wire detectors into pruneCandidates (RED/GREEN)
 Files: `prune.mjs`, `prune.test.mjs`, `harness/observe/ledger/sources.mjs`, `sources.test.mjs`.
-- [ ] Failing integration test (tmp audit dir + tmp transcript dir): skill used only in a transcript -> not deprecate; used only via SKILL.md Read (<5 per turn) -> not deprecate; 20 reads in one turn -> treated unused; transcript read truncated -> `truncated` set and no deprecate items.
-- [ ] `pruneCandidates` merges audit + transcript events through detectors, reports one `truncated` (first cause), new option `o.transcriptRoots`; `pruneSource` passes defaults.
-- [ ] Run: `node --test harness/evolve/loop/prune.test.mjs harness/observe/ledger/sources.test.mjs`.
+- [x] Failing integration test (tmp audit dir + tmp transcript dir): skill used only in a transcript -> not deprecate; used only via SKILL.md Read (<5 per turn) -> not deprecate; 20 reads in one turn -> treated unused; transcript read truncated -> `truncated` set and no deprecate items.
+- [x] `pruneCandidates` merges audit + transcript events through detectors, reports one `truncated` (first cause), new option `o.transcriptRoots`; `pruneSource` passes defaults.
+- [x] Run: `node --test harness/evolve/loop/prune.test.mjs harness/observe/ledger/sources.test.mjs`.
 
 ### Task 9 (extra): Per-project usage
 Files: `collect.mjs`, `prune-cli.mjs`, tests.
