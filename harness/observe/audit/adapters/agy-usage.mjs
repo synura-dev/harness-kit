@@ -53,6 +53,12 @@ export function stepDuration(text, stepIdx, deadline = Infinity) {
   return null;
 }
 
+/** Duong dan transcript theo conversationId (Post tool khong co transcriptPath). Thuan: caller kiem file ton tai. */
+export function agyTranscriptPath(convId, home) {
+  const sep = process.platform === 'win32' ? '\\' : '/';
+  return [home, '.gemini', 'antigravity-cli', 'brain', convId, '.system_generated', 'logs', 'transcript_full.jsonl'].join(sep);
+}
+
 /** "Command exited with code N." -> N | null */
 export function exitCodeOf(content) {
   const m = /Command exited with code (-?\d+)/.exec(String(content ?? ''));

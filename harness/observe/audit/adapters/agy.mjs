@@ -9,6 +9,36 @@ import path from 'node:path';
 import { compile, redact, cut } from '../redact.mjs';
 import { fileURLToPath } from 'node:url';
 import * as audit from '../audit.mjs';
+import os from 'node:os';
+import { sumAgyUsage, stepDuration, exitCodeOf, exitStatusOf, agyTranscriptPath } from './agy-usage.mjs';
+
+const TAIL_BYTES = 65536;
+const TAIL_MS = 100;
+const STOP_BAD = /^(ERROR|MAX_)/;
+
+// Doc DUOI file (toi da TAIL_BYTES), bo dong dau do dang. Loi/khong co file -> null (fail-open).
+function readTail(file) {
+  let fd;
+  try {
+    fd = fs.openSync(file, 'r');
+    const size = fs.fstatSync(fd).size;
+    const len = Math.min(size, TAIL_BYTES);
+    const buf = Buffer.alloc(len);
+    fs.readSync(fd, buf, 0, len, size - len);
+    const text = buf.toString('utf8');
+    return size > len ? text.slice(text.indexOf('\n') + 1) : text;
+  } catch { return null; } finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
+}
+
+// Exit code tu noi dung buoc GENERIC cung stepIdx trong duoi transcript.
+function stepExit(text, stepIdx) {
+  const pat = `"step_index":${Number(stepIdx)}`;
+  for (const line of text.split('\n')) {
+    if (!line.includes(pat)) continue;
+    try { const e = JSON.parse(line); if (e.type === 'GENERIC' && e.step_index === Number(stepIdx)) return exitCodeOf(e.content); } catch {}
+  }
+  return null;
+}
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -126,6 +156,14 @@ export function handle(event, input, ctx = {}) {
       inp.session_id = getSid(inp) || inp.session_id;
       inp.cli = 'agy';
       if (inp.stepIdx != null) inp.step_idx = inp.stepIdx;
+      if (typeof inp.modelName === 'string' && inp.modelName) inp.model = inp.modelName;
+      // transcript: payload (SessionStart/PostInvocation/Stop) hoac suy tu conversationId (Post tool khong co); file khong ton tai -> bo
+      let tPath = typeof inp.transcriptPath === 'string' && inp.transcriptPath.endsWith('.jsonl') ? inp.transcriptPath : null;
+      if (!tPath && typeof inp.conversationId === 'string' && /^[\w.-]+$/.test(inp.conversationId)) {
+        const d = agyTranscriptPath(inp.conversationId, ctx.home || os.homedir());
+        if (fs.existsSync(d)) tPath = d;
+      }
+      if (tPath) inp.transcript_path = tPath;
 
       // Che do `pre` (PreToolUse): chi ghi marker thoi gian, khong ghi envelope.
       if (isPre) {
@@ -231,14 +269,7 @@ export function handle(event, input, ctx = {}) {
 
       // Session & Lifecycle normalization (SessionStart, Stop, PostInvocation)
       const isSessionEvent = inp.hook_event_name === 'SessionStart' || inp.hook_event_name === 'Stop' || inp.hook_event_name === 'PostInvocation' || inp.hook_event_name === 'SessionEnd';
-      const usage = inp.usage || inp.tokens || {};
-      const tIn = inp.tokens_in ?? inp.tokensIn ?? usage.input_tokens ?? usage.inputTokens ?? usage.tokens_in;
-      const tOut = inp.tokens_out ?? inp.tokensOut ?? usage.output_tokens ?? usage.outputTokens ?? usage.tokens_out;
-      const turns = inp.turns ?? usage.turns;
-      if (tIn != null && !isNaN(Number(tIn))) inp.tokens_in = Number(tIn);
-      if (tOut != null && !isNaN(Number(tOut))) inp.tokens_out = Number(tOut);
-      if (turns != null && !isNaN(Number(turns))) inp.turns = Number(turns);
-
+      // Task 0: payload agy khong co usage/tokens; token lay tu transcript (core + sumAgyUsage).
       const dur = inp.duration_ms ?? inp.durationMs ?? inp.duration;
       if (dur != null && !isNaN(Number(dur))) inp.duration_ms = Number(dur);
 
@@ -250,7 +281,8 @@ export function handle(event, input, ctx = {}) {
 
       try {
         const cfg = ctx.cfg || audit.readAuditConfig();
-        const env = audit.buildEnvelope(inp, cfg);
+        const root = ctx.root || audit.auditRoot();
+        const env = audit.buildEnvelope(inp, cfg, new Date(), { root, usage: { sum: sumAgyUsage, model: inp.model } });
 
         try {
           const res = compile(cfg.redact);
@@ -264,24 +296,45 @@ export function handle(event, input, ctx = {}) {
         } catch {}
 
         if (env.tool === 'Bash' && inp.tool_input) env.data.has_timeout = agyTimeoutMs(inp.tool_input.command);
-        if (env.tool && inp.session_id && inp.step_idx != null && env.dur_ms == null) {
-          const d = takePre(ctx.root || audit.auditRoot(), inp.session_id, inp.step_idx, Date.now());
-          if (d != null) env.dur_ms = d;
+        let exitCode = errInfo.exitCode ?? null;
+        if (env.tool && inp.session_id && inp.step_idx != null) {
+          if (env.dur_ms == null) {
+            const d = takePre(root, inp.session_id, inp.step_idx, Date.now());
+            if (d != null) { env.dur_ms = d; env.data.dur_src = 'marker'; }
+          }
+          // Mot lan doc duoi transcript cho ca dur (khi chua co marker) va exit code.
+          const wantDur = env.dur_ms == null;
+          const wantExit = exitCode == null && (errInfo.hasError || env.tool === 'Bash');
+          if ((wantDur || wantExit) && inp.transcript_path) {
+            const text = readTail(inp.transcript_path);
+            if (text) {
+              if (wantDur) { const d = stepDuration(text, inp.step_idx, Date.now() + TAIL_MS); if (d != null) { env.dur_ms = d; env.data.dur_src = 'transcript'; } }
+              if (wantExit) exitCode = stepExit(text, inp.step_idx);
+            }
+          }
         }
+        if (exitCode == null && errInfo.hasError) exitCode = exitStatusOf(errInfo.error); // shortcut: "exit status N" theo tai lieu, chua thay that
 
         // Post-process envelope if needed
         if (errInfo.hasError) {
           env.ok = false;
           env.status = 'error';
-          if (errInfo.exitCode != null) env.data.exit_code = errInfo.exitCode;
           if (errInfo.error && !env.data.error) env.data.error = errInfo.error;
+        }
+        if (exitCode != null && (errInfo.hasError || exitCode !== 0)) env.data.exit_code = exitCode;
+
+        // Stop: ly do dung that cua agy
+        if (inp.hook_event_name === 'Stop' && typeof inp.terminationReason === 'string') {
+          const tr = inp.terminationReason;
+          env.data.stop_reason = tr;
+          if (inp.executionNum != null) env.data.exec_num = Number(inp.executionNum);
+          if (typeof inp.fullyIdle === 'boolean') env.data.fully_idle = inp.fullyIdle;
+          if (STOP_BAD.test(tr)) { env.ok = false; env.status = 'error'; }
+          if (tr === 'USER_CANCELED') env.data.signal = 'interrupt';
         }
 
         if (isSessionEvent) {
           if (env.type === 'other') env.type = 'session';
-          if (inp.tokens_in != null && env.tokens_in == null) env.tokens_in = Number(inp.tokens_in);
-          if (inp.tokens_out != null && env.tokens_out == null) env.tokens_out = Number(inp.tokens_out);
-          if (inp.turns != null && env.turns == null) env.turns = Number(inp.turns);
           if (inp.duration_ms != null && env.dur_ms == null) env.dur_ms = Number(inp.duration_ms);
           if (inp.hook_event_name === 'PostInvocation' && (!env.status || env.status === 'unknown')) {
             env.status = 'ok';
@@ -291,7 +344,6 @@ export function handle(event, input, ctx = {}) {
         // Re-compute summary after all normalized overrides
         env.summary = audit.summarizeEvent(env);
 
-        const root = ctx.root || audit.auditRoot();
         if (ctx.write !== false) audit.writeEnvelope(env, cfg, root);
         return { record: env };
       } catch (auditErr) {
