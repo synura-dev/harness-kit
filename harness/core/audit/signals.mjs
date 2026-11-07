@@ -110,10 +110,11 @@ export function hookRunEnvelope(event, input, modules, totalMs, now = new Date()
   try {
     if (!Array.isArray(modules) || !modules.length) return null;
     const raw = String((input && input.session_id) ?? '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64) || 'nosession';
-    const sid = raw.startsWith('claude-') ? raw : `claude-${raw}`;
+    const cli = input && input.cli === 'agy' ? 'agy' : 'claude'; // agy: dispatcher agy gan cli + session_id (conversationId)
+    const sid = cli === 'agy' || raw.startsWith('claude-') ? raw : `claude-${raw}`;
     const ms = modules.map((m) => ({ id: safeId(m.id, 40), ms: Math.round(m.ms), ...(m.err ? { err: String(m.err).replace(/[^\w:.-]/g, '').slice(0, 40) } : {}) }));
     return {
-      v: 2, ts: now.toISOString(), type: 'hook', event: 'HookRun', cli: 'claude', sid, agent_id: null, agent_type: null, actor: null,
+      v: 2, ts: now.toISOString(), type: 'hook', event: 'HookRun', cli, sid, agent_id: null, agent_type: null, actor: null,
       project: null, cwd: '', tool: null, target: null, target_kind: null,
       ok: null, dur_ms: Math.round(totalMs), turns: null, tokens_in: null, tokens_out: null, status: String(event).slice(0, 30), model: null,
       summary: `${event} ${Math.round(totalMs)}ms ${ms.map((m) => `${m.id}=${m.ms}${m.err ? '!' : ''}`).join(' ')}`.slice(0, 120),

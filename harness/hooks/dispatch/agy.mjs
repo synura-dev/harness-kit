@@ -134,6 +134,7 @@ export const AGY = Object.freeze({
   setEvent: false, // adapter audit tu suy su kien nhu cu
   failOut: (e) => ({ stdout: e === 'PreToolUse' ? ALLOW : NOOP, stderr: '', code: 0 }),
   noop: (e) => ({ stdout: e === 'PreToolUse' ? ALLOW : NOOP, stderr: '', code: 0 }),
+  hookCtx: (input) => ({ cli: 'agy', session_id: (input && (input.conversationId || input.sessionId)) || '' }), // cho HookRun
   // vet gate cua dispatcher: gan session agy (conversationId) de khong roi vao "nosession".
   mapRecords: (records, input) => records.map((r) => (r.sink === 'gate' && !r.ctx ? { ...r, ctx: { cli: 'agy', session_id: (input && (input.conversationId || input.sessionId)) || '' } } : r)),
 });

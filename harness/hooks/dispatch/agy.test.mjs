@@ -99,3 +99,13 @@ test('SessionStart agy ghi stamp khoa agy vao data root (fail-open)', () => {
   const st = JSON.parse(fs.readFileSync(path.join(data, '.harness-writers.json'), 'utf8'));
   expect(Object.keys(st)).toEqual(['agy']); expect(st.agy.version).toMatch(/^\d+\.\d+\.\d+/); expect(Object.keys(st.agy).sort()).toEqual(['at', 'schema', 'version']);
 }, 60000);
+
+test('HookRun cua hook agy ghi cli=agy va sid = conversationId', () => {
+  const e = env();
+  spawn(NEW, ['SessionStart', 'audit-agy'], JSON.stringify({ conversationId: 'conv-hr' }), e);
+  const rows = fs.readdirSync(e.CLAUDE_AUDIT_DIR, { recursive: true }).filter((f) => String(f).endsWith('.jsonl'))
+    .flatMap((f) => fs.readFileSync(path.join(e.CLAUDE_AUDIT_DIR, String(f)), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)));
+  const hr = rows.filter((x) => x.event === 'HookRun');
+  expect(hr.length).toBeGreaterThan(0);
+  for (const x of hr) { expect(x.cli).toBe('agy'); expect(x.sid).toBe('conv-hr'); }
+}, 60000);
