@@ -74,9 +74,9 @@ Files: `harness/observe/audit/adapters/agy.mjs`, `harness/observe/audit/adapters
 
 ### Task 4: Report tong hop theo cli (RED/GREEN) [song song Task 1, 2]
 Files: tao `harness/observe/report/defaults/cost-cli.json`, `harness/observe/report/cost-cli.test.mjs`. Neu test cu dem so muc mac dinh (`grep -n "length\|sections" harness/observe/report/*.test.mjs`) thi sua dung cho do, ghi trong commit.
-- [ ] Test do truoc: su kien gia (claude + agy: Post ok/loi co `dur_ms`, Stop co `data.usage`, `data.stop_reason`) qua `loadSections` + engine -> hang `claude`/`agy` voi dung: phien, su kien, token vao (`sum:data.usage.input`), token ra, cache doc (`sum:data.usage.cache_read`), loi (`count` loc `ok:false`), ms (`sum:dur_ms`), dung bat thuong (`count` loc `data.stop_reason` thuoc ERROR|MAX_INVOCATIONS|MAX_FORCED_INVOCATIONS|MAX_TOKEN_BUDGET_EXCEEDED).
-- [ ] Muc JSON: `group_by:["cli"]`, `window_days:7`, `compare:"prev_window"`, `format:"table"`, `order` sau `cost-session` (12). Khong loc `usage_mode` (`data.usage` luon la delta). Khong sua `engine.mjs`.
-- [ ] Chay: `timeout 120 bun test harness/observe/report/cost-cli.test.mjs harness/observe/report/run.test.mjs harness/observe/report/engine.test.mjs`.
+- [x] Test do truoc: su kien gia (claude + agy: Post ok/loi co `dur_ms`, Stop co `data.usage`, `data.stop_reason`) qua `loadSections` + engine -> hang `claude`/`agy` voi dung: phien, su kien, token vao (`sum:data.usage.input`), token ra, cache doc (`sum:data.usage.cache_read`), loi (`count` loc `ok:false`), ms (`sum:dur_ms`), dung bat thuong (`count` loc `data.stop_reason` thuoc ERROR|MAX_INVOCATIONS|MAX_FORCED_INVOCATIONS|MAX_TOKEN_BUDGET_EXCEEDED).
+- [x] Muc JSON: `group_by:["cli"]`, `window_days:7`, `compare:"prev_window"`, `format:"table"`, `order` sau `cost-session` (12). Khong loc `usage_mode` (`data.usage` luon la delta). Khong sua `engine.mjs`.
+- [x] Chay: `timeout 120 bun test harness/observe/report/cost-cli.test.mjs harness/observe/report/run.test.mjs harness/observe/report/engine.test.mjs`.
 - Done: test xanh; `harness observe report --dry-run` in muc moi (builder trich 5 dong).
 
 ### Task 5: README observe [phu thuoc Task 0, 3]
