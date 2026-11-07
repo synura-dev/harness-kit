@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.2
+### Fixed
+- Shim `harness` chon root: uu tien root co thu muc `data` chua registry extension khong rong (it nhat 1 muc), roi moi xet version cao nhat, roi thu tu khoa. Truoc day hai root bang version thi chon khoa sau (agy, chua co registry) nen moi lenh extension bao chua dang ky. Khong root nao co registry thi giu logic cu.
+
 ## 0.4.1
 ### Added
 - agy dung duoc extension da duyet: `harness ext approve|register|remove` (TTY) ghi dang ky vao thu muc du lieu cua CLI hien tai va sao nguyen van sang moi thu muc `data` da dang ky trong `roots.json` (SessionStart moi CLI ghi `data` cua minh). agy doc `plugin_data/<ten>` canh `plugins/`, khong cham `~/.claude`; thieu/khong doc duoc -> fail-closed, thong bao chay `harness ext approve` o terminal. Hash ghim van kiem luc chay.

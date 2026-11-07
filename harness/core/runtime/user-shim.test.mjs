@@ -346,3 +346,35 @@ test('shimStatus: missing / ok / stale / foreign / nopath o thu muc co dinh; co 
   fs.writeFileSync(planShim({ dir }).files[0].file, 'viet tay');
   expect(st()).toBe('foreign');
 });
+
+// Chon root: root co data voi registry ext khong rong (config/ext/local.json) thang root khong co, roi moi xet version.
+const withRegistry = (name, entries) => {
+  const d = mk(name);
+  fs.mkdirSync(path.join(d, 'config', 'ext'), { recursive: true });
+  fs.writeFileSync(path.join(d, 'config', 'ext', 'local.json'), JSON.stringify({ extensions: entries }));
+  return d;
+};
+const lastVer = (r) => JSON.parse(r.stdout.trim().split(/\r?\n/).pop())[0];
+test('chon root: hai root bang version, chi claude co registry -> chon claude (agy dung sau)', () => {
+  const dir = mk('bin');
+  applyShim(planShim({ dir }));
+  const cache = mk('cache');
+  fs.mkdirSync(path.join(cache, '0.4.1', 'bin'), { recursive: true });
+  fs.writeFileSync(path.join(cache, '0.4.1', 'bin', 'harness'), "console.log(JSON.stringify(['claude-scan'])); process.exit(7);\n");
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { scan: cache, data: withRegistry('cdata', { '/ws': [{ id: 'knowledge' }] }) }, agy: { root: fakeRoot('a', '0.4.1'), version: '0.4.1', data: mk('adata') } }));
+  const runs = runShim(dir, ['knowledge']);
+  expect(runs.length).toBeGreaterThan(0);
+  for (const r of runs) expect(lastVer(r)).toBe('claude-scan');
+});
+test('chon root: root co registry thang root version cao hon nhung khong registry', () => {
+  const dir = mk('bin');
+  applyShim(planShim({ dir }));
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { root: fakeRoot('c', '0.4.1'), version: '0.4.1', data: withRegistry('cdata', { '/ws': [{ id: 'x' }] }) }, agy: { root: fakeRoot('a', '0.9.0'), version: '0.9.0', data: mk('adata') } }));
+  for (const r of runShim(dir)) expect(lastVer(r)).toBe('0.4.1');
+});
+test('chon root: khong root nao co registry (rong/thieu) -> giu logic cu', () => {
+  const dir = mk('bin');
+  applyShim(planShim({ dir }));
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { root: fakeRoot('c', '0.4.1'), version: '0.4.1', data: withRegistry('cdata', { '/ws': [] }) }, agy: { root: fakeRoot('a', '0.4.2'), version: '0.4.2', data: mk('adata') } }));
+  for (const r of runShim(dir)) expect(lastVer(r)).toBe('0.4.2');
+});
