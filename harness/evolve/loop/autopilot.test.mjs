@@ -273,3 +273,89 @@ test('effect: dry-run bao se lam gi nhung khong ghi/rollback', async () => {
   expect(logOps().length).toBe(before.log);
 });
 
+const propFile = (pid) => path.join(o.dataRoot, 'proposals', `${pid}.json`);
+const editProp = (pid, fn) => { const j = readProp(pid); fn(j); fs.writeFileSync(propFile(pid), JSON.stringify(j)); };
+const effLines = () => logOps().filter((x) => x.op === 'effect');
+const worse = () => { okCalls(AFTER, 'sa', 160); failN(AFTER, 'sf', 40); };
+
+test('effect: rollback dong thoi (status doi giua luc do) khong bi ghi de ve applied', async () => {
+  const { target, pid } = await applied();
+  worse();
+  const raced = { ...T8(), onRead: () => editProp(pid, (j) => { j.status = 'rolled_back'; }) };
+  await runAutopilot(raced);
+  expect(readProp(pid).status).toBe('rolled_back');
+  expect(effLines().length).toBe(0);
+  expect(fs.existsSync(target)).toBe(true); // khong tu rollback theo ket qua cu
+});
+
+test('effect: truncated + baseline hoi to khong duoc luu', async () => {
+  const { pid } = await applied();
+  editProp(pid, (j) => { delete j.effect; });
+  worse();
+  await runAutopilot({ ...T8(), limits: { query_max_rows: 5 } });
+  expect(readProp(pid).effect.baseline).toBe(null);
+});
+
+test('effect: manifest khong khop de xuat -> khong tu rollback, ghi log', async () => {
+  const { target, pid } = await applied();
+  const ver = readProp(pid).ver;
+  const mf = path.join(o.dataRoot, 'versions', ver, 'manifest.json');
+  const m = JSON.parse(fs.readFileSync(mf, 'utf8')); m.id = 'khac'; fs.writeFileSync(mf, JSON.stringify(m));
+  worse();
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(0); expect(t.refused.length).toBe(1);
+  expect(fs.existsSync(target)).toBe(true);
+  expect(logOps().some((x) => x.op === 'rollback' && x.ok === false && x.id === pid)).toBe(true);
+});
+
+test('effect: sau rollback do hieu qua khong de xuat/ap lai cung fp (2 lan chay)', async () => {
+  await applied();
+  worse();
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(1);
+  for (const d of [9, 18]) {
+    const r = await runAutopilot({ ...o, nowMs: NOW + d * DAY, ledgerEntries: [entry(FP)], force: true });
+    expect(r.applied.length).toBe(0); expect(r.queued.length).toBe(0);
+  }
+  expect(logOps().filter((x) => x.op === 'apply' && x.ok).length).toBe(1);
+});
+
+test('effect: insufficient lap lai khong them dong log/ghi proposal moi ngay', async () => {
+  const { pid } = await applied();
+  okCalls(AFTER, 'sa', 50);
+  await runAutopilot(T8());
+  await runAutopilot({ ...T8(), nowMs: NOW + 9 * DAY });
+  expect(effLines().length).toBe(1);
+  expect(readProp(pid).effect.verdict).toBe('insufficient');
+});
+
+test('effect: luat muc 2 chi ghi effect, khong rollback (refused)', async () => {
+  const { target, pid } = await applied();
+  editProp(pid, (j) => { j.change.target = 'evolve/rules/x.json'; });
+  worse();
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(0); expect(t.refused.length).toBe(1);
+  expect(fs.existsSync(target)).toBe(true);
+  expect(readProp(pid).effect.verdict).toBe('worse');
+});
+
+test('effect: hai lan chay lien tiep khong ghi/rollback 2 lan', async () => {
+  await applied();
+  worse();
+  const a = await runAutopilot(T8());
+  const b = await runAutopilot({ ...T8(), nowMs: NOW + 9 * DAY });
+  expect(a.rolledBack.length).toBe(1); expect(b.rolledBack.length + b.kept.length).toBe(0);
+  expect(effLines().length).toBe(1);
+  expect(logOps().filter((x) => x.op === 'rollback' && x.ok).length).toBe(1);
+});
+
+test('effect: rollback that bai -> bao loi, state rollback_failed', async () => {
+  const { target } = await applied();
+  fs.writeFileSync(target, 'bi sua tay'); // sha lech -> rollback tu choi
+  worse();
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(0);
+  expect(t.errors.join(' ')).toContain('rollback');
+  expect(readState(o).applied[0].status).toBe('rollback_failed');
+});
+

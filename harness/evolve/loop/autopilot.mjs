@@ -136,12 +136,21 @@ export async function runAutopilot(o = {}) {
     if (!dry) { st.lastRun = nowMs; if (!save()) return res; } // chiem moc ngay: loi giua chung cung khong chay lai trong 24h
     if (!dry) { const rec = recoverApplying(o, st); if (rec.changed) { res.errors.push(...rec.notes); save(); } }
     if (weekKey(nowMs) !== st.week.key) st.week = { key: weekKey(nowMs), proposals: 0 };
-    const record = (p, effect) => { // effect -> proposal JSON (nguon su that) + dong op:effect trong applied.jsonl
-      wr(path.join(ctx(o).evo, 'proposals', `${p.id}.json`), { ...p, effect });
-      appendLog(ctx(o), { op: 'effect', id: p.id, ver: p.ver, verdict: effect.verdict, action: effect.action, reason: effect.reason });
+    // effect -> proposal JSON (nguon su that) + dong op:effect. Doc lai tu dia (rollback dong thoi khong bi ghi de); chi ghi khi verdict/ly do doi.
+    const record = (p, effect) => {
+      const e = effect.truncated && !(p.effect && p.effect.baseline) ? { ...effect, baseline: null } : effect; // khong luu baseline hoi to bi cat
+      if (p.effect && p.effect.verdict === e.verdict && p.effect.reason === e.reason) return true;
+      const pf = path.join(ctx(o).evo, 'proposals', `${p.id}.json`);
+      const fresh = readJson(pf, null);
+      if (!fresh || fresh.status !== 'applied') return false;
+      if (!wr(pf, { ...fresh, effect: e })) { res.errors.push(`khong ghi duoc effect ${p.id} (guard/IO)`); return false; }
+      appendLog(ctx(o), { op: 'effect', id: p.id, ver: p.ver, verdict: e.verdict, action: e.action, reason: e.reason });
+      return true;
     };
+    const refuseRoll = (p, reason) => { res.refused.push({ entry: p.id, reason }); appendLog(ctx(o), { op: 'rollback', id: p.id, ver: p.ver, ok: false, reason }); };
 
     // 1) Do hieu qua luat da ap (effect.mjs, MOT luot doc audit): proposal.effect la nguon su that; keep/rollback theo verdict.
+    // Do ca luat ap tay (chu y). shortcut: luat muc 2 chi ghi effect, khong tu rollback.
     const pend = listProposals(o).filter((p) => p.kind === 'rule' && p.status === 'applied');
     for (const { id, effect } of pend.length ? measureDue(pend, nowMs, o) : []) {
       if (timeUp()) { res.errors.push('timeout'); break; }
@@ -149,13 +158,16 @@ export async function runAutopilot(o = {}) {
       const a = st.applied.find((x) => x.pid === id);
       const who = { ver: p.ver, fp: p.evidence && p.evidence.fp };
       const roll = effect.action === 'rollback';
-      // chi tu rollback luat muc 1; muc 2 chi ghi effect, nguoi tu quyet
-      if (roll && classifyChange({ kind: p.kind, target: p.change && p.change.target }).level !== 1) { res.refused.push({ entry: id, reason: `${effect.verdict}: rollback can nguoi (khong phai muc 1)` }); if (!dry) record(p, effect); continue; }
       if (dry) { if (roll) res.rolledBack.push({ ...who, reason: effect.reason, verdict: effect.verdict, dry: true }); else if (effect.action === 'keep') res.kept.push({ ...who, verdict: effect.verdict, dry: true }); continue; }
-      record(p, effect);
+      if (!record(p, effect)) continue;
       if (effect.action === 'keep') { res.kept.push({ ...who, verdict: effect.verdict }); if (a) a.status = 'kept'; continue; }
       if (!roll) continue; // insufficient: do lai lan sau
-      const r = rollback(p.ver, { ...o, approve: true });
+      // chi tu rollback luat muc 1 va manifest khop de xuat (khong tin ver trong file de xuat)
+      if (!/^[A-Za-z0-9_.-]{1,80}$/.test(String(p.ver))) { refuseRoll(p, 'ver khong hop le'); continue; }
+      const m = readJson(path.join(ctx(o).evo, 'versions', p.ver, 'manifest.json'), null);
+      if (!m || m.id !== p.id) { refuseRoll(p, `${effect.verdict}: manifest khong khop de xuat`); continue; }
+      if (classifyChange({ kind: m.kind, target: m.target }).level !== 1 || classifyChange({ kind: p.kind, target: p.change && p.change.target }).level !== 1) { refuseRoll(p, `${effect.verdict}: rollback can nguoi (khong phai muc 1)`); continue; }
+      const r = rollback(p.ver, { ...o, approve: true, force: false }); // --force cua autopilot chi bo cong 24h, khong bo kiem "dich bi sua tay"
       if (a) { a.status = r.ok ? 'rolled_back' : 'rollback_failed'; a.reason = r.ok ? effect.reason : r.reason; }
       (r.ok ? res.rolledBack : res.errors).push(r.ok ? { ...who, reason: effect.reason, verdict: effect.verdict } : `rollback ${p.ver}: ${r.reason}`);
       if (a && a.entry_id) notes.set(a.entry_id, { status: r.ok ? 'rolled_back' : 'rollback_failed', reason: a.reason, ver: p.ver });
@@ -163,7 +175,11 @@ export async function runAutopilot(o = {}) {
 
     // 2) Muc ledger can de xuat.
     const entries = o.ledgerEntries || readLedgerRaw(ledgerPath(o));
-    const taken = new Set([...st.applied.filter((a) => ['applied', 'kept'].includes(a.status)).map((a) => a.fp), ...queue.filter((q) => q.status === 'pending').map((q) => q.fp)]);
+    // fp bi rollback do hieu qua (unchanged|worse) khong de xuat lai. shortcut: loai vinh vien, chua co cooldown/het han.
+    const byEffect = listProposals(o).filter((p) => p.effect && ['unchanged', 'worse'].includes(p.effect.verdict));
+    const badPids = new Set(byEffect.map((p) => p.id));
+    const taken = new Set([...byEffect.map((p) => p.evidence && p.evidence.fp), ...st.applied.filter((a) => badPids.has(a.pid)).map((a) => a.fp),
+      ...st.applied.filter((a) => ['applied', 'kept'].includes(a.status)).map((a) => a.fp), ...queue.filter((q) => q.status === 'pending').map((q) => q.fp)]);
     const todo = entries.filter((e) => ['open', 'warned'].includes(e.status) && e.action === 'propose' && e.fp && !taken.has(e.fp)
       && !(e.evolve && ['applied', 'queued', 'refused'].includes(e.evolve.status))).sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, cfg.maxProposals);
     const scan = todo.length ? await findCandidates({ ...o, days: cfg.oracleDays, threshold: 1, nowMs, timeoutMs: 20000 }) : { items: [] };
