@@ -144,7 +144,7 @@ test('cache: entries without current v are misses; cold limits when no current e
   fs.writeFileSync(c, JSON.stringify({ file: f, mtimeMs: st.mtimeMs, size: st.size, sess: { s1: '2026-11-06T10:00:00Z' }, records: [] }) + '\n');
   const o1 = await cached(r, c);
   assert.equal(o1.cold, true); assert.equal(o1.cache_hits, 0); assert.equal(o1.files_parsed, 1); assert.equal(o1.records.length, 1);
-  assert.ok(JSON.parse(fs.readFileSync(c, 'utf8').trim()).v >= 1);
+  assert.equal(JSON.parse(fs.readFileSync(c, "utf8").trim()).v, 2);
   const o2 = await cached(r, c);
   assert.equal(o2.cold, false); assert.equal(o2.cache_hits, 1);
 });
@@ -162,4 +162,24 @@ test('cache: oversized cache file -> start empty, fail-open; unwritable cache pa
 test('compactMsg keeps uuid and isSidechain', () => {
   const c = compactMsg({ type: 'user', uuid: 'u1', isSidechain: true, message: { role: 'user', content: 'hi' } });
   assert.equal(c.uuid, 'u1'); assert.equal(c.isSidechain, true);
+});
+
+// ---- fix3 ----
+test('cache over cap: save trims to cap (newest kept), reports cache_trimmed, never writes over cap', async () => {
+  const r = mk(); const c = cacheOf();
+  for (let i = 0; i < 4; i++) put(r, `p/f${i}.jsonl`, [skillLine('2026-11-06T10:00:00Z', `s${i}`)], NOW - (4 - i) * 1000);
+  const cap = 1500;
+  const o = await cached(r, c, { limits: { cacheMaxBytes: cap } });
+  assert.ok(fs.statSync(c).size <= cap);
+  assert.ok(o.cache_trimmed > 0 && o.cache_trimmed < 4);
+  assert.ok(cacheFiles(c).some((f) => f.endsWith('f3.jsonl'))); // newest mtime kept
+  const o2 = await cached(r, c, { limits: { cacheMaxBytes: cap } });
+  assert.equal(o2.cold, false); assert.ok(o2.cache_hits >= 1);
+});
+test('timestamp: later "timestamp" inside toolUseResult is ignored', async () => {
+  const r = mk();
+  const l = '{"type":"assistant","uuid":"u1","message":{"content":[{"type":"tool_use","name":"Skill","input":{"skill":"a"}}]},"sessionId":"s1","timestamp":"2026-11-06T10:00:00Z","toolUseResult":{"timestamp":"2030-01-01T00:00:00Z"}}';
+  put(r, 'pa/1.jsonl', [l], NOW - 1000);
+  const o = await run(r);
+  assert.equal(o.total_sessions, 1);
 });
