@@ -103,7 +103,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   if (cfg.enabled === false && ev !== 'WorktreeCreate') return { ...profile.noop(ev), records: [], input: original };
   if (profile.setEvent && !original.hook_event_name) original.hook_event_name = ev;
   const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
-  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [], fc: new Map() };
+  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [] };
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
   const gw = (id, kind) => { state.warns.push(gateWarn(id, kind)); state.items.push({ id: 'dispatch', result: { additionalContext: `lop bao ve ${clean(id, /[^\w.-]/g)} khong chay (fail-open)` } }); };
 
@@ -118,10 +118,9 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
       try {
-        const ctx = state.fc.set(m.id, { mod: m.mod, matched: false, done: false }).get(m.id).ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
+        const ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
-      state.fc.has(m.id) && (state.fc.get(m.id).done = true);
       if (!kind && validateHookResult(res).length) kind = 'bad-result';
       state.timings.push({ id: m.id, ms: Date.now() - t0, ...(kind ? { err: kind } : {}) });
       if (kind) {
