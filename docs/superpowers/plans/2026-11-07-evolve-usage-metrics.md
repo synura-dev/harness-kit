@@ -80,7 +80,7 @@ Files: create `harness/evolve/usage/dupes.mjs`, `dupes.test.mjs`.
 - [x] Run: `node --test harness/evolve/usage/dupes.test.mjs`.
 
 ### Task 12: Docs + full suite once
-- [ ] Update `harness/observe/ledger/README.md` and the evolve manifest help (flags `--cost`, `--by-project`, window fields, `source` actions).
+- [x] Update `harness/observe/ledger/README.md` and the evolve manifest help (flags `--cost`, `--by-project`, window fields, `source` actions).
 - [ ] Full suite once, background, with timeout, log to a file: `timeout 900 node --test harness > <scratch>/full.log 2>&1`; builder reports the log tail; no rerun.
 - [ ] Reviewer (Opus) pass on the branch.
 
