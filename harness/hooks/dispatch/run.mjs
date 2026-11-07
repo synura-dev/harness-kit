@@ -170,7 +170,7 @@ export async function main({ event, only = '', profile = CLAUDE } = {}) {
     const r = await dispatch({ event, only, stdin, cfg, startedAt, profile });
     out = r; records = r.records; input = r.input;
     if (profile.mapRecords) records = profile.mapRecords(records, input);
-    try { const lr = latencyRecord(event || input.hook_event_name, input, r.timings, r.totalMs, cfg.hookSlowMs); if (lr) records = [...records, lr]; } catch {}
+    try { const lr = latencyRecord(event || input.hook_event_name, profile.hookCtx ? { ...input, ...profile.hookCtx(input) } : input, r.timings, r.totalMs, cfg.hookSlowMs); if (lr) records = [...records, lr]; } catch {}
   } catch { /* fail-open */ }
   try { if (out.stdout) fs.writeSync(1, out.stdout); if (out.stderr) fs.writeSync(2, out.stderr); } catch {}
   try { await writeRecords(records, input); } catch {}
