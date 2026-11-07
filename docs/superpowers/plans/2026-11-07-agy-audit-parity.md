@@ -27,7 +27,7 @@
 
 ### Task 0: Xac minh payload + transcript agy that (KHONG code; general-purpose, lam truoc)
 Workspace tam trong scratchpad (nam duoi `C:\Users\huynh` = trustedWorkspaces, khong dung du lieu audit hub).
-- [ ] Chuan bi (bash, duong dan tuyet doi, `S` = scratchpad cua agent):
+- [x] Chuan bi (bash, duong dan tuyet doi, `S` = scratchpad cua agent):
   ```
   W="$S/agy-ws"; mkdir -p "$W/.agents/plugins"
   git clone -q "E:/06. Projects/harness-kit" "$W/.agents/plugins/harness-kit"
@@ -35,17 +35,17 @@ Workspace tam trong scratchpad (nam duoi `C:\Users\huynh` = trustedWorkspaces, k
   printf '{"permissions":{"allow":["read_file(%s)"]}}' "$(cygpath -w "$W" | sed 's/\\/\\\\/g')" > "$S/agy-settings.json"
   ```
   Neu agy khong nap plugin (khong co dong capture nao), doi chieu bo cuc `E:/11. Agents/.agents/` (chi `ls`, khong doc data/) va `agy plugin list --json`.
-- [ ] Chay mot lan (nen, timeout cung):
+- [x] Chay mot lan (nen, timeout cung):
   ```
   cd "$W" && HUB_AGY_CAPTURE="$S/agy-capture.jsonl" timeout 300 agy -p "Dung view_file doc README.md roi doc khong-ton-tai.md, tra loi dong 2 cua README. Khong goi subagent, khong run_command." --mode plan --settings "$S/agy-settings.json" --output-format json > "$S/agy-out.json" 2> "$S/agy-err.log"
   ```
   Khong dung `--dangerously-skip-permissions`. File khong ton tai de co mot Post loi.
-- [ ] Ghi nhan (chi doc file trong `$S`, transcript doc bang `head`/`grep` co gioi han):
+- [x] Ghi nhan (chi doc file trong `$S`, transcript doc bang `head`/`grep` co gioi han):
   (a) `transcriptPath` trong payload: gia tri, file co ton tai, la `transcript.jsonl` hay `transcript_full.jsonl` hay duong khac; tong `input/cache_read/output_tokens` cac buoc MODEL so voi `usage` trong `agy-out.json` (lech %; co `thinking` tach rieng khong).
   (b) Hook co ban khi `agy -p` khong: danh sach su kien trong capture (SessionStart, PostToolUse, PostInvocation, Stop) va so lan.
   (c) Payload Post that (co `stepIdx`, `error` khi view_file loi, gia tri) va Stop that (`terminationReason, executionNum, error, fullyIdle`); `stepIdx` cua Post khop `step_index` cua buoc GENERIC nao; transcript co tang dan theo step_index (append-only) khong; `agy --help` co co tiep tuc hoi thoai (resume) khong.
   (d) Audit workspace tam: lenh `harness observe query` (hoac `node "$W/.agents/plugins/harness-kit/harness/cli/harness.mjs" observe query --raw`) - ban ghi hien tai co `tokens_in` null, `data.usage:"unavailable"`.
-- [ ] Ket qua: capture/out/log o lai `$S` (khong dua vao repo). Agent bao <= 30 dong; main chep tom tat vao muc "Ket qua Task 0" cuoi plan nay (commit local truoc khi dispatch Task 1-4).
+- [x] Ket qua: capture/out/log o lai `$S` (khong dua vao repo). Agent bao <= 30 dong; main chep tom tat vao muc "Ket qua Task 0" cuoi plan nay (commit local truoc khi dispatch Task 1-4).
 - Re nhanh theo ket qua:
   - (a) sai/thieu (khong co `transcriptPath`, hoac tro file khong ton tai): Task 2 them `agyTranscriptPath(inp, home)` = `<home>/.gemini/antigravity-cli/brain/<conversationId>/.system_generated/logs/transcript.jsonl` neu ton tai; Task 3 dung no khi payload thieu. Tro `transcript_full.jsonl`: parser van dung (dedupe step_index). Token lech > 5% hoac co thinking rieng: Task 2 them truong `thinking` vao ket qua va ghi chu nguon dung.
   - (b) hook KHONG ban khi `-p`: Task 1-5 giu nguyen (hook ban o phien tuong tac); Task 6 doi thanh huong dan nguoi dung chay mot phien tuong tac; ghi cau hoi mo cho nguoi dung ve cach do phien `-p` (khong lam trong plan nay).
@@ -109,4 +109,8 @@ Khong push, khong sua `.gitignore`, khong install, khong co-author Claude trong 
 - Do token cho phien `agy -p` neu hook khong ban o che do nay (chi ghi cau hoi mo).
 
 ## Ket qua Task 0
-(main dien sau Task 0)
+Chay that 2026-11-07, agy 1.5.x, model gemini-4-argon-medium, `agy -p --mode plan --settings <file> --output-format json` trong workspace tam co plugin; rc=0, 72s. Bang chung o scratchpad cua phien (agy-t0/: agy-capture.jsonl, agy-out.json, audit tam).
+- (a) `transcriptPath` co trong SessionStart/PostInvocation/Stop (KHONG co trong Post tool): `C:/Users/<u>/.gemini/antigravity-cli/brain/<convId>/.system_generated/logs/transcript_full.jsonl` (dau `/`), file ton tai. Tong token cac buoc PLANNER_RESPONSE = usage cua `--output-format json`: input 15143, cache_read 17707, output 1260, lech 0%. `thinking_tokens` (254) da nam trong output, khong tach dong. Transcript append-only, moi step_index mot dong, tang dan. Dong khong co model; `modelName` co o moi payload. -> Khong can `agyTranscriptPath` lam duong chinh (giu du phong neu re). Post khong co transcriptPath -> dur_ms cua Post phai lay transcript qua duong dan da biet cua phien (vd luu tu SessionStart/Stop truoc theo sid) hoac suy tu `brain/<conversationId>/.system_generated/logs/transcript_full.jsonl`.
+- (b) Hook BAN khi `agy -p`: SessionStart 1, Post 3, PostInvocation 3 (audit ghi UserPromptSubmit event_inferred), Stop 1, PreToolUse co ban cho Write. Nhanh "khong ban" khong ap dung.
+- (c) Post that: `{stepIdx:2, error:"", toolCall:{name:"read_file",args:{Path}}}`; Post loi: `error:"file does not exist"` (khong co "exit status", khong exit code cho tool doc). Stop that: `{terminationReason:"NO_TOOL_CALL", executionNum:0, error:"", fullyIdle:true}`. stepIdx = step_index cua buoc GENERIC; content bat dau "Created At: ...+07:00\nCompleted At: ...". `exit status N` chi theo tai lieu (chua thay that) -> exit_code lay tu "Command exited with code N." trong transcript hoac regex `exit status N`, danh dau chua kiem.
+- (d) Audit hien tai: Stop status stopped, tokens null, `data.usage_reason:'no_path'`, model null, khong stop_reason. Post loi da ok:false + data.error. dur_ms null cho Read (Pre matcher hep), Write co dur tu marker. Ban ghi hook-run gan cli:"claude" sid:"claude-nosession" (loi nhan, ngoai pham vi).
