@@ -24,7 +24,7 @@ export async function runPrune(o = {}) {
   const extra = [];
   if (o.cost) {
     const top = [...r.inventory].sort((a, b) => b.cost.windowCost - a.cost.windowCost).slice(0, 15);
-    extra.push(`chi phi ngu canh (top 15 theo windowCost = desc x ${r.total_sessions} phien + body x so lan dung; token ~ chars/4):`,
+    extra.push(`chi phi ngu canh (top 15 theo windowCost = desc x phien nap + body x so lan dung; phien nap: project=${r.hub_sessions ?? '-'} (du an hub), plugin=phien du an cai, con lai=${r.total_sessions} (tat ca); token ~ chars/4):`,
       ...top.map((i) => `  ${`${i.kind}:${i.name}`.padEnd(40)} windowCost=${i.cost.windowCost} (desc ${i.cost.desc_tokens}, body ${i.cost.body_tokens}, dung ${i.count}) costPerUse=${Math.round(i.cost.costPerUse)}  ${i.source}`));
   }
   if (o.byProject) {
@@ -47,7 +47,7 @@ export async function runPrune(o = {}) {
     `evolve prune-candidates: ${dep.length - insuf.length - rep.length} deprecate (${dep.filter((i) => i.status === 'propose_remove').length} propose_remove), ${insuf.length} insufficient_window, ${rep.length} report_only, ${r.items.filter((i) => i.kind === 'cap').length} cap (cua so yeu cau ${r.days} ngay, quet ${r.scanned} su kien)`,
     `du lieu thuc: ${[tsrc && `transcript tu ${String(tsrc.earliest).slice(0, 10)} (${tsrc.window_days} ngay, cache ${tsrc.cache_hits}/${tsrc.files})`, `audit tu ${String(asrc.earliest).slice(0, 10)} (${asrc.window_days} ngay)`].filter(Boolean).join(', ')}; duplicates_dropped=${r.duplicates_dropped}, maintenance_dropped=${r.maintenance_dropped}`,
     'thanh phan: ' + Object.entries(r.counts).map(([t, c]) => `${t} ${c.total}/${c.cap}`).join(', '),
-    `phien trong cua so: ${r.total_sessions}`,
+    `phien trong cua so: ${r.total_sessions} (du an hub: ${r.hub_sessions ?? '-'})`,
     `nguon: gateway=${r.sources.command_gateway} (tu ${r.sources.gateway_since || '-'}), bash_fallback=${r.sources.command_bash_fallback}, hookrun=${r.sources.hookrun_events} (tu ${r.sources.hookrun_since || '-'})`,
     ...r.items.filter((i) => i.kind === 'cap').map((i) => `CAP ${i.sample}`),
     ...r.dupes.pairs.map((p) => `trung mo ta: ${p.a} ~ ${p.b} (${p.score.toFixed(2)})`),

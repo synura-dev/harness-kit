@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateTokens, componentCost, costPerUse, rankByCost, windowCost } from './cost.mjs';
+import path from 'node:path';
+import { estimateTokens, componentCost, costPerUse, rankByCost, windowCost, projectFolder, scopeSessions } from './cost.mjs';
 
 test('estimateTokens = ceil(chars/4)', () => {
   assert.equal(estimateTokens('abcde'), 2);
@@ -28,6 +29,22 @@ test('rankByCost by windowCost desc, costPerUse secondary', () => {
   const r = rankByCost(items, { totalSessions: 3 });
   assert.deepEqual(r.map((i) => i.id), ['c', 'b', 'a']);
   assert.equal(r[0].windowCost, 203); assert.equal(r[0].costPerUse, 203 / 2);
+});
+
+test('projectFolder encodes like Claude (non-alnum -> -)', () => {
+  if (process.platform === 'win32') assert.equal(projectFolder('E:\\11. Agents'), 'E--11--Agents');
+  assert.match(projectFolder('/a/b c.d'), /^[A-Za-z0-9-]+$/);
+});
+test('scopeSessions: project -> own folder; plugin -> installed projects (user scope = all); others = all', () => {
+  const D = path.resolve('/zz/hub'), P2 = path.resolve('/zz/two');
+  const base = { total: 10, byProject: { [projectFolder(D)]: 4, [projectFolder(P2)]: 3 }, projectDir: D };
+  assert.equal(scopeSessions({ source: 'project' }, base), 4);
+  assert.equal(scopeSessions({ source: 'project' }, { ...base, projectDir: path.resolve('/nope') }), 0);
+  const inst = (e) => ({ plugins: { 'pl@m': e } });
+  assert.equal(scopeSessions({ source: 'plugin', plugin: 'pl' }, { ...base, installed: inst([{ scope: 'project', projectPath: P2 }]) }), 3);
+  assert.equal(scopeSessions({ source: 'plugin', plugin: 'pl' }, { ...base, installed: inst([{ scope: 'project', projectPath: P2 }, { scope: 'project', projectPath: D }]) }), 7);
+  assert.equal(scopeSessions({ source: 'plugin', plugin: 'pl' }, { ...base, installed: inst([{ scope: 'user' }]) }), 10);
+  for (const s of ['account', 'builtin', 'third_party', 'unknown']) assert.equal(scopeSessions({ source: s }, base), 10);
 });
 
 test('windowCost = desc*totalSessions + body*count', () => {

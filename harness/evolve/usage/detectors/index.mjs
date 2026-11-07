@@ -48,12 +48,11 @@ export function agent(e, ctx = {}) {
 export function skillAudit(e, ctx = {}) {
   if (e.gw || e.tool !== 'Skill' || e.event !== 'PreToolUse') return [];
   const id = idOf(e);
-  if (!id && ctx.auditSkill === false) return [];
+  if (!id && ctx.auditSkill === false && (!e.cli || e.cli === 'claude')) return []; // agy khong co transcript Claude -> giu
   const full = String(dataOf(e).skill || e.target || '').trim().split(/\s+/)[0];
   if (!full) return [];
   return [{ kind: 'skill', id: full, short: full.split(':').pop(), ts: e.ts, session: e.sid, origin: 'audit', channel: 'tool', callId: id }];
 }
 
-export const detectors = { skill, agent, command, hook };
 export const detectAudit = (e, ctx) => [command, hook, agent, skillAudit].flatMap((d) => d(e, ctx));
 export const detectTranscript = (r, ctx) => skill(r, ctx);

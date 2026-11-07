@@ -113,6 +113,52 @@ test('subagents subfolder read, own turns', async () => {
   assert.equal(o.records[0].turn, `${f}#1`);
 });
 
+// ---- fix2: per-project sessions, ts upper bound, timestamp robustness, cache version/limits ----
+test('project_sessions: sessions per project folder; total_sessions same window', async () => {
+  const r = mk();
+  put(r, 'pa/1.jsonl', [skillLine('2026-11-06T10:00:00Z', 'a1'), skillLine('2026-11-06T11:00:00Z', 'a2')], NOW - 1000);
+  put(r, 'pb/1.jsonl', [skillLine('2026-11-06T10:00:00Z', 'b1')], NOW - 1000);
+  const o = await run(r);
+  assert.deepEqual(o.project_sessions, { pa: 2, pb: 1 }); assert.equal(o.total_sessions, 3);
+  const c = path.join(mk(), 'c.jsonl');
+  await run(r, { cacheFile: c });
+  assert.deepEqual((await run(r, { cacheFile: c })).project_sessions, { pa: 2, pb: 1 }); // cache hit giu dem
+});
+test('ts upper bound: session only in the far future is not counted', async () => {
+  const r = mk();
+  put(r, 'pa/1.jsonl', [skillLine('2026-11-06T10:00:00Z', 'a1'), skillLine('2030-01-01T00:00:00Z', 'fut')], NOW - 1000);
+  const o = await run(r);
+  assert.equal(o.total_sessions, 1); assert.deepEqual(o.project_sessions, { pa: 1 });
+});
+test('timestamp: top-level timestamp wins over a "timestamp" key inside tool_use input', async () => {
+  const r = mk();
+  const l = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name: 'Skill', input: { skill: 'a', timestamp: '2020-01-01T00:00:00Z' } }] }, sessionId: 's1', timestamp: '2026-11-06T10:00:00Z' });
+  put(r, 'pa/1.jsonl', [l], NOW - 1000);
+  const o = await run(r);
+  assert.equal(o.total_sessions, 1); assert.deepEqual(o.project_sessions, { pa: 1 });
+});
+test('cache: entries without current v are misses; cold limits when no current entries', async () => {
+  const r = mk(); const c = cacheOf();
+  const f = put(r, 'p/s.jsonl', [skillLine('2026-11-06T10:00:00Z')], NOW - 1000);
+  const st = fs.statSync(f);
+  fs.writeFileSync(c, JSON.stringify({ file: f, mtimeMs: st.mtimeMs, size: st.size, sess: { s1: '2026-11-06T10:00:00Z' }, records: [] }) + '\n');
+  const o1 = await cached(r, c);
+  assert.equal(o1.cold, true); assert.equal(o1.cache_hits, 0); assert.equal(o1.files_parsed, 1); assert.equal(o1.records.length, 1);
+  assert.ok(JSON.parse(fs.readFileSync(c, 'utf8').trim()).v >= 1);
+  const o2 = await cached(r, c);
+  assert.equal(o2.cold, false); assert.equal(o2.cache_hits, 1);
+});
+test('cache: oversized cache file -> start empty, fail-open; unwritable cache path does not throw', async () => {
+  const r = mk(); const c = cacheOf();
+  put(r, 'p/s.jsonl', [skillLine('2026-11-06T10:00:00Z')], NOW - 1000);
+  await cached(r, c);
+  const o = await cached(r, c, { limits: { cacheMaxBytes: 5 } });
+  assert.equal(o.cache_hits, 0); assert.equal(o.files_parsed, 1);
+  const blocker = path.join(mk(), 'file'); fs.writeFileSync(blocker, 'x');
+  const o2 = await cached(r, path.join(blocker, 'sub', 'c.jsonl'));
+  assert.equal(o2.records.length, 1);
+});
+
 test('compactMsg keeps uuid and isSidechain', () => {
   const c = compactMsg({ type: 'user', uuid: 'u1', isSidechain: true, message: { role: 'user', content: 'hi' } });
   assert.equal(c.uuid, 'u1'); assert.equal(c.isSidechain, true);

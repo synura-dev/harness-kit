@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { parseFrontmatter } from '../../core/agy/agents.mjs';
 
 // shortcut: ~4 chars/token, no tokenizer
@@ -31,4 +32,17 @@ export function rankByCost(items, { totalSessions = 0 } = {}) {
     const wc = windowCost(i, { count: i.count, totalSessions });
     return { ...i, windowCost: wc, costPerUse: wc / Math.max(i.count || 0, 1) };
   }).sort((a, b) => b.windowCost - a.windowCost);
+}
+
+// Claude ma hoa duong dan du an thanh ten thu muc duoi ~/.claude/projects: moi ky tu khong phai chu/so -> '-'.
+export const projectFolder = (p) => path.resolve(String(p)).replace(/[^A-Za-z0-9]/g, '-');
+
+// So phien noi thanh phan thuc su duoc nap: project -> phien cua thu muc du an; plugin -> du an cai plugin
+// (installed_plugins.json; scope user hoac khong ro = tat ca); account/builtin/third_party/unknown -> tat ca.
+export function scopeSessions({ source, plugin } = {}, { total = 0, byProject = {}, projectDir = '', installed = null } = {}) {
+  if (source === 'project') return projectDir ? byProject[projectFolder(projectDir)] || 0 : total;
+  if (source !== 'plugin') return total;
+  const list = plugin && installed?.plugins ? Object.entries(installed.plugins).filter(([k]) => k.split('@')[0] === plugin).flatMap(([, v]) => (Array.isArray(v) ? v : [])) : [];
+  if (!list.length || list.some((i) => !i.projectPath || (i.scope !== 'project' && i.scope !== 'local'))) return total; // shortcut: khong ro noi cai -> tinh het (khong de thieu)
+  return [...new Set(list.map((i) => projectFolder(i.projectPath)))].reduce((n, f) => n + (byProject[f] || 0), 0);
 }

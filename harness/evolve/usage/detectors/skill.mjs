@@ -1,10 +1,11 @@
 // Pure skill-usage detector: detect(record, ctx) -> event[]. No I/O.
 // record = {session, project, ts, turn, file, msg}; ctx = {agentSkills?, skillNames?: Set}.
-// Event: id = id day du (vd harness-kit:doctor), short = doan cuoi. Slash: kind 'skill' only if ctx.skillNames has short (or id), else 'command'.
+// Event: id = id day du (vd harness-kit:doctor), short = doan cuoi. Slash: 'skill' only if ctx.skillNames has short (or id); 'command' only if ctx.commandIds has id; else bo (built-in /clear, /model... khong phai muc dung).
 // Slash callId = msg.uuid:blockIndex (dedupe khi doc lai cache); tool/read callId = tool_use id.
 
 const last = (s) => String(s).split(':').pop();
 const SLASH = /<command-name>\s*\/?([^<\s]+?)\s*<\/command-name>/g;
+const THIRD_PARTY = /\/\.claude\/plugins\//; // cache/marketplaces cua plugin ben thu ba: khong ghep voi skill local cung ten
 const SKILL_MD = /^(?:.*\/)?skills\/([^/]+)\/skill\.md$/i;
 
 export function detect(record, ctx = {}) {
@@ -25,7 +26,8 @@ export function detect(record, ctx = {}) {
             for (const m of it.text.matchAll(SLASH)) {
               const id = m[1];
               const isSkill = ctx.skillNames?.has(last(id)) || ctx.skillNames?.has(id);
-              out.push(ev(isSkill ? 'skill' : 'command', id, 'slash', uuid ? { callId: `${uuid}:${bi}${j ? '.' + j : ''}` } : {}));
+              const kind = isSkill ? 'skill' : ctx.commandIds?.has(id) ? 'command' : null;
+              if (kind) out.push(ev(kind, id, 'slash', uuid ? { callId: `${uuid}:${bi}${j ? '.' + j : ''}` } : {}));
               j++;
             }
           } else if (it.type === 'tool_use') {
@@ -35,7 +37,7 @@ export function detect(record, ctx = {}) {
             } else if (it.name === 'Read' && typeof inp.file_path === 'string') {
               const file = inp.file_path.replace(/\\/g, '/');
               const m = SKILL_MD.exec(file);
-              if (m) out.push(ev('skill', m[1], 'read', { file, callId: it.id }));
+              if (m && !THIRD_PARTY.test(file)) out.push(ev('skill', m[1], 'read', { file, callId: it.id }));
             } else if ((it.name === 'Agent' || it.name === 'Task') && typeof inp.subagent_type === 'string') {
               const a = ctx.agentSkills, key = last(inp.subagent_type);
               const list = a && Object.hasOwn(a, key) ? a[key] : null;

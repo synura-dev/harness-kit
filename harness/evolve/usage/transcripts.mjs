@@ -8,9 +8,11 @@ import { createInterface } from 'node:readline';
 // shortcut: cold = cache rong -> tran lon 4GB/120s de lan dau xong gan het; warm = 512MB/20s.
 // Con so do tu may that (2.5GB/4277 file/30 ngay), khong suy ra tu cong thuc; ghi de bang `limits`.
 export const TRANSCRIPTS = Object.freeze({
-  limits: Object.freeze({ timeoutMs: 20000, maxBytes: 512 * 1048576, maxFiles: 5000 }),
+  limits: Object.freeze({ timeoutMs: 20000, maxBytes: 512 * 1048576, maxFiles: 5000, cacheMaxBytes: 128 * 1048576 }),
   coldLimits: Object.freeze({ timeoutMs: 120000, maxBytes: 4096 * 1048576, maxFiles: 20000 }),
 });
+const CACHE_V = 2; // doi khi doi dinh dang entry (record/sess) -> entry cu thanh miss
+const DAY = 86400000;
 const MARK = ['"Skill"', '<command-name>', 'SKILL.md', '.md"', 'subagent_type'];
 const CMD_RE = /<command-name>[\s\S]*?<\/command-name>/;
 
@@ -50,28 +52,39 @@ export function compactMsg(m) {
   return r;
 }
 
-function loadCache(file) {
+// Chi nhan entry dung phien ban hien tai; qua maxBytes hoac loi doc -> rong (fail-open).
+function loadCache(file, maxBytes) {
   const m = new Map();
-  let txt; try { txt = fs.readFileSync(file, 'utf8'); } catch { return m; }
-  for (const l of txt.split('\n')) { if (!l) continue; try { const e = JSON.parse(l); if (e?.file) m.set(e.file, e); } catch { /* bo dong hong */ } }
+  let txt; try { if (fs.statSync(file).size > maxBytes) return m; txt = fs.readFileSync(file, 'utf8'); } catch { return m; }
+  for (const l of txt.split('\n')) { if (!l) continue; try { const e = JSON.parse(l); if (e?.file && e.v === CACHE_V) m.set(e.file, e); } catch { /* bo dong hong */ } }
   return m;
 }
-function saveCache(file, m) {
-  const tmp = `${file}.tmp`;
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(tmp, [...m.values()].map((e) => JSON.stringify(e)).join('\n') + (m.size ? '\n' : ''));
-  fs.renameSync(tmp, file);
+function saveCache(file, m) { // tmp theo pid: job SessionStart + CLI chay dong thoi; loi ghi khong lam hong lan quet
+  const tmp = `${file}.${process.pid}.tmp`;
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(tmp, [...m.values()].map((e) => JSON.stringify(e)).join('\n') + (m.size ? '\n' : ''));
+    fs.renameSync(tmp, file);
+  } catch { try { fs.rmSync(tmp, { force: true }); } catch { /* bo qua */ } }
 }
 
 export async function readTranscripts({ roots = [path.join(os.homedir(), '.claude', 'projects')], fromMs = 0, nowMs = Date.now(), limits = {}, cacheFile = null } = {}) {
-  const cache = cacheFile ? loadCache(cacheFile) : null;
-  const L = { ...(cache && cache.size === 0 ? TRANSCRIPTS.coldLimits : TRANSCRIPTS.limits), ...limits };
+  const cache = cacheFile ? loadCache(cacheFile, limits.cacheMaxBytes ?? TRANSCRIPTS.limits.cacheMaxBytes) : null;
+  const cold = !!cache && cache.size === 0; // khong co entry hop le -> tran lon de lan dau (hoac doi dinh dang) khong bi cat
+  const L = { ...(cold ? TRANSCRIPTS.coldLimits : TRANSCRIPTS.limits), ...limits };
   const deadline = Date.now() + L.timeoutMs;
   const records = []; let cache_hits = 0, files_parsed = 0, bytes_parsed = 0, truncated = null;
   let earliest = Infinity, latest = -Infinity, eTs = null, lTs = null;
   const seen = new Set(); const fresh = new Map();
   const allSess = new Map(); // sessionId -> ts lon nhat tren MOI dong (khong chi dong khop prefilter) -> total_sessions chinh xac
-  const mergeSess = (o) => { for (const [k, v] of Object.entries(o)) if (!allSess.has(k) || v > allSess.get(k)) allSess.set(k, v); };
+  const projSess = new Map(); // project -> Map(sessionId -> ts lon nhat)
+  const mergeSess = (o, project) => {
+    const pm = projSess.get(project) || new Map(); projSess.set(project, pm);
+    for (const [k, v] of Object.entries(o)) {
+      if (!allSess.has(k) || v > allSess.get(k)) allSess.set(k, v);
+      if (!pm.has(k) || v > pm.get(k)) pm.set(k, v);
+    }
+  };
   const add = (r) => {
     records.push(r);
     const ts = Date.parse(r.ts);
@@ -84,13 +97,13 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
       let st; try { st = fs.statSync(f); } catch { continue; }
       if (st.mtimeMs < fromMs) continue;
       seen.add(f);
+      const rel = path.relative(root, f).split(path.sep);
+      const project = rel.length > 1 ? rel[0] : '';
       const hit = cache?.get(f);
-      if (hit && hit.sess && hit.mtimeMs === st.mtimeMs && hit.size === st.size) { cache_hits++; mergeSess(hit.sess); for (const r of hit.records) add(r); continue; }
+      if (hit && hit.mtimeMs === st.mtimeMs && hit.size === st.size) { cache_hits++; mergeSess(hit.sess, project); for (const r of hit.records) add(r); continue; }
       if (files_parsed >= L.maxFiles) { truncated = 'max_files'; break outer; }
       if (bytes_parsed + st.size > L.maxBytes) { truncated = 'max_bytes'; break outer; }
       bytes_parsed += st.size; files_parsed++;
-      const rel = path.relative(root, f).split(path.sep);
-      const project = rel.length > 1 ? rel[0] : '';
       const rl = createInterface({ input: fs.createReadStream(f, { encoding: 'utf8' }), crlfDelay: Infinity });
       let n = 0, turn = 0; const mine = []; const sess = {};
       for await (const line of rl) {
@@ -98,7 +111,7 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
         if (!line) continue;
         const si = line.indexOf('"sessionId":"'); // khong JSON.parse: chi cat chuoi sessionId + timestamp
         if (si >= 0) {
-          const sid = line.slice(si + 13, line.indexOf('"', si + 13)); const ti = line.indexOf('"timestamp":"');
+          const sid = line.slice(si + 13, line.indexOf('"', si + 13)); const ti = line.lastIndexOf('"timestamp":"'); // timestamp cua dong nam sau message; khong lay khoa "timestamp" trong tool input
           const tv = ti >= 0 ? line.slice(ti + 13, line.indexOf('"', ti + 13)) : '';
           if (sid && tv && (!sess[sid] || tv > sess[sid])) sess[sid] = tv;
         }
@@ -111,9 +124,9 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
         mine.push({ session: msg.sessionId, project: project || msg.cwd || '', ts: msg.timestamp, turn: `${f}#${turn}`, file: f, msg: cache ? compactMsg(msg) : msg });
       }
       for (const r of mine) add(r);
-      mergeSess(sess);
+      mergeSess(sess, project);
       if (truncated) break outer; // file dang do khong cache
-      if (cache) fresh.set(f, { file: f, mtimeMs: st.mtimeMs, size: st.size, records: mine, sess });
+      if (cache) fresh.set(f, { v: CACHE_V, file: f, mtimeMs: st.mtimeMs, size: st.size, records: mine, sess });
     }
   }
   if (cache) {
@@ -126,6 +139,9 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
     for (const [f, e] of fresh) out.set(f, e);
     saveCache(cacheFile, out);
   }
-  let total_sessions = 0; for (const v of allSess.values()) if (Date.parse(v) >= fromMs) total_sessions++;
-  return { records, total_sessions, truncated, files_read: cache_hits + files_parsed, cache_hits, files_parsed, bytes_parsed, earliest_ts: eTs, latest_ts: lTs };
+  const inWin = (v) => { const t = Date.parse(v); return t >= fromMs && t <= nowMs + DAY; };
+  let total_sessions = 0; for (const v of allSess.values()) if (inWin(v)) total_sessions++;
+  const project_sessions = {};
+  for (const [pr, m] of projSess) { let n = 0; for (const v of m.values()) if (inWin(v)) n++; if (n) project_sessions[pr] = n; }
+  return { records, total_sessions, project_sessions, cold, truncated, files_read: cache_hits + files_parsed, cache_hits, files_parsed, bytes_parsed, earliest_ts: eTs, latest_ts: lTs };
 }

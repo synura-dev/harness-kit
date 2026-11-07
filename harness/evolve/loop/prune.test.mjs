@@ -3,7 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { cmdNames, inventoryCommands, inventoryHooks, inventorySkills, inventoryAgents, inventoryRules, countUsage, buildCandidates, pruneCandidates, PRUNE } from './prune.mjs';
+import { cmdNames, inventoryCommands, inventoryHooks, inventorySkills, inventoryAgents, inventoryRules, auditEvents, usageFrom, readUsageEvents, buildCandidates, pruneCandidates, PRUNE } from './prune.mjs';
+import { projectFolder } from '../usage/cost.mjs';
+
+// audit events -> usage (same two steps pruneCandidates runs); countUsage was removed from prune.mjs as test-only
+const countUsage = (events, inv, opts = {}) => {
+  const a = auditEvents(events, inv, opts);
+  const r = usageFrom(a.events, { gwFirst: a.gwFirst, stats: a.stats, maintenanceReads: opts.maintenanceReads });
+  return { usage: r.usage, sources: r.sources };
+};
 
 const DAY = 86400000;
 const NOW = Date.parse('2026-11-05T12:00:00Z');
@@ -137,11 +145,11 @@ const asst = (ts, sid, blocks) => line({ type: 'assistant', sessionId: sid, time
 const user = (ts, sid, text) => line({ type: 'user', sessionId: sid, timestamp: ts, message: { role: 'user', content: text } });
 const skillUse = (id, name) => ({ type: 'tool_use', id, name: 'Skill', input: { skill: name } });
 const readUse = (id, f) => ({ type: 'tool_use', id, name: 'Read', input: { file_path: f } });
-async function integ({ tr, audit = '', opts = {} }) {
+async function integ({ tr, audit = '', opts = {}, auditDay }) {
   const proj = tmp(), auditDir = tmp(), trDir = tmp();
   wr(path.join(proj, '.claude/skills/old/SKILL.md'), 'x'); wr(path.join(proj, '.claude/skills/other/SKILL.md'), 'x');
-  wr(path.join(trDir, 'p1', 's.jsonl'), tr);
-  const d = ISO(NOW).slice(0, 10);
+  wr(path.join(trDir, projectFolder(proj), 's.jsonl'), tr);
+  const d = auditDay || ISO(NOW).slice(0, 10);
   if (audit) wr(path.join(auditDir, 'x', `date=${d}`, 'a.jsonl'), audit);
   const r = await pruneCandidates({ pluginRoot: tmp(), projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], nowMs: NOW, order: {}, ...opts });
   return { r, dep: (n) => r.items.find((i) => i.id === `skill:${n}`) };
@@ -192,7 +200,7 @@ test('integ: audit Skill khong co tool_use_id bi bo khi doc transcript (khong de
 test('integ: gateWindow: du lieu 8 ngay -> insufficient_window, khong pending; sources co earliest+window_days', async () => {
   const t = ISO(NOW - 8 * DAY);
   const audit = line({ ts: t, sid: 's1', event: 'PreToolUse', tool: 'Agent', data: { subagent_type: 'x' } });
-  const { r } = await integ({ tr: asst(t, 's1', [skillUse('T1', 'zzz')]), audit, opts: { gateWindow: true } });
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('T1', 'zzz')]), audit, auditDay: ISO(NOW - 8 * DAY).slice(0, 10), opts: { gateWindow: true } });
   assert.equal(r.sources.audit.window_days, 8);
   assert.equal(r.items.filter((i) => i.status === 'pending' || i.status === 'propose_remove').length, 0);
   assert.equal(r.items.find((i) => i.id === 'skill:old').status, 'insufficient_window');
@@ -247,7 +255,7 @@ test('integ: cost {desc,body,windowCost,costPerUse} theo total_sessions; dupes t
   wr(path.join(proj, '.claude/skills/a/SKILL.md'), sk('quan ly tri thuc luu tru bao cao nghien cuu'));
   wr(path.join(proj, '.claude/skills/b/SKILL.md'), sk('quan ly tri thuc luu tru bao cao nghien cuu'));
   const t = ISO(NOW - DAY);
-  wr(path.join(trDir, 'p1', 's.jsonl'), user(t, 's1', 'hi') + asst(t, 's1', [skillUse('t1', 'a')]) + user(t, 's2', 'hi'));
+  wr(path.join(trDir, projectFolder(proj), 's.jsonl'), user(t, 's1', 'hi') + asst(t, 's1', [skillUse('t1', 'a')]) + user(t, 's2', 'hi'));
   const r = await pruneCandidates({ pluginRoot: tmp(), projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], nowMs: NOW, order: {} });
   const a = r.inventory.find((i) => i.name === 'a');
   assert.equal(r.total_sessions, 2);
@@ -255,6 +263,70 @@ test('integ: cost {desc,body,windowCost,costPerUse} theo total_sessions; dupes t
   assert.equal(a.cost.windowCost, a.cost.desc_tokens * 2 + 10 * 1);
   assert.equal(a.cost.costPerUse, a.cost.windowCost);
   assert.equal(r.dupes.pairs.length, 1);
+});
+
+// ---- fix2: accuracy ----
+test('A integ: windowCost scope: project skill = its project folder sessions; plugin skill = installed projects', async () => {
+  const proj = tmp(), other = tmp(), pr = tmp(), trDir = tmp(), auditDir = tmp();
+  const sk = `---\nname: x\ndescription: ${'d'.repeat(40)}\n---\nbody`;
+  wr(path.join(proj, '.claude/skills/ps/SKILL.md'), sk); wr(path.join(pr, 'skills/pl/SKILL.md'), sk);
+  wr(path.join(pr, '.claude-plugin/plugin.json'), JSON.stringify({ name: 'plx' }));
+  const t = ISO(NOW - DAY);
+  wr(path.join(trDir, projectFolder(proj), 's.jsonl'), user(t, 's1', 'hi'));
+  wr(path.join(trDir, projectFolder(other), 's.jsonl'), user(t, 's2', 'hi') + user(t, 's3', 'hi') + user(t, 's4', 'hi'));
+  const installedPlugins = { plugins: { 'plx@m': [{ scope: 'project', projectPath: other }] } };
+  const r = await pruneCandidates({ pluginRoot: pr, projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], nowMs: NOW, order: {}, installedPlugins });
+  const c = (n) => r.inventory.find((i) => i.name === n).cost;
+  assert.equal(r.total_sessions, 4); assert.equal(r.hub_sessions, 1);
+  assert.ok(c('ps').desc_tokens > 0);
+  assert.equal(c('ps').windowCost, c('ps').desc_tokens * 1);
+  assert.equal(c('pl').windowCost, c('pl').desc_tokens * 3);
+});
+
+test('B inventoryCommands: ext under projectDir -> source project; outside -> unknown', () => {
+  const root = tmp(), proj = tmp(), out = tmp();
+  wr(path.join(proj, 'ext1/manifest.json'), JSON.stringify({ kind: 'cli', domain: 'hubx', cmds: ['go'] }));
+  wr(path.join(out, 'ext2/manifest.json'), JSON.stringify({ kind: 'cli', domain: 'outx', cmds: ['go'] }));
+  const cmds = inventoryCommands({ pluginRoot: root, extRoots: [path.join(proj, 'ext1'), path.join(out, 'ext2')], projectDir: proj });
+  const by = (n) => cmds.find((c) => c.name === n);
+  assert.equal(by('hubx.go').source, 'project'); assert.equal(by('hubx.go').action, 'delete_in_repo');
+  assert.equal(by('outx.go').source, 'unknown');
+});
+
+test('D readUsageEvents: earliest = oldest partition name (any partition); hookrun_earliest before ts filter', async () => {
+  const a = tmp(); const fromMs = NOW - 30 * DAY;
+  wr(path.join(a, 'x', 'date=2026-09-01', 'a.jsonl'), line({ ts: '2026-09-01T05:00:00Z', event: 'PreToolUse', tool: 'Skill', target: 'zz' }));
+  const hr = ISO(fromMs - 5 * 3600000);
+  wr(path.join(a, 'x', `date=${ISO(fromMs).slice(0, 10)}`, 'b.jsonl'), line({ ts: hr, event: 'HookRun', sid: 's', data: { modules: [{ id: 'g', ms: 1 }] } }));
+  const r = await readUsageEvents({ auditDirs: [a], fromMs, nowMs: NOW });
+  assert.ok(r.earliest_ts.startsWith('2026-09-01'));
+  assert.equal(r.events.length, 0); assert.equal(r.hookrun_earliest, hr);
+});
+
+test('D buildCandidates: state kept when kind flips to insufficient_window (pending_since preserved)', () => {
+  const st = { 'skill:old': { pending_since: '2026-10-25' } };
+  const young = new Date(NOW - 8 * DAY).toISOString();
+  const r = buildCandidates({ inv: emptyInv, usage: countUsage([], emptyInv).usage, nowMs: NOW, state: st, window: W(young) });
+  assert.equal(r.items.find((i) => i.id === 'skill:old').status, 'insufficient_window');
+  assert.deepEqual(r.state, st);
+});
+
+test('E auditEvents: Skill without tool_use_id dropped only for claude/empty cli when transcript read', () => {
+  const base = { ts: '2026-11-05T01:00:00Z', sid: 's', event: 'PreToolUse', tool: 'Skill', target: 'old' };
+  const n = (e) => auditEvents([e], { commands: [] }, { auditSkill: false }).events.length;
+  assert.equal(n(base), 0); assert.equal(n({ ...base, cli: 'claude' }), 0); assert.equal(n({ ...base, cli: 'agy' }), 1);
+});
+
+test('F gateWindow default ON; only gateWindow:false turns it off', async () => {
+  const t = ISO(NOW - 8 * DAY); const day = ISO(NOW - 8 * DAY).slice(0, 10);
+  const tr = asst(t, 's1', [skillUse('T1', 'zzz')]);
+  assert.equal((await integ({ tr, auditDay: day })).dep('old').status, 'insufficient_window');
+  assert.equal((await integ({ tr, auditDay: day, opts: { gateWindow: false } })).dep('old').status, 'pending');
+});
+
+test('G transcript record with ts beyond now+1d is not counted', async () => {
+  const { dep } = await integ({ tr: asst(ISO(NOW + 5 * DAY), 's1', [skillUse('t1', 'old')]) });
+  assert.ok(dep('old'));
 });
 
 test('integ: usage_detail co channels, sessions, ids day du, projects cho --detail', async () => {
