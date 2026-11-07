@@ -349,6 +349,36 @@ test('effect: hai lan chay lien tiep khong ghi/rollback 2 lan', async () => {
   expect(logOps().filter((x) => x.op === 'rollback' && x.ok).length).toBe(1);
 });
 
+const filler = (n) => { for (let i = 0; i < n; i++) fs.writeFileSync(propFile(`zz${String(i).padStart(3, '0')}`), JSON.stringify({ id: `zz${i}`, kind: 'skill', status: 'checked', change: { target: 'evolve/skills/x/SKILL.md' } })); };
+
+test('effect: >20 de xuat: luat ap cu van duoc do, fp da rollback van bi loai', async () => {
+  const { target } = await applied();
+  filler(25);
+  worse();
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(1); expect(fs.existsSync(target)).toBe(false);
+  filler(25);
+  const r = await runAutopilot({ ...o, nowMs: NOW + 9 * DAY, ledgerEntries: [entry(FP)], force: true });
+  expect(r.applied.length).toBe(0); expect(r.queued.length).toBe(0);
+});
+
+test('effect: loai fp chi ap cho kind rule (skill cung fp van xep hang duoc)', async () => {
+  await applied();
+  worse();
+  await runAutopilot(T8());
+  const r = await runAutopilot({ ...o, nowMs: NOW + 9 * DAY, ledgerEntries: [entry(FP, { evolve_kind: 'skill' })], force: true });
+  expect(r.queued.length).toBe(1);
+});
+
+test('effect: dry-run bao refused (khong phai rolledBack) khi muc 2 / manifest lech', async () => {
+  const { pid } = await applied();
+  editProp(pid, (j) => { j.change.target = 'evolve/rules/x.json'; });
+  worse();
+  const t = await runAutopilot({ ...T8(), dryRun: true });
+  expect(t.rolledBack.length).toBe(0);
+  expect(t.refused).toMatchObject([{ entry: pid, dry: true }]);
+});
+
 test('effect: rollback that bai -> bao loi, state rollback_failed', async () => {
   const { target } = await applied();
   fs.writeFileSync(target, 'bi sua tay'); // sha lech -> rollback tu choi
