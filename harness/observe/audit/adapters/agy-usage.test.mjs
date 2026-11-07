@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { sumAgyUsage, stepDurations, exitCodeOf, exitStatusOf } from './agy-usage.mjs';
+import { sumAgyUsage, stepDurations, stepDuration, exitCodeOf, exitStatusOf } from './agy-usage.mjs';
 
 const L = (o) => JSON.stringify(o);
 const model = (i, inp, cr, out) => L({ step_index: i, source: 'MODEL', type: 'PLANNER_RESPONSE', status: 'DONE', created_at: '2026-10-29T01:25:22Z', input_tokens: inp, cache_read_tokens: cr, output_tokens: out });
@@ -35,6 +35,34 @@ test('stepDurations tu Created At/Completed At co mui gio', () => {
   const m = stepDurations(t);
   expect(m.get(5)).toBe(2500);
   expect(m.has(6)).toBe(false);
+});
+
+const gen = (i, c, type = 'GENERIC') => L({ step_index: i, source: 'SYSTEM', type, content: c });
+const span = (a, b) => `Created At: ${a}\nCompleted At: ${b}\nx`;
+
+test('dong non-MODEL co input_tokens bi bo', () => {
+  const t = L({ step_index: 1, source: 'SYSTEM', type: 'GENERIC', input_tokens: 99, output_tokens: 9 });
+  expect(sumAgyUsage(t).msgs).toBe(0);
+});
+
+test('stepDurations: am, content khong chuoi, tron Z/+07:00, khong phai GENERIC', () => {
+  const t = [
+    gen(1, span('2026-10-29T01:00:05Z', '2026-10-29T01:00:00Z')),
+    L({ step_index: 2, source: 'SYSTEM', type: 'GENERIC', content: { 'Created At:': 1 } }),
+    gen(3, span('2026-10-29T08:00:00+07:00', '2026-10-29T01:00:03Z')),
+    gen(4, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:01Z'), 'PLANNER_RESPONSE'),
+    gen(5, 'note\n' + span('2026-10-29T01:00:00Z', '2026-10-29T01:00:01Z')),
+  ].join('\n');
+  const m = stepDurations(t);
+  expect([...m.entries()]).toEqual([[3, 3000]]);
+});
+
+test('stepDuration tim dung buoc, khong thay/het deadline -> null', () => {
+  const t = [gen(10, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:02Z')), gen(11, span('2026-10-29T01:00:00Z', '2026-10-29T01:00:04Z'))].join('\n');
+  expect(stepDuration(t, 11)).toBe(4000);
+  expect(stepDuration(t, '10')).toBe(2000);
+  expect(stepDuration(t, 12)).toBeNull();
+  expect(stepDuration(t, 10, Date.now() - 1)).toBeNull();
 });
 
 test('exitCodeOf / exitStatusOf', () => {

@@ -19,23 +19,38 @@ export function sumAgyUsage(text, deadline = Infinity) {
   return r;
 }
 
-const CREATED = /Created At:\s*(\S+)/;
-const COMPLETED = /Completed At:\s*(\S+)/;
+const DUR = /^Created At:\s*(\S+)\nCompleted At:\s*(\S+)/;
 
-/** text -> Map step_index -> ms (Created At/Completed At ISO co mui gio); thieu Completed/khong parse duoc -> bo. */
+const durOf = (e) => {
+  if (!e || e.type !== 'GENERIC' || typeof e.content !== 'string') return null;
+  const m = DUR.exec(e.content); if (!m) return null;
+  const ms = Date.parse(m[2]) - Date.parse(m[1]);
+  return Number.isFinite(ms) && ms >= 0 ? ms : null;
+};
+
+/** text -> Map step_index -> ms (chi dong GENERIC, content bat dau Created At/Completed At); khong khop/am -> bo. */
 export function stepDurations(text) {
   const out = new Map();
   for (const line of String(text).split('\n')) {
     if (!line.includes('Created At:')) continue;
     let e; try { e = JSON.parse(line); } catch { continue; }
-    if (!e || typeof e.step_index !== 'number') continue;
-    const c = typeof e.content === 'string' ? e.content : JSON.stringify(e.content ?? '');
-    const a = CREATED.exec(c), b = COMPLETED.exec(c);
-    if (!a || !b) continue;
-    const ms = Date.parse(b[1]) - Date.parse(a[1]);
-    if (Number.isFinite(ms) && ms >= 0) out.set(e.step_index, ms);
+    const ms = durOf(e);
+    if (ms !== null && typeof e.step_index === 'number') out.set(e.step_index, ms);
   }
   return out;
+}
+
+/** Thoi luong mot buoc GENERIC theo step_index -> ms | null; dung som khi thay, het deadline -> null. */
+export function stepDuration(text, stepIdx, deadline = Infinity) {
+  const n = Number(stepIdx); if (!Number.isInteger(n)) return null;
+  const pat = `"step_index":${n}`;
+  for (const line of String(text).split('\n')) {
+    if (Date.now() > deadline) return null;
+    if (!line.includes(pat)) continue;
+    let e; try { e = JSON.parse(line); } catch { continue; }
+    if (e && e.type === 'GENERIC' && e.step_index === n) return durOf(e);
+  }
+  return null;
 }
 
 /** "Command exited with code N." -> N | null */
