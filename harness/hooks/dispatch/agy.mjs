@@ -8,6 +8,7 @@ import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 import { main } from './run.mjs';
 import { TOOL_MAP, getCommand, makePick } from '../../core/io/agy-payload.mjs';
+import { classifyHarnessCommand, SAFE_RULE, UNSAFE_RULE } from './agy-harness.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DOCTOR = path.resolve(HERE, '..', '..', 'cli', 'commands', 'doctor.mjs');
@@ -69,6 +70,20 @@ const GUARD_AGY = {
   },
 };
 
+/** harness agy: lenh `harness` chi-doc trong allowlist -> allow (render them permissionOverrides command(harness)); unsafe -> khong can thiep, chi ghi ly do vao gate. Chay SAU guard/bash-guard (gate: deny cat chuoi). */
+const gateRec = (rule, reason) => ({ sink: 'gate', data: { kind: 'gate', decision: 'allow', hook: 'agy-harness', rule, reason } });
+const HARNESS_AGY = {
+  id: 'harness-agy', events: ['PreToolUse'], timeoutMs: 1500, onError: 'open',
+  async handle(event, input) {
+    const tc = input && typeof input === 'object' ? input.toolCall : null;
+    if (!tc || tc.name !== 'run_command' || !tc.args || typeof tc.args !== 'object') return {};
+    const r = classifyHarnessCommand(getCommand(tc.args));
+    if (r.kind === 'none') return {};
+    if (r.kind === 'safe') return { decision: 'allow', records: [gateRec(SAFE_RULE, r.reason)] };
+    return { records: [gateRec(UNSAFE_RULE, r.reason)] };
+  },
+};
+
 /** session agy: doctor luc SessionStart, MISS/LOI -> stderr; khong chan phien. */
 const SESSION_AGY = {
   id: 'session-agy', events: ['SessionStart'], timeoutMs: 20000, onError: 'open', // < 25s con cua agy-native.mjs (user-shim goi reg/powershell dong bo + doctor)
@@ -77,6 +92,10 @@ const SESSION_AGY = {
       // shortcut: chay tu staging agy khong co cache plugin Claude -> user-shim bo qua (khong tro shim vao staging: duong dan staging khong on dinh, de len shim cua Claude)
       const u = await (await import('../../build/user-shim/hook.mjs')).default.handle('SessionStart', {}, {});
       if (u && u.additionalContext) process.stderr.write(u.additionalContext + '\n');
+    } catch { /* fail-open */ }
+    try { // stamp ban du lieu khoa `agy` (data-stamp, T9); cung dataRoot voi duong audit agy (HUB_DATA_DIR da dat boi agy-native)
+      const [{ stampSession }, { dataRoot }] = await Promise.all([import('../../core/io/data-stamp.mjs'), import('../../core/io/paths.mjs')]);
+      stampSession('agy', { dataRoot: dataRoot(null) });
     } catch { /* fail-open */ }
     const r = spawnSync(process.execPath, [DOCTOR], { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     const out = String(r.stdout || '');
@@ -88,7 +107,7 @@ const SESSION_AGY = {
 const wrap = (m, gate = false) => ({ id: m.id, gate, load: async () => ({ default: m }) });
 export const AGY_ORDER = Object.freeze({
   SessionStart: [wrap(AUDIT_AGY), wrap(SESSION_AGY)],
-  PreToolUse: [wrap(GUARD_AGY, true), wrap(BASH_GUARD_AGY, true), wrap(AUDIT_AGY)],
+  PreToolUse: [wrap(GUARD_AGY, true), wrap(BASH_GUARD_AGY, true), wrap(HARNESS_AGY, true), wrap(AUDIT_AGY)],
   PostToolUse: [wrap(AUDIT_AGY)],
   PostInvocation: [wrap(AUDIT_AGY)],
   Stop: [wrap(AUDIT_AGY)],
@@ -105,6 +124,8 @@ export function renderAgy(event, m) {
   if (event !== 'PreToolUse') return { stdout: NOOP, stderr: '', code: 0 };
   if (m.decision === 'ask') return { stdout: JSON.stringify({ decision: 'deny', reason: ASK_PREFIX + (m.reason || 'approval') }) + '\n', stderr: '', code: 0 };
   if (m.decision === 'deny') return { stdout: JSON.stringify(m.reason === undefined ? { decision: 'deny' } : { decision: 'deny', reason: m.reason }) + '\n', stderr: '', code: 0 };
+  // shortcut: mergeResults (merge.mjs, ngoai pham vi T2) khong chuyen truong la -> nhan biet "safe" qua record gate cua harness-agy.
+  if (m.decision === 'allow' && Array.isArray(m.records) && m.records.some((r) => r && r.data && r.data.rule === SAFE_RULE)) return { stdout: JSON.stringify({ decision: 'allow', permissionOverrides: ['command(harness)'] }) + '\n', stderr: '', code: 0 };
   return { stdout: ALLOW, stderr: '', code: 0 };
 }
 

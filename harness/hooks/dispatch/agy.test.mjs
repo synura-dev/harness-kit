@@ -43,3 +43,43 @@ test('loi: JSON hong / rong -> Pre allow, khac {}; su kien la -> {}', () => {
   expect(JSON.parse(spawn(NEW, ['PostToolUse'], '{bad', e).stdout)).toEqual({});
   expect(JSON.parse(spawn(NEW, ['Nope'], '{}', e).stdout)).toEqual({});
 }, 60000);
+
+// --- T2: tu cho phep lenh harness chi-doc (A1: allow + permissionOverrides); guard deny luon thang ---
+import { renderAgy } from './agy.mjs';
+import { SAFE_RULE } from './agy-harness.mjs';
+const pre = (cmd) => JSON.parse(spawn(NEW, ['PreToolUse'], pay('run_command', { CommandLine: cmd }), env()).stdout);
+
+test('Pre harness doctor -> allow + permissionOverrides command(harness), khong overwrite', () => {
+  expect(pre('harness doctor')).toEqual({ decision: 'allow', permissionOverrides: ['command(harness)'] });
+  expect(pre('harness knowledge get architecture')).toEqual({ decision: 'allow', permissionOverrides: ['command(harness)'] });
+}, 60000);
+
+test('Pre harness khong an toan / khong phai harness -> allow tran (khong overrides)', () => {
+  for (const c of ['harness doctor | head', 'harness ext list', 'harness doctor --apply', 'harness', 'git status']) expect([c, pre(c)]).toEqual([c, { decision: 'allow' }]);
+}, 120000);
+
+test('guard deny van thang (lenh qua dai); unsafe ghi ly do vao audit gate', () => {
+  const o = pre('echo ' + 'a'.repeat(100001));
+  expect(o.decision).toBe('deny'); expect(o.permissionOverrides).toBeUndefined();
+  const e = env(); spawn(NEW, ['PreToolUse'], pay('run_command', { CommandLine: 'harness doctor --apply' }), e);
+  const txt = fs.readdirSync(e.CLAUDE_AUDIT_DIR, { recursive: true }).filter((f) => String(f).endsWith('.jsonl')).map((f) => fs.readFileSync(path.join(e.CLAUDE_AUDIT_DIR, String(f)), 'utf8')).join('');
+  expect(txt).toContain('harness-unsafe');
+}, 60000);
+
+test('renderAgy: allow giu permissionOverrides (marker safe trong records); ask van deny; deny khong overrides', () => {
+  const safe = { decision: 'allow', records: [{ sink: 'gate', data: { rule: SAFE_RULE } }] };
+  expect(JSON.parse(renderAgy('PreToolUse', safe).stdout)).toEqual({ decision: 'allow', permissionOverrides: ['command(harness)'] });
+  expect(JSON.parse(renderAgy('PreToolUse', { ...safe, decision: 'deny', reason: 'x' }).stdout)).toEqual({ decision: 'deny', reason: 'x' });
+  expect(JSON.parse(renderAgy('PreToolUse', { ...safe, decision: 'ask', reason: 'x' }).stdout).decision).toBe('deny');
+  expect(JSON.parse(renderAgy('PreToolUse', { decision: 'allow' }).stdout)).toEqual({ decision: 'allow' });
+  expect(JSON.parse(renderAgy('PostToolUse', safe).stdout)).toEqual({});
+});
+
+test('SessionStart agy ghi stamp khoa agy vao data root (fail-open)', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-stamp-')); const data = path.join(d, 'data');
+  const e = { ...process.env, HUB_DATA_DIR: data, CLAUDE_AUDIT_DIR: path.join(d, 'audit'), HOOK_USER_SHIM_ENABLED: '0' };
+  const r = spawn(NEW, ['SessionStart', 'session-agy'], JSON.stringify({ conversationId: 'c-stamp' }), e);
+  expect(JSON.parse(r.stdout)).toEqual({});
+  const st = JSON.parse(fs.readFileSync(path.join(data, '.harness-writers.json'), 'utf8'));
+  expect(Object.keys(st)).toEqual(['agy']); expect(st.agy.version).toMatch(/^\d+\.\d+\.\d+/); expect(Object.keys(st.agy).sort()).toEqual(['at', 'schema', 'version']);
+}, 60000);
