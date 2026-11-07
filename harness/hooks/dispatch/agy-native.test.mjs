@@ -84,7 +84,7 @@ test('agy init native: da cai / tat / chua cai + canh bao .agents/hooks.json cu'
   expect(off.code).toBe(1); expect(off.lines.join('\n')).toContain('agy plugin enable');
   const no = native({ dir: d, inj: { list: () => '[{"name":"egm","enabled":true}]' } });
   expect(no.code).toBe(1); expect(no.lines.join('\n')).toContain('git clone');
-  expect(no.lines.join('\n')).toMatch(/plugins[\/]harness-kit/);
+  expect(no.lines.join('\n')).toMatch(/plugins[\\/]harness-kit/);
   // project scope: plugin.json trong .agents/plugins/harness-kit -> OK, khong can agy list
   const pj = path.join(d, '.agents', 'plugins', 'harness-kit', '.antigravity-plugin');
   fs.mkdirSync(pj, { recursive: true }); fs.writeFileSync(path.join(pj, 'plugin.json'), '{}');
