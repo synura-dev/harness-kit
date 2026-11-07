@@ -20,11 +20,14 @@ const DANGER_FLAG = /^(--(apply|yes|force)(=|$)|-[yf]$)/;
 const FAKE_HARNESS = /(^|[\\/])harness(\.[A-Za-z0-9]+)?$/i;
 
 /** @returns {{kind:'safe'|'unsafe'|'none', argv?:string[], reason?:string}} */
-export function classifyHarnessCommand(cmd, { allow = ALLOW } = {}) {
+// `node <pluginRoot>/bin/harness ...` (khi bin/ khong co tren PATH, vd workspace o o E: trong agy) = `harness ...`; chi khi token ngay sau node la DUNG duong dan bin/harness cua plugin nay (so khop tuyet doi).
+const slash = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+export function classifyHarnessCommand(cmd, { allow = ALLOW, pluginRoot } = {}) {
   if (typeof cmd !== 'string') return { kind: 'none' };
   const s = cmd.trim();
   if (!s) return { kind: 'none' };
-  const tokens = s.split(/[ \t]+/);
+  let tokens = s.split(/[ \t]+/);
+  if (pluginRoot && /^node(\.exe)?$/i.test(tokens[0]) && tokens[1] && slash(tokens[1]) === slash(pluginRoot) + '/bin/harness') tokens = ['harness', ...tokens.slice(2)];
   if (tokens[0] !== 'harness') return FAKE_HARNESS.test(tokens[0]) ? { kind: 'unsafe', reason: 'harness gia mao/duong dan (chi `harness` tran)' } : { kind: 'none' };
   const no = (reason) => ({ kind: 'unsafe', reason });
   if (/[\r\n]/.test(s) || !tokens.every((t) => TOKEN.test(t))) return no('ky tu shell/quote/xuong dong (chi token an toan)');
