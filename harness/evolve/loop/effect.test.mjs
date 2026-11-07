@@ -90,6 +90,14 @@ test('measureDue: hai proposal den han -> MOT luot doc audit; chua den han / ver
   expect(typeof out[0].effect.measured_at).toBe('string');
 });
 
+test('tokens_per_session: cumulative lay max theo sid, delta cong don', () => {
+  const stop = (ts, sid, n, mode) => ({ v: 2, ts, type: 'session', event: 'Stop', sid, ok: true, tokens_in: n, tokens_out: 0, data: { usage_mode: mode } });
+  write('2026-10-29', 'c1', [stop('2026-10-29T01:00:00Z', 'c1', 100, 'cumulative'), stop('2026-10-29T02:00:00Z', 'c1', 300, 'cumulative')]);
+  write('2026-10-29', 'd1', [stop('2026-10-29T01:00:00Z', 'd1', 100, 'delta'), stop('2026-10-29T02:00:00Z', 'd1', 300, 'delta')]);
+  const r = computeWindow(audit, FP, NOW - 7 * DAY, NOW, opts());
+  expect(r.tokens_per_session).toBe((300 + 400) / 2);
+});
+
 test('measureDue: unchanged/worse -> action rollback', () => {
   day('2026-10-26', 's1', 300, 3); day('2026-10-27', 's1', 300, 3);
   const [x] = measureDue([prop('a')], NOW, opts());

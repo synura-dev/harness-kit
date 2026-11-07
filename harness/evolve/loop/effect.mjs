@@ -60,11 +60,20 @@ const mfpOf = (e) => { const d = e.data && typeof e.data === 'object' ? e.data :
 /** Gom nhom loi MOT lan: [{c, evs}] (evs = su kien goc, gom ca nhom 1 loi). */
 export function groupIndex(events, nowMs) {
   const errs = events.filter((e) => e.ok === false && !isHookRun(e));
-  return repeatedFailureCandidates(events.concat(errs.map((e) => ({ ...e, __dup: true }))), iso(nowMs)).map((c) => ({ c, evs: c._evs.filter((e) => !e.__dup) }));
+  const idx = repeatedFailureCandidates(events.concat(errs.map((e) => ({ ...e, __dup: true }))), iso(nowMs)).map((c) => ({ c, evs: c._evs.filter((e) => !e.__dup) }));
+  // Map fp -> nhom (nhom dau thang): _fp, _legacy, error_fp va mfp cua moi su kien -> tra cuu O(1) moi proposal
+  const byFp = new Map();
+  for (const g of idx) {
+    const keys = [g.c._fp, ...(g.c._legacy || [])];
+    for (const e of g.evs) keys.push(e.data && e.data.error_fp, mfpOf(e));
+    for (const k of keys) if (k && !byFp.has(k)) byFp.set(k, g);
+  }
+  idx.byFp = byFp;
+  return idx;
 }
-/** Su kien loi cua nhom chua fp: khop _fp/_legacy hoac bat ky su kien co error_fp/mfp = fp (on dinh khi bien the mfp nho hon xuat hien). */
+/** Su kien loi cua nhom chua fp (on dinh khi bien the mfp nho hon xuat hien). */
 export function groupEvents(idx, fp) {
-  const g = idx.find(({ c, evs }) => c._fp === fp || (c._legacy || []).includes(fp) || evs.some((e) => (e.data && e.data.error_fp) === fp || mfpOf(e) === fp));
+  const g = idx.byFp.get(fp);
   return g ? g.evs : [];
 }
 
@@ -76,8 +85,16 @@ export function statsOf(events, gevs, fromMs, toMs) {
   const target = gevs.filter(inWin).length;
   const sids = new Set(calls.map((e) => e.sid || '-'));
   const stops = win.filter((e) => e.event === 'Stop' && !isHookRun(e));
-  const tok = stops.reduce((s, e) => s + (Number(e.tokens_in) || 0) + (Number(e.tokens_out) || 0), 0);
-  const stopSids = new Set(stops.map((e) => e.sid || '-'));
+  // data.usage_mode (audit.mjs:293,300): cumulative -> lay max theo sid; delta/thieu -> cong don
+  const perSid = new Map();
+  for (const e of stops) {
+    const k = e.sid || '-', n = (Number(e.tokens_in) || 0) + (Number(e.tokens_out) || 0);
+    const s = perSid.get(k) || { sum: 0, max: 0 };
+    if (e.data && e.data.usage_mode === 'cumulative') s.max = Math.max(s.max, n); else s.sum += n;
+    perSid.set(k, s);
+  }
+  const tok = [...perSid.values()].reduce((t, s) => t + s.sum + s.max, 0);
+  const stopSids = new Set(perSid.keys());
   // signal correction nam tren UserPromptSubmit, interrupt tren tool event: dem moi su kien (khong HookRun) co signal
   const corr = win.filter((e) => !isHookRun(e) && e.data && (e.data.signal === 'correction' || e.data.signal === 'interrupt')).length;
   return {
@@ -145,7 +162,8 @@ export function measureDue(proposals, now, o = {}) {
   }
   if (!due.length) return [];
   const audits = ctx(o).audits;
-  const A = readEvents(audits, Math.min(...due.map((d) => d.afterFrom)), nowMs, o); // luot chinh: cua so after
+  // shortcut: audit rat lon (> query_max_rows trong 7 ngay) -> luot chinh luon truncated, proposal giu insufficient mai va bi doc lai moi lan chay.
+  const A = readEvents(audits,Math.min(...due.map((d) => d.afterFrom)), nowMs, o); // luot chinh: cua so after
   const idxA = groupIndex(A.events, nowMs);
   // Baseline tinh bu doc o luot rieng (gioi han theo khoang cua chung) de khong keo cua so luot chinh ve 30 ngay truoc.
   const retros = due.filter((d) => d.retro);
