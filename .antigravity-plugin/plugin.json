@@ -1,6 +1,6 @@
 {
   "name": "harness-kit",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Lop rang buoc tat dinh cho agent: guard, data zone, audit, cong CLI, hook dispatcher.",
   "author": { "name": "Phat Huynh" }
 }

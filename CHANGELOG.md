@@ -2,6 +2,11 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.10
+- ext-guard fail-open khi timeout: dispatcher va ext-guard khong con deny khi guard/module het gio hoac loi spawn (cho qua + canh bao + audit `rule=fail-open`); chi chan khi co tin hieu vi pham ro (hash ext lech/chua duyet: kiem het truoc khi spawn; guard exit 2: tra ngay, guard chay song song nen ext treo khong lam mat deny that). Thong bao va hanh vi nhat quan.
+- agy-sync: hook SessionStart cua Claude tu chay `agy plugin install "<cache plugin>"` (nen, chi nang cap, chi khi phien khoi dong) khi ban agy cu hon ban plugin Claude; khoa + gian thoi gian thu lai; tat bang `HARNESS_AGY_AUTOSYNC=0`.
+- worktree hook dung wrapper spawn `core/runtime/proc.mjs` (proc-check xanh lai).
+
 ## 0.3.9
 - agy: harness-kit la plugin agy native (`.antigravity-plugin/plugin.json` + `hooks.json` o goc -> `harness/hooks/dispatch/agy-native.mjs`, workspace lay tu stdin `workspacePaths`). Cai global mot lan: `agy plugin install "<thu muc plugin Claude>"`; bat theo du an bang `enabledPlugins["harness-kit@synura"]: true` trong `.claude/settings.json` (khong bat -> hook cho qua, khong ghi gi). Bo shim `.agents/harness-agy-shim.mjs`, `.agents/hooks.json`, `harness agy init --legacy`, module agy-heal; khong sinh ban chep `.agents/skills`. `harness agy init` kiem cai global, lech version, du an da bat. Playbook co bien dung san `${harnessBin}` (`node ${harnessBin} <lenh>`).
 
