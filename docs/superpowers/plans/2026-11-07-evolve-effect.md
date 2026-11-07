@@ -20,12 +20,12 @@ Done: test tren xanh; `apply` khong doi hanh vi cho kind khac.
 
 ### Task 2: Tich hop autopilot + CLI + README (RED/GREEN)
 Files: `harness/evolve/loop/autopilot.mjs`, `autopilot.test.mjs`, `cli.mjs`, `cli.test.mjs`, `harness/evolve/README.md`.
-- [ ] Failing tests truoc (`autopilot.test.mjs`): (a) rule da apply >=7 ngay, rate giam <=0.7 -> better, KHONG rollback, `kept`; (b) rate khong doi -> rollback + ly do; (c) rate tang >=1.3 -> rollback; (d) mau nho (tool_calls < min) -> insufficient, khong hanh dong, do lai lan sau; (e) qua 21 ngay van insufficient -> inconclusive, giu; (f) moi verdict ghi dong `op:'effect'` vao `applied.jsonl` va `proposal.effect`; (g) regression bug cu: before va after cung don vi per-1000, cua so 30 ngay khong anh huong.
-- [ ] Failing test `cli.test.mjs`: `evolve list` co cot verdict; `evolve log` hien dong effect.
-- [ ] Go khoi rollback cu (autopilot.mjs:150-165) va `shouldRollback` neu khong con dung; goi `measureDue` mot lan; `better|inconclusive` -> giu, `unchanged|worse` -> `rollback(ver, {approve:true})` (chi rule muc 1) ghi ly do, `insufficient` -> khong lam gi; ton trong `timeUp()`. Ghi effect vao proposal + applied.jsonl.
-- [ ] `cli.mjs`: cot verdict trong list, dong effect trong log.
-- [ ] README `harness/evolve/README.md`: them muc do hieu qua (baseline, verdict, nguong); sua drift (README noi chi con kind `skill`, trong khi code van co `rule`/`inject`, loop.mjs KINDS :20).
-- [ ] Run: `timeout 120 bun test harness/evolve/loop/autopilot.test.mjs harness/evolve/loop/cli.test.mjs`.
-- [ ] Cuoi: full suite MOT lan, nen, co timeout: `timeout 300 bun test harness dev > <log> 2>&1` (lenh trong `dev/README.md:7`); bao ket qua.
+- [x] Failing tests truoc (`autopilot.test.mjs`): (a) rule da apply >=7 ngay, rate giam <=0.7 -> better, KHONG rollback, `kept`; (b) rate khong doi -> rollback + ly do; (c) rate tang >=1.3 -> rollback; (d) mau nho (tool_calls < min) -> insufficient, khong hanh dong, do lai lan sau; (e) qua 21 ngay van insufficient -> inconclusive, giu; (f) moi verdict ghi dong `op:'effect'` vao `applied.jsonl` va `proposal.effect`; (g) regression bug cu: before va after cung don vi per-1000, cua so 30 ngay khong anh huong.
+- [x] Failing test `cli.test.mjs`: `evolve list` co cot verdict; `evolve log` hien dong effect.
+- [x] Go khoi rollback cu (autopilot.mjs:150-165) va `shouldRollback` neu khong con dung; goi `measureDue` mot lan; `better|inconclusive` -> giu, `unchanged|worse` -> `rollback(ver, {approve:true})` (chi rule muc 1) ghi ly do, `insufficient` -> khong lam gi; ton trong `timeUp()`. Ghi effect vao proposal + applied.jsonl.
+- [x] `cli.mjs`: cot verdict trong list, dong effect trong log.
+- [x] README `harness/evolve/README.md`: them muc do hieu qua (baseline, verdict, nguong); sua drift (README noi chi con kind `skill`, trong khi code van co `rule`/`inject`, loop.mjs KINDS :20).
+- [x] Run: `timeout 120 bun test harness/evolve/loop/autopilot.test.mjs harness/evolve/loop/cli.test.mjs`.
+- [x] Cuoi: full suite MOT lan, nen, co timeout: `timeout 300 bun test harness dev > <log> 2>&1` (lenh trong `dev/README.md:7`); bao ket qua.
 
 Done: test hep xanh, full suite xanh, README khop code.
