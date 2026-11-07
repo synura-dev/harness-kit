@@ -47,7 +47,7 @@ export function sumUsage(text, deadline = Infinity) {
 }
 
 /** Doc phan moi cua transcript `file` ke tu offset da luu (moi transcript mot file offset). root: thu muc audit (cho state); thieu -> khong luu offset. */
-export function readUsageDelta(file, { root = null, limits = USAGE_TAIL, now = Date.now } = {}) {
+export function readUsageDelta(file, { root = null, limits = USAGE_TAIL, now = Date.now, sum = sumUsage } = {}) {
   try {
     if (typeof file !== 'string' || !/\.jsonl$/i.test(file)) return null;
     const deadline = now() + limits.timeoutMs;
@@ -68,7 +68,7 @@ export function readUsageDelta(file, { root = null, limits = USAGE_TAIL, now = D
     let body = complete;
     if (jumped) { const nl = complete.indexOf(0x0a); body = nl >= 0 ? complete.subarray(nl + 1) : complete.subarray(0, 0); }
     const text = body.toString('utf8');
-    const r = sumUsage(text, deadline);
+    const r = sum(text, deadline);
     if (!r) return null; // het gio: khong tien offset (lan sau doc lai)
     if (sf) writeState(sf, { off: start + complete.length, ts: Date.now() });
     return { ...r, truncated: jumped };
