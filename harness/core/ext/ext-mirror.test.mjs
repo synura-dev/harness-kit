@@ -57,7 +57,32 @@ test('mirrorRegistry: thu muc du lieu hien tai KHONG khop data nao trong roots.j
   fs.mkdirSync(B); put(A, J); put(F, { extensions: { fake: [] } });
   const shimDir = roots(t, { claude: { data: A }, agy: { data: B } });
   const m = mirrorRegistry({ machineFile: reg(F), shimDir });
-  expect(m.mirrored).toEqual([]); expect(m.failed).toEqual([]); expect(fs.existsSync(reg(B))).toBe(false);
+  expect(m.mirrored).toEqual([]); expect(m.failed.length).toBe(1); expect(m.unmatched).toBe(true); expect(fs.existsSync(reg(B))).toBe(false); // Thap-3: canh bao + failed
+});
+
+const ents = (w, ids) => ({ extensions: { [w]: ids.map((id) => ({ id, root: 'x', hash: 'h', approvedAt: 'x' })) } });
+const count = (f) => Object.values(JSON.parse(fs.readFileSync(f, 'utf8')).extensions).flat().length;
+
+test('TB-1: ban cua tien trinh (agy) chua co, Claude co 3 muc, register foo -> Claude co 4 muc (khong mat approve cu)', async () => {
+  const t = mk(); const w = path.join(t, 'ws'); fs.mkdirSync(w); const A = path.join(t, 'claude'), B = path.join(t, 'agy');
+  fs.mkdirSync(B); put(A, ents(w, ['a', 'b', 'c']));
+  fs.mkdirSync(path.join(w, 'ext', 'foo'), { recursive: true });
+  fs.writeFileSync(path.join(w, 'ext', 'foo', 'manifest.json'), JSON.stringify({ id: 'foo', entry: 'i.mjs', domain: 'foo' }));
+  fs.writeFileSync(path.join(w, 'ext', 'foo', 'i.mjs'), '');
+  const shimDir = roots(t, { claude: { data: A }, agy: { data: B } });
+  const r = await register('ext/foo', { workspace: w, machineFile: reg(B), shimDir, confirm: () => true });
+  expect(r.code).toBe(0);
+  expect(count(reg(A))).toBe(4); expect(count(reg(B))).toBe(4);
+});
+
+test('TB-1: rao chan - nguon it hon dich > 1 muc thi KHONG chep de, code 1', () => {
+  const t = mk(); const w = path.join(t, 'ws'); const A = path.join(t, 'a'), B = path.join(t, 'b');
+  put(A, ents(w, ['a'])); put(B, ents(w, ['a', 'b', 'c', 'd']));
+  const shimDir = roots(t, { claude: { data: A }, agy: { data: B } });
+  const before = fs.readFileSync(reg(B), 'utf8');
+  const m = mirrorRegistry({ machineFile: reg(A), shimDir });
+  expect(m.failed.length).toBe(1); expect(m.mirrored).toEqual([]);
+  expect(fs.readFileSync(reg(B), 'utf8')).toBe(before);
 });
 
 test('writeAll chi ghi ban chinh (khong chep)', () => {

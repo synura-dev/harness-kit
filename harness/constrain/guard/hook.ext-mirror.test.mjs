@@ -35,6 +35,16 @@ test('agy toolCall write_file/edit_file (qua toClaudeInput): ghi ban sao / roots
   expect(denied(toClaudeInput({ toolCall: { name: 'write_file', args: { Path: 'E:\\p\\a.txt', Content: 'x' } } }))).toBe(false);
 });
 
+test('TB-2/Thap-4: plugins\\data cua Claude + seg\\..\\ ; redirect stderr (2>&1, >$null, > NUL) khong bi coi la ghi', () => {
+  expect(denied({ tool_name: 'Write', tool_input: { file_path: 'C:\\Users\\u\\.claude\\plugins\\data\\harness-kit-mkt\\other.json' } })).toBe(true);
+  expect(denied({ tool_name: 'PowerShell', tool_input: { command: 'mv C:\\Users\\u\\.harness-kit\\x\\..\\bin b' } })).toBe(true);
+  expect(denied({ tool_name: 'PowerShell', tool_input: { command: 'Rename-Item C:\\Users\\u\\.claude\\plugins\\data\\harness-kit-mkt c2' } })).toBe(true);
+  for (const command of ['"$HOME\\.harness-kit\\bin\\harness.cmd" knowledge get x 2>&1', '"$HOME\\.harness-kit\\bin\\harness.cmd" doctor >$null', '"$HOME\\.harness-kit\\bin\\harness.cmd" doctor > NUL', '"$HOME\\.harness-kit\\bin\\harness.cmd" doctor 2>&1 | head'])
+    expect(denied({ tool_name: 'PowerShell', tool_input: { command } })).toBe(false);
+  expect(denied({ tool_name: 'PowerShell', tool_input: { command: 'echo x > "$HOME\\.harness-kit\\bin\\roots.json"' } })).toBe(true);
+  expect(denied({ tool_name: 'PowerShell', tool_input: { command: 'echo x 2> "$HOME\\.harness-kit\\bin\\harness.cmd"' } })).toBe(true);
+});
+
 const PD = 'C:\\Users\\u\\.gemini\\config\\plugin_data\\harness-kit';
 test('CAO-2: redirect/Out-File/Set-Content vao roots.json voi duong trong nhay don/kep bi chan', () => {
   for (const command of [

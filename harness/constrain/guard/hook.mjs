@@ -36,11 +36,13 @@ const PLUGIN_REASON = 'Cam sua so dang ky plugin (installed_plugins.json/known_m
 const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b|(?:^|[^\w-])bin[\\/]+roots\.json\b/i;
 // Thu muc du lieu plugin cua CLI khac + thu muc shim: cong cu ghi file -> chan moi duong; lenh shell -> chan khi co dong tu ghi/doi ten/tao link (EXT_DATA_RE && WRITE_VERB_RE).
 // shortcut: khong giai bien gian tiep ($p=...; Rename-Item $p) - rui ro con lai, ghi trong bao cao.
-const EXT_DATA_RE = /(?:^|[^\w-])plugin_data[\\/]+[\w.@-]+|(?:^|[^\w-])\.harness-kit[\\/]+bin\b/i;
-const WRITE_VERB_RE = />|\b(?:Rename-Item|ren|rename\w*|mv|Move-Item|mi|New-Item|ni|mklink|ln|symlink\w*|junction|cp|copy|Copy-Item|cpi|Set-Content|sc|Add-Content|ac|Out-File|tee|rm|del|erase|Remove-Item|ri|rd|rmdir|robocopy|xcopy|sed|writeFile\w*)\b/i;
+const EXT_DATA_RE = /(?:^|[^\w-])plugin_data[\\/]+[\w.@-]+|(?:^|[^\w-])plugins[\\/]+data[\\/]|(?:^|[^\w-])\.harness-kit[\\/]+bin\b/i;
+// `>`/`>>` chi la ghi khi theo sau la duong dan (khong tinh 2>&1, >&, >$null, > NUL, > /dev/null).
+const WRITE_VERB_RE = />>?\s*(?!&)(?!["']?(?:\$null|NUL|\/dev\/null)(?![\w.]))["']?[\w$~.\\/:%-]|\b(?:Rename-Item|ren|rename\w*|mv|Move-Item|mi|New-Item|ni|mklink|ln|symlink\w*|junction|cp|copy|Copy-Item|cpi|Set-Content|sc|Add-Content|ac|Out-File|tee|rm|del|erase|Remove-Item|ri|rd|rmdir|robocopy|xcopy|sed|writeFile\w*)\b/i;
 const GIT_MSG_LEAD_RE = /^git\s+(?:-c\s+\S+\s+)*(?:commit|tag|notes)\b/i;
 /** Bo doan `\.\` `/./` thua (lach regex duong dan). */
-const dotNorm = (s) => { let p = s, q; do { q = p; p = p.replace(/([\\/])(?:\.[\\/]+)+/g, '$1'); } while (p !== q); return p; };
+// shortcut: cd tung cap / file script / bien gian tiep van lach duoc; guard chi la lop chan lenh ro rang, KHONG phai ranh gioi bao mat.
+const dotNorm = (s) => { let p = s, q; do { q = p; p = p.replace(/([\\/])(?:\.[\\/]+)+/g, '$1').replace(/([\\/])[^\\/.][^\\/]*[\\/]+\.\.(?=[\\/]|$)/g, '$1'); } while (p !== q); return p; };
 /** Duong cua tool ghi file: resolve (`..`, `.`) roi bo `\.\`, khop ca ban goc lan ban chuan hoa. */
 const extPathHit = (p) => { const n = dotNorm(path.resolve(p)); return [p, dotNorm(p), n].some((x) => EXT_CONFIG_RE.test(x) || EXT_DATA_RE.test(x)); };
 // Chi chan lenh GHI/CHAY: `harness ext register|approve`; ext-cmd/ext-registry cung dong voi register|approve; chay ext-cmd bang node/bun/deno;
