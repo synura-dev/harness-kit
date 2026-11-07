@@ -35,7 +35,7 @@ export function native({ dir, inj = {} } = {}) {
   else if (typeof me === 'object' && me.enabled === false) { code = 1; lines.push('[warn] plugin harness-kit (global) da cai nhung dang tat (enabled=false) -> hook khong chay', '-> chay: agy plugin enable harness-kit'); }
   else {
     lines.push('[OK] agy da cai plugin harness-kit (global)');
-    if (typeof me === 'object' && mine && me.version && me.version !== mine) lines.push(`[warn] ban cai trong agy ${me.version} != plugin nay ${mine} -> cai lai: agy plugin install "${root}"`);
+    if (typeof me === 'object' && mine && me.version && me.version !== mine) lines.push(`[warn] ban cai trong agy ${me.version} != plugin nay ${mine} -> cai lai: agy plugin install "${root}" (hook SessionStart cua Claude tu cap nhat khi mo phien; tat: HARNESS_AGY_AUTOSYNC=0)`);
   }
   if (enabledIn(dir)) lines.push('[OK] du an nay da bat harness-kit (enabledPlugins trong .claude/settings*.json)');
   else { code = 1; lines.push('[THIEU] du an nay chua bat harness-kit -> hook agy khong chay o day', '-> them vao .claude/settings.json: "enabledPlugins": { "harness-kit@synura": true }'); }
