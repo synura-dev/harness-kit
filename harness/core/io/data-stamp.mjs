@@ -22,10 +22,10 @@ export function readStamps(dataRoot) {
 export function writeStamp(dataRoot, { tool, version, schema = DATA_SCHEMA, now = Date.now() }) {
   const f = path.join(dataRoot, STAMP_FILE); const tmp = `${f}.${process.pid}.tmp`;
   try {
-    const all = readStamps(dataRoot);
-    all[tool] = { version: String(version), schema, at: new Date(now).toISOString() };
     fs.mkdirSync(dataRoot, { recursive: true });
-    fs.writeFileSync(tmp, JSON.stringify(all)); fs.renameSync(tmp, f);
+    const own = { version: String(version), schema, at: new Date(now).toISOString() };
+    fs.writeFileSync(tmp, JSON.stringify({ ...readStamps(dataRoot), [tool]: own })); // doc lai ngay truoc khi ghi tmp+rename (giam mat khoa tool kia khi 2 SessionStart dong thoi)
+    fs.renameSync(tmp, f);
     return true;
   } catch { try { fs.unlinkSync(tmp); } catch {} return false; }
 }

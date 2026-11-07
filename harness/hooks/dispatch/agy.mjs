@@ -71,7 +71,8 @@ const GUARD_AGY = {
 };
 
 /** harness agy: lenh `harness` chi-doc trong allowlist -> allow (render them permissionOverrides command(harness)); unsafe -> khong can thiep, chi ghi ly do vao gate. Chay SAU guard/bash-guard (gate: deny cat chuoi). */
-const gateRec = (rule, reason) => ({ sink: 'gate', data: { kind: 'gate', decision: 'allow', hook: 'agy-harness', rule, reason } });
+// unsafe: decision 'warn' (khong can thiep; 'none' khong thuoc DECISIONS cua gate-event nen se bi bo ban ghi), khong ghi 'allow'.
+const gateRec = (rule, reason) => ({ sink: 'gate', data: { kind: 'gate', decision: rule === SAFE_RULE ? 'allow' : 'warn', hook: 'agy-harness', rule, reason } });
 const HARNESS_AGY = {
   id: 'harness-agy', events: ['PreToolUse'], timeoutMs: 1500, onError: 'open',
   async handle(event, input) {
@@ -123,8 +124,7 @@ export function renderAgy(event, m) {
   if (event !== 'PreToolUse') return { stdout: NOOP, stderr: '', code: 0 };
   if (m.decision === 'ask') return { stdout: JSON.stringify({ decision: 'deny', reason: ASK_PREFIX + (m.reason || 'approval') }) + '\n', stderr: '', code: 0 };
   if (m.decision === 'deny') return { stdout: JSON.stringify(m.reason === undefined ? { decision: 'deny' } : { decision: 'deny', reason: m.reason }) + '\n', stderr: '', code: 0 };
-  // shortcut: mergeResults (merge.mjs, ngoai pham vi T2) khong chuyen truong la -> nhan biet "safe" qua record gate cua harness-agy.
-  if (m.decision === 'allow' && Array.isArray(m.records) && m.records.some((r) => r && r.data && r.data.rule === SAFE_RULE)) return { stdout: JSON.stringify({ decision: 'allow', permissionOverrides: ['command(harness)'] }) + '\n', stderr: '', code: 0 };
+  // safe -> chi {decision:'allow'} (khong permissionOverrides; allowlist chi quyet dinh allow cua hook).
   return { stdout: ALLOW, stderr: '', code: 0 };
 }
 

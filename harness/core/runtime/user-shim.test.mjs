@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { legacyShimDir, msixInfo, virtualizedDir, realTerminalLine, SHIM_MARK, renderShims, userPathDirs, defaultShimDir, planShim, applyShim, shimStatus, onPath, ensureUserPath, strayShims, syncUserShim, rootsFile, rootVersion } from './user-shim.mjs';
+import { legacyShimDir, msixInfo, virtualizedDir, realTerminalLine, SHIM_MARK, renderShims, userPathDirs, defaultShimDir, planShim, applyShim, shimStatus, onPath, ensureUserPath, strayShims, syncUserShim, rootsFile, rootVersion, rootsStatus } from './user-shim.mjs';
 
 // KHONG test nao duoc ghi PATH that: Windows luon truyen regPath + setUserPath gia; POSIX dung home tam.
 let tmp;
@@ -303,6 +303,27 @@ test('strayShims: chi lay file co marker o thu muc khac dich', () => {
   const out = strayShims(a, { env, home: tmp });
   expect(out.length).toBeGreaterThan(0);
   expect(out.every((f) => f.startsWith(b))).toBe(true);
+});
+
+test('rootsStatus: roots.json thieu / hong / khong co root hop le -> stale; co root con bin/harness hoac scan ton tai -> ok', () => {
+  const dir = mk('rs'); const plug = fakeRoot('rp', '0.1.1');
+  expect(rootsStatus(dir)).toBe('missing');
+  fs.writeFileSync(rootsFile(dir), '{bad');
+  expect(rootsStatus(dir)).toBe('invalid');
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ agy: { root: path.join(tmp, 'da-vang') } }));
+  expect(rootsStatus(dir)).toBe('invalid');
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ agy: { root: path.join(tmp, 'da-vang') }, claude: { root: plug } }));
+  expect(rootsStatus(dir)).toBe('ok');
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { scan: tmp } }));
+  expect(rootsStatus(dir)).toBe('ok');
+});
+
+test('writeRoot: ghi atomic (khong de lai .tmp), giu khoa tool kia', () => {
+  const home = mk('home2'); const A = fakeRoot('wa', '0.2.0'); const B = fakeRoot('wb', '0.2.1');
+  const s = syncUserShim({ tool: 'agy', pluginRoot: A, ...mkInj(home) });
+  syncUserShim({ tool: 'claude', pluginRoot: B, ...mkInj(home) });
+  expect(Object.keys(rootsOf(s.dir)).sort()).toEqual(['agy', 'claude']);
+  expect(fs.readdirSync(s.dir).filter((f) => f.includes('.tmp'))).toEqual([]);
 });
 
 test('shimStatus: missing / ok / stale / foreign / nopath o thu muc co dinh; co tool -> khoa roots lech = stale', () => {

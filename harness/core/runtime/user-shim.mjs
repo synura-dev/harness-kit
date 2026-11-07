@@ -200,6 +200,14 @@ export function strayShims(dir, { platform = process.platform, env = process.env
   return out;
 }
 
+/** Trang thai roots.json canh shim: 'missing' | 'invalid' (khong co root con bin/harness hoac scan ton tai) | 'ok'. */
+export function rootsStatus(dir, platform = process.platform) {
+  const raw = read(rootsFile(dir, platform));
+  if (raw === null || raw === undefined || raw === '') return 'missing';
+  const ok = Object.values(readRoots(rootsFile(dir, platform))).some((e) => e && typeof e === 'object' && ((typeof e.root === 'string' && fs.existsSync(path.join(e.root, 'bin', 'harness'))) || (typeof e.scan === 'string' && fs.existsSync(e.scan))));
+  return ok ? 'ok' : 'invalid';
+}
+
 /** Ghi khoa `tool` vao roots.json canh shim, giu khoa khac; -> true neu file doi. pluginRoot rong -> khong ghi. */
 function writeRoot(dir, tool, pluginRoot, platform, scan) {
   if (!pluginRoot) return false;
@@ -210,7 +218,8 @@ function writeRoot(dir, tool, pluginRoot, platform, scan) {
   const text = `${JSON.stringify(next, null, 2)}\n`;
   if (read(file) === text) return false;
   fs.mkdirSync(dir, { recursive: true });
-  fs.writeFileSync(file, text);
+  const tmp = `${file}.${process.pid}.tmp`; // atomic: doc lai ngay truoc khi ghi de giu khoa tool kia vua ghi (hai SessionStart dong thoi)
+  try { fs.writeFileSync(tmp, `${JSON.stringify({ ...readRoots(file), [tool]: next[tool] }, null, 2)}\n`); fs.renameSync(tmp, file); } catch (e) { try { fs.unlinkSync(tmp); } catch {} throw e; }
   return true;
 }
 

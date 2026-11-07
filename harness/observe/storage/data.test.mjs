@@ -31,6 +31,12 @@ test('scan: phat hien muc la', () => {
   const root = mk();
   assert.deepEqual(scan(root, regOf()).unknown.map((u) => u.name).sort(), ['stray.log', 'weird']);
 });
+test('scan: .harness-writers.json (data-stamp) la reserved, khong bao unregistered', () => {
+  const root = mk();
+  fs.writeFileSync(path.join(root, '.harness-writers.json'), '{}');
+  assert.ok(!scan(root, regOf()).unknown.some((u) => u.name === '.harness-writers.json'));
+  assert.ok(!scanZones({ root, reg: regOf(), write: false }).warnings.some((w) => w.rule === 'unregistered' && w.path === '.harness-writers.json'));
+});
 test('clean: dry-run khong xoa; --yes xoa file cu theo retention, giu muc retention null', () => {
   const root = mk();
   const d = clean({ root });
