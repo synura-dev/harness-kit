@@ -70,8 +70,8 @@ Files: `collect.mjs`, `prune-cli.mjs`, tests.
 
 ### Task 10 (extra): Doctor check for skill copy hash drift
 Files: builder locates the doctor check convention (`grep -rn "doctor" harness --include=manifest.json -l`), adds a `skill-drift` check + test there.
-- [ ] Failing test: tmp trio `.claude/skills/x`, `.agents/skills/x`, plugin-cache copy; identical -> ok; one differs -> warn naming the copy; missing copy -> info. Hash = sha1 of CRLF-normalized files; reads bounded (maxFiles, timeout).
-- [ ] Run: `node --test <that check's test file>`.
+- [x] Failing test: tmp trio `.claude/skills/x`, `.agents/skills/x`, plugin-cache copy; identical -> ok; one differs -> warn naming the copy; missing copy -> info. Hash = sha1 of CRLF-normalized files; reads bounded (maxFiles, timeout).
+- [x] Run: `node --test <that check's test file>`.
 
 ### Task 11 (extra): Near-duplicate description warning
 Files: create `harness/evolve/usage/dupes.mjs`, `dupes.test.mjs`.
