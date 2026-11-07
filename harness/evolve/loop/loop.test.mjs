@@ -380,3 +380,18 @@ test('policy: file rule/inject bat buoc tien to evolve- va khong trung luat mac 
   expect(classifyTarget('evolve/rules/evolve-ok.json', 'rule', o).ok).toBe(true);
   expect(classifyTarget('evolve/inject/evolve-ok.md', 'inject', o).ok).toBe(true);
 });
+
+test('apply rule chup baseline.effect; kind khac khong co', async () => {
+  const pr = await propose(await candId('aaaaaaaaaa'), { ...o, kind: 'rule' });
+  expect(check(pr.id, o).check.ok).toBe(true);
+  expect(apply(pr.id, { ...o, approve: true }).ok).toBe(true);
+  const b = JSON.parse(fs.readFileSync(pjson(pr.id), 'utf8')).effect.baseline;
+  expect(b).toMatchObject({ window_days: 7, to: new Date(NOW).toISOString() });
+  expect(typeof b.from).toBe('string');
+  for (const k of ['target_count', 'tool_calls', 'rate_per_1000', 'sessions']) expect(k in b).toBe(true);
+  expect(b.target_count).toBe(3);
+  const ps = await propose(await candId('aaaaaaaaaa'), { ...o, kind: 'inject' });
+  expect(check(ps.id, o).check.ok).toBe(true);
+  expect(apply(ps.id, { ...o, approve: true }).ok).toBe(true);
+  expect(JSON.parse(fs.readFileSync(pjson(ps.id), 'utf8')).effect).toBeUndefined();
+});

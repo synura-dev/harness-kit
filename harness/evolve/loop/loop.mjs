@@ -110,6 +110,7 @@ export async function findCandidates(o = {}) {
 }
 
 import { ruleText, injectText } from './rule-content.mjs';
+import { captureBaseline } from './effect.mjs';
 import { classifyTarget as classifyRaw, same, layoutOf as layoutRaw } from './policy.mjs';
 // Policy luon nhan goc du lieu/evolve THUC (ctx) de suy dich mac dinh: <dataDir>/<evolve>/skills.
 const polOpts = (o = {}) => { const c = ctx(o); return { ...o, hubRoot: c.hub, dataBase: c.base, dataRoot: c.evo }; };
@@ -250,7 +251,9 @@ export function apply(id, o = {}) {
     try { restoreTarget(p.kind, pol, orig, c, o, p.id); } catch {}
     return refuse(5, `ap loi, da khoi phuc: ${e.message}`);
   }
-  p.status = 'applied'; p.ver = ver; saveProposal(p, o);
+  p.status = 'applied'; p.ver = ver;
+  if (p.kind === 'rule') { const at = Number(o.nowMs) || Date.now(); p.applied_at = new Date(at).toISOString(); p.effect = captureBaseline(p, at, o); } // loi baseline khong lam hong apply
+  saveProposal(p, o);
   appendLog(c, { op: 'apply', id, ok: true, ver, target: pol.rel });
   return { ok: true, code: 0, ver, target: pol.rel };
 }
