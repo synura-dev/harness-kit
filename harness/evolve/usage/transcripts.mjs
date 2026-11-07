@@ -45,7 +45,9 @@ export function compactMsg(m) {
       if (x) content.push({ type: 'text', text: x[0] });
     }
   }
-  return { type: m?.type, message: { role: m?.message?.role, content } };
+  const r = { type: m?.type, uuid: m?.uuid, message: { role: m?.message?.role, content } };
+  if (m?.isSidechain !== undefined) r.isSidechain = m.isSidechain;
+  return r;
 }
 
 function loadCache(file) {

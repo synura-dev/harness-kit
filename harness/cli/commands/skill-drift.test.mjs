@@ -29,7 +29,7 @@ test('mot ban lech -> warn nen ten ban sao', () => {
 });
 test('thieu ban sao -> info, khong warn', () => {
   const { proj } = fx();
-  put(proj, '.claude/skills/x/SKILL.md', 'a');
+  put(proj, '.claude/skills/x/SKILL.md', 'a'); put(proj, '.agents/skills/y/SKILL.md', 'a');
   const f = one(skillDrift({ projectDir: proj }), 'x');
   assert.equal(f.level, 'info');
   assert.match(f.detail, /\.agents\/skills/);
@@ -38,4 +38,17 @@ test('vuot maxFiles -> truncated', () => {
   const { proj } = fx();
   for (let i = 0; i < 5; i++) put(proj, `.claude/skills/x/f${i}.md`, 'a');
   assert.equal(skillDrift({ projectDir: proj, maxFiles: 3 }).truncated, 'max_files');
+});
+
+test('.agents/skills vang hoan toan -> khong info thieu ban sao', () => {
+  const { proj } = fx();
+  put(proj, '.claude/skills/x/SKILL.md', 'a');
+  const r = skillDrift({ projectDir: proj });
+  assert.equal(r.findings.length, 0);
+});
+test('nhi phan hash nguyen: CRLF trong file nhi phan la khac biet', () => {
+  const { proj } = fx();
+  put(proj, '.claude/skills/x/b.bin', Buffer.from([0, 13, 10, 1]));
+  put(proj, '.agents/skills/x/b.bin', Buffer.from([0, 10, 1]));
+  assert.equal(one(skillDrift({ projectDir: proj }), 'x').level, 'warn');
 });

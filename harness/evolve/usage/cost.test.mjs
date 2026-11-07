@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { estimateTokens, componentCost, costPerUse, rankByCost } from './cost.mjs';
+import { estimateTokens, componentCost, costPerUse, rankByCost, windowCost } from './cost.mjs';
 
 test('estimateTokens = ceil(chars/4)', () => {
   assert.equal(estimateTokens('abcde'), 2);
@@ -19,11 +19,21 @@ test('costPerUse formula, 0 uses safe', () => {
   assert.equal(costPerUse({ desc_tokens: 10, body_tokens: 100 }, { count: 4, sessions: 8 }), (10 * 8 + 100 * 4) / 4);
   assert.equal(costPerUse({ desc_tokens: 10, body_tokens: 100 }, { count: 0, sessions: 5 }), 50);
 });
-test('rankByCost desc; 0-use ranked by desc_tokens', () => {
+test('rankByCost by windowCost desc, costPerUse secondary', () => {
   const items = [
-    { id: 'a', desc_tokens: 5, body_tokens: 0, count: 0, sessions: 3 },
-    { id: 'b', desc_tokens: 9, body_tokens: 0, count: 0, sessions: 3 },
-    { id: 'c', desc_tokens: 1, body_tokens: 100, count: 2, sessions: 3 },
+    { id: 'a', desc_tokens: 5, body_tokens: 0, count: 0 },
+    { id: 'b', desc_tokens: 9, body_tokens: 0, count: 0 },
+    { id: 'c', desc_tokens: 1, body_tokens: 100, count: 2 },
   ];
-  assert.deepEqual(rankByCost(items).map((i) => i.id), ['c', 'b', 'a']);
+  const r = rankByCost(items, { totalSessions: 3 });
+  assert.deepEqual(r.map((i) => i.id), ['c', 'b', 'a']);
+  assert.equal(r[0].windowCost, 203); assert.equal(r[0].costPerUse, 203 / 2);
+});
+
+test('windowCost = desc*totalSessions + body*count', () => {
+  assert.equal(windowCost({ desc_tokens: 10, body_tokens: 100 }, { count: 4, totalSessions: 50 }), 10 * 50 + 400);
+});
+test('componentCost handles BOM and multi-line description', () => {
+  const c = componentCost({ kind: 'skill', body: '\uFEFF---\nname: x\ndescription: >-\n  abcd\n  efgh\n---\nbody' });
+  assert.equal(c.desc_tokens, estimateTokens('abcd efgh'));
 });

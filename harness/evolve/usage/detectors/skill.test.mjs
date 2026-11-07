@@ -13,7 +13,7 @@ test('tool channel: Skill', () => {
   assert.equal(e.kind, 'skill'); assert.equal(e.id, 'plugin-authoring');
   assert.equal(e.channel, 'tool'); assert.equal(e.callId, 't1'); assert.equal(e.origin, 'transcript');
   const [q] = detect(rec([tu('Skill', { skill: 'harness-kit:doctor' })]), {});
-  assert.equal(q.id, 'doctor');
+  assert.equal(q.id, 'harness-kit:doctor'); assert.equal(q.short, 'doctor');
 });
 
 test('slash channel: skill vs command', () => {
@@ -28,7 +28,7 @@ test('slash channel: skill vs command', () => {
 test('read channel', () => {
   const a = detect(rec([tu('Read', { file_path: 'C:\\x\\skills\\my-skill\\skill.md' })]), {})[0];
   assert.equal(a.id, 'my-skill'); assert.equal(a.channel, 'read'); assert.equal(a.file, 'C:/x/skills/my-skill/skill.md'); assert.equal(a.callId, 't1');
-  assert.equal(detect(rec([tu('Read', { file_path: '/a/b/SKILL.md' })]), {})[0].id, 'b');
+  assert.equal(detect(rec([tu('Read', { file_path: '/a/skills/b/SKILL.md' })]), {})[0].id, 'b');
 });
 
 test('read ignores non-skill', () => {
@@ -52,4 +52,24 @@ test('regression: 32 calls -> 32 distinct events', () => {
   }
   assert.equal(evs.length, 32);
   assert.equal(new Set(evs.map(e => e.callId)).size, 32);
+});
+
+test('slash callId uuid:blockIndex; id full + short', () => {
+  const r = rec([{ type: 'text', text: '<command-name>/harness-kit:doctor</command-name>' }], 'user');
+  r.msg.uuid = 'u9';
+  const [e] = detect(r, { skillNames: new Set(['doctor']) });
+  assert.equal(e.callId, 'u9:0'); assert.equal(e.id, 'harness-kit:doctor'); assert.equal(e.short, 'doctor');
+});
+test('read only matches /skills/<x>/SKILL.md', () => {
+  assert.deepEqual(detect(rec([tu('Read', { file_path: '/a/docs/SKILL.md' })]), {}), []);
+});
+test('agentSkills: strips plugin prefix, ignores prototype keys', () => {
+  const ev = detect(rec([tu('Agent', { subagent_type: 'p:builder' }, 'a1')]), { agentSkills: { builder: ['tdd'] } });
+  assert.equal(ev.length, 1);
+  assert.deepEqual(detect(rec([tu('Agent', { subagent_type: 'constructor' }, 'a2')]), { agentSkills: {} }), []);
+});
+test('one bad block does not drop others', () => {
+  const bad = { type: 'tool_use', id: 't0', name: 'Skill', get input() { throw new Error('x'); } };
+  const ev = detect(rec([bad, tu('Skill', { skill: 'ok' }, 't2')]), {});
+  assert.deepEqual(ev.map((e) => e.id), ['ok']);
 });
