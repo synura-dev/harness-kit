@@ -3,7 +3,8 @@
 // SessionStart: voi moi ext da dang ky VA hash ok (drift/chua duyet/thieu => bo qua) co event khop, chay SONG SONG (spawn bat dong bo, kill khi het timeout)
 //   `harness <domain> <args>` (bin/harness cua plugin, process.execPath, khong shell; domain = domain dau tien trong manifest ext, khong trung domain core;
 //   {cwd} chi duoc thay vao args), cat 12 dong/1.5KB, ghi cache theo session (data/system/ext-inject/, khoa session_id + workspace) va chen vao additionalContext.
-// SubagentStart: CHI doc cache cua session (khong spawn, khong hash, khong git) -> nhanh, nam trong budget 2500ms.
+// SubagentStart: doc cache cua session (khong hash, khong git); ext co arg {agent_type} (chi SubagentStart) duoc spawn theo vai tro agent_type
+//   (khop AGENT_RE) o day, cache theo job+agent_type (TTL 30 phut), tran rieng kep 30 dong/3KB, timeout roleTimeoutMs trong budget 2500ms.
 // Workspace = CLAUDE_PROJECT_DIR (du phong cwd su kien). Khong hard-code ten ext. Fail-open. Tat: hook.config.local.json {"enabled": false} / HOOK_EXT_INJECT_ENABLED=0.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -20,7 +21,9 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const EVENTS = ['SessionStart', 'SubagentStart'];
 const CACHE_TTL_MS = 24 * 3600 * 1000;
 
-export const DEFAULTS = { enabled: true, events: EVENTS, timeoutMs: 2000, totalMs: 3000, gitTimeoutMs: 1000, maxLines: 12, maxBytes: 1536 };
+export const DEFAULTS = { enabled: true, events: EVENTS, timeoutMs: 2000, totalMs: 3000, gitTimeoutMs: 1000, maxLines: 12, maxBytes: 1536, roleTimeoutMs: 1500, capLines: 30, capBytes: 3072 };
+export const AGENT_RE = /^[a-z0-9][a-z0-9-]{1,40}$/;
+const posInt = (n) => (Number.isFinite(n) && n > 0 ? Math.floor(n) : undefined);
 export const configFiles = () => [path.join(HERE, 'hook.config.json'), path.join(HERE, 'hook.config.local.json')];
 export const load = (files = configFiles()) => loadHookConfig('ext-inject', { defaults: DEFAULTS, files, env: { HOOK_EXT_INJECT_ENABLED: 'enabled' } });
 
@@ -33,12 +36,14 @@ export function clip(text, maxLines, maxBytes) {
   return buf.length > maxBytes ? buf.subarray(0, maxBytes).toString('utf8').replace(/�+$/, '') : t;
 }
 
-/** Thuan: khai bao inject hop le => {events, args} | null. */
+/** Thuan: khai bao inject hop le => {events, args, maxLines?, maxBytes?} | null (maxLines/maxBytes: so duong, kep capLines/capBytes). */
 export function parseInject(m) {
   const i = m && m.inject;
   if (!isObj(i) || !Array.isArray(i.events) || !Array.isArray(i.args)) return null;
   if (!i.args.every((a) => typeof a === 'string')) return null;
-  return { events: i.events.filter((e) => typeof e === 'string'), args: i.args };
+  const ml = posInt(i.maxLines), mb = posInt(i.maxBytes);
+  return { events: i.events.filter((e) => typeof e === 'string'), args: i.args,
+    ...(ml && { maxLines: Math.min(ml, DEFAULTS.capLines) }), ...(mb && { maxBytes: Math.min(mb, DEFAULTS.capBytes) }) };
 }
 
 /** Domain core (loai tru khoi routing ext). Loi => null (khong biet => bo qua moi inject, fail-closed). */
@@ -84,16 +89,17 @@ export function defaultRun(domain, args, { cwd, timeoutMs, maxBytes, env, bin })
 const cacheFile = (dir, sid, ws) => path.join(dir, `${crypto.createHash('sha256').update(`${sid}\0${norm(ws)}`).digest('hex').slice(0, 24)}.json`);
 function readCache(dir, sid, ws) {
   const j = readJson(cacheFile(dir, sid, ws));
-  return j && j.sid === sid && typeof j.text === 'string' ? j.text : '';
+  const ok = j && j.sid === sid && typeof j.text === 'string';
+  return { text: ok ? j.text : '', roleJobs: ok && Array.isArray(j.roleJobs) ? j.roleJobs : [] };
 }
-function writeCache(dir, sid, ws, text) {
+function writeCache(dir, sid, ws, text, roleJobs = []) {
   try {
     fs.mkdirSync(dir, { recursive: true });
     const now = Date.now();
     for (const f of fs.readdirSync(dir)) { // don cache cu (>24h)
       try { const p = path.join(dir, f); if (now - fs.statSync(p).mtimeMs > CACHE_TTL_MS) fs.rmSync(p, { force: true }); } catch { /* bo qua */ }
     }
-    fs.writeFileSync(cacheFile(dir, sid, ws), JSON.stringify({ sid, ws, text }));
+    fs.writeFileSync(cacheFile(dir, sid, ws), JSON.stringify({ sid, ws, text, roleJobs }));
   } catch { /* cache la tien ich, khong lam hong hook */ }
 }
 
@@ -122,8 +128,30 @@ export async function handle(event, input, ctx = {}) {
     const sid = typeof inp.session_id === 'string' ? inp.session_id : '';
     const cdir = ctx.cacheDir || dataDir('system/ext-inject', { env });
 
-    if (event === 'SubagentStart') { // chi doc cache, khong spawn/hash
-      const text = sid ? readCache(cdir, sid, ws) : '';
+    if (event === 'SubagentStart') { // doc cache; chi spawn cho role job (ext {agent_type})
+      const c = sid ? readCache(cdir, sid, ws) : { text: '', roleJobs: [] };
+      const at = typeof inp.agent_type === 'string' && AGENT_RE.test(inp.agent_type) ? inp.agent_type : '';
+      const texts = [c.text];
+      if (at) {
+        const now = ctx.now ?? Date.now();
+        const left = () => (Number.isFinite(ctx.deadline) ? ctx.deadline - Date.now() - 300 : Infinity); // job tuan tu: tinh lai truoc moi job
+        const run = ctx.run || defaultRun;
+        for (const j of c.roleJobs) {
+          try {
+            const args = j.args.map((a) => a.split('{agent_type}').join(at));
+            const key = crypto.createHash('sha256').update([norm(ws), j.key, j.domain, ...j.args, at].join('\0')).digest('hex').slice(0, 32);
+            let t = readOutCache(cdir, key, now, cfg.cacheTtlMs ?? OUT_TTL_MS);
+            if (t === null) {
+              const timeoutMs = Math.min(cfg.roleTimeoutMs, left()); if (timeoutMs < 100) break; const o = await run(j.domain, args, { cwd: ws, timeoutMs, maxBytes: j.maxBytes, env });
+              if (typeof o !== 'string') continue;
+              t = clip(o, j.maxLines, j.maxBytes);
+              writeOutCache(cdir, key, t, now);
+            }
+            texts.push(t);
+          } catch { /* fail-open: bo vai tro loi */ }
+        }
+      }
+      const text = texts.filter(Boolean).join('\n\n');
       return text ? { additionalContext: text } : {};
     }
 
@@ -134,12 +162,15 @@ export async function handle(event, input, ctx = {}) {
     const run = ctx.run || defaultRun;
     let core; // tinh lazy, chi khi co ext can chay
     const jobs = [];
+    const roleJobs = [];
     const parts = [];
     for (const e of list) {
       try {
         const m = readManifest(e.root);
         const inj = parseInject(m);
-        if (!inj || !inj.events.includes(event)) continue;
+        if (!inj) continue;
+        const hasAt = inj.args.some((a) => a.includes('{agent_type}')), isRole = hasAt && inj.events.includes('SubagentStart'); // spawn theo vai tro o SubagentStart, khong chay o SessionStart
+        if (hasAt ? !isRole : !inj.events.includes(event)) continue;
         if (hashOf(e.root) !== e.hash) continue; // drift/chua duyet/thieu: bo qua
         parts.push(e.root, e.hash, JSON.stringify(inj));
         core = core === undefined ? (ctx.core ? ctx.core() : coreDomains()) : core;
@@ -147,13 +178,15 @@ export async function handle(event, input, ctx = {}) {
         const domain = manifestDomains(m).find((d) => !core.has(d));
         if (!domain) continue; // khong co domain rieng (trung core): khong dinh tuyen
         const args = inj.args.map((a) => a.split('{cwd}').join(evCwd));
-        jobs.push(() => Promise.resolve(run(domain, args, { cwd: ws, timeoutMs: cfg.timeoutMs, maxBytes: cfg.maxBytes, env })).then((o) => (typeof o === 'string' ? clip(o, cfg.maxLines, cfg.maxBytes) : null), () => null));
+        const maxLines = inj.maxLines ?? cfg.maxLines, maxBytes = inj.maxBytes ?? cfg.maxBytes;
+        if (isRole) { roleJobs.push({ domain, args, maxLines, maxBytes, key: e.hash }); continue; }
+        jobs.push(() => Promise.resolve(run(domain, args, { cwd: ws, timeoutMs: cfg.timeoutMs, maxBytes, env })).then((o) => (typeof o === 'string' ? clip(o, maxLines, maxBytes) : null), () => null));
       } catch { /* mot ext loi khong anh huong ext khac */ }
     }
     // Cache theo hash ext da dang ky + manifest inject (+ workspace, cwd su kien). Hash doi => lam moi. TTL ngan de output dong khong cu qua lau.
     const ckey = jobs.length ? crypto.createHash('sha256').update([norm(ws), evCwd, ...parts].join('\0')).digest('hex').slice(0, 32) : '';
     const hit = ckey ? readOutCache(cdir, ckey, ctx.now ?? Date.now(), cfg.cacheTtlMs ?? OUT_TTL_MS) : null;
-    if (hit !== null) { if (sid) writeCache(cdir, sid, ws, hit); return hit ? { additionalContext: hit } : {}; }
+    if (hit !== null) { if (sid) writeCache(cdir, sid, ws, hit, roleJobs); return hit ? { additionalContext: hit } : {}; }
     let total;
     // tran tong khong vuot phan con lai cua dispatcher (ctx.deadline) tru bien 300ms de con ghi cache/tra ket qua
     const totalMs = Number.isFinite(ctx.deadline) ? Math.max(100, Math.min(cfg.totalMs, ctx.deadline - Date.now() - 300)) : cfg.totalMs;
@@ -162,7 +195,8 @@ export async function handle(event, input, ctx = {}) {
     clearTimeout(total);
     const text = (outs || []).filter(Boolean).join('\n\n');
     const complete = !!outs && outs.every((o) => o !== null); // chi cache khi MOI ext thanh cong; loi/timeout -> khong cache (lan sau thu lai)
-    if (sid && complete) writeCache(cdir, sid, ws, text);
+    if (sid && complete) writeCache(cdir, sid, ws, text, roleJobs);
+    else if (sid && roleJobs.length) writeCache(cdir, sid, ws, '', roleJobs); // ext thuong loi: van giu role job (khong luu text do)
     if (ckey && complete) writeOutCache(cdir, ckey, text, ctx.now ?? Date.now());
     return text ? { additionalContext: text } : {};
   } catch { return {}; }

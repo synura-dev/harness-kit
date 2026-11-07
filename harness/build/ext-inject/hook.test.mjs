@@ -196,3 +196,112 @@ test('ctx.deadline cat totalMs (con 300ms bien); ghi cache ngay khi xong', async
   expect(DEFAULTS.totalMs).toBeLessThan(DEFAULTS.totalMs + 1);
   expect(mod.timeoutMs).toBeGreaterThan(DEFAULTS.totalMs);
 });
+
+// ---- {agent_type}: nap theo vai tro o SubagentStart ----
+const RINJ = { domain: 'role-dom', inject: { events: ['SubagentStart'], args: ['role', '{agent_type}'] } };
+const mkR = (over = {}) => {
+  const calls = [];
+  const m = mk({
+    list: () => [{ id: 'alpha', root: 'alpha', hash: 'h1' }, { id: 'role', root: 'role', hash: 'h1' }],
+    readManifest: (r) => (r === 'role' ? RINJ : INJ),
+    run: async (domain, args, o) => { calls.push({ domain, args, o }); return domain === 'role-dom' ? `ROLE-${args[1]}` : 'common'; },
+    ...over,
+  });
+  return { ctx: m.ctx, calls };
+};
+const roleCalls = (calls) => calls.filter((c) => c.domain === 'role-dom');
+
+test('role 1: SessionStart khong chay ext {agent_type}, ext thuong van chay', async () => {
+  const { ctx, calls } = mkR();
+  expect(await handle('SessionStart', S(), ctx)).toEqual({ additionalContext: 'common' });
+  expect(roleCalls(calls)).toHaveLength(0);
+  expect(calls).toHaveLength(1);
+});
+test('role 2: SubagentStart goi run(domain, [role, agent]) dung 1 lan, noi text chung + vai tro', async () => {
+  const { ctx, calls } = mkR();
+  await handle('SessionStart', S(), ctx);
+  const r = await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx);
+  expect(r).toEqual({ additionalContext: 'common\n\nROLE-reviewer' });
+  expect(roleCalls(calls)).toHaveLength(1);
+  expect(roleCalls(calls)[0].args).toEqual(['role', 'reviewer']);
+});
+test('role 3: cache theo agent_type; khac agent_type thi goi', async () => {
+  const { ctx, calls } = mkR();
+  await handle('SessionStart', S(), ctx);
+  await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx);
+  const r = await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx);
+  expect(r.additionalContext).toBe('common\n\nROLE-reviewer');
+  expect(roleCalls(calls)).toHaveLength(1);
+  await handle('SubagentStart', S({ agent_type: 'builder' }), ctx);
+  expect(roleCalls(calls)).toHaveLength(2);
+});
+test('role 4: agent_type thieu/sai dinh dang => khong run, chi text chung', async () => {
+  const { ctx, calls } = mkR();
+  await handle('SessionStart', S(), ctx);
+  for (const at of [undefined, 'egm:x', '../a', 'a'.repeat(50), 'Explore']) {
+    const r = await handle('SubagentStart', S(at === undefined ? {} : { agent_type: at }), ctx);
+    expect(r).toEqual({ additionalContext: 'common' });
+  }
+  expect(roleCalls(calls)).toHaveLength(0);
+});
+test('role 5: run null => chi text chung, khong ghi cache vai tro (lan sau thu lai)', async () => {
+  let fail = true;
+  const calls0 = [];
+  const { ctx, calls } = mkR({ run: async (d, a) => (d === 'role-dom' ? (calls0.push(d), fail ? null : `ROLE-${a[1]}`) : 'common') });
+  await handle('SessionStart', S(), ctx);
+  expect(await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx)).toEqual({ additionalContext: 'common' });
+  fail = false;
+  expect((await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx)).additionalContext).toBe('common\n\nROLE-reviewer');
+  expect(calls0).toHaveLength(2);
+  void calls;
+});
+test('role 6: ext role lech hash o SessionStart => SubagentStart khong run', async () => {
+  const { ctx, calls } = mkR({ hashOf: (r) => (r === 'role' ? 'bad' : 'h1') });
+  await handle('SessionStart', S(), ctx);
+  expect(await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx)).toEqual({ additionalContext: 'common' });
+  expect(roleCalls(calls)).toHaveLength(0);
+});
+test('role 7: inject.maxLines/maxBytes ap dung, kep tran 30/3072; thieu => 12/1536', async () => {
+  const many = Array.from({ length: 60 }, (_, i) => `l${i}`).join('\n');
+  const t = async (inject, text = many) => {
+    const { ctx } = mkR({ readManifest: (r) => (r === 'role' ? { ...RINJ, inject: { ...RINJ.inject, ...inject } } : INJ),
+      run: async (d) => (d === 'role-dom' ? text : 'common') });
+    await handle('SessionStart', S(), ctx);
+    const r = await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx);
+    return r.additionalContext.split('\n\n').slice(1).join('\n\n');
+  };
+  expect((await t({ maxLines: 5 })).split('\n')).toHaveLength(5);
+  expect((await t({ maxLines: 100 })).split('\n')).toHaveLength(30);
+  expect((await t({})).split('\n')).toHaveLength(12);
+  expect(Buffer.byteLength(await t({ maxLines: 30, maxBytes: 99999 }, 'x'.repeat(9000)))).toBe(3072);
+  expect(Buffer.byteLength(await t({}, 'x'.repeat(9000)))).toBe(1536);
+  const n = mk({ readManifest: () => ({ ...INJ, inject: { ...INJ.inject, maxLines: 3 } }), run: async () => many }); // ext thuong cung ap
+  expect((await handle('SessionStart', S(), n.ctx)).additionalContext.split('\n')).toHaveLength(3);
+});
+test('role 8: timeout spawn = min(roleTimeoutMs, deadline - now - 300)', async () => {
+  const { ctx, calls } = mkR();
+  await handle('SessionStart', S(), ctx);
+  await handle('SubagentStart', S({ agent_type: 'reviewer' }), { ...ctx, deadline: Date.now() + 900 });
+  const t1 = roleCalls(calls)[0].o.timeoutMs;
+  expect(t1).toBeLessThanOrEqual(600);
+  expect(t1).toBeGreaterThan(400);
+  await handle('SubagentStart', S({ agent_type: 'builder' }), ctx);
+  expect(roleCalls(calls)[1].o.timeoutMs).toBe(DEFAULTS.roleTimeoutMs);
+});
+test('role 9: ext thuong loi o SessionStart van giu role job', async () => {
+  const { ctx, calls } = mkR({ run: async (d, a) => { calls.push({ domain: d, args: a }); return d === 'role-dom' ? `ROLE-${a[1]}` : null; } });
+  await handle('SessionStart', S(), ctx);
+  expect(await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx)).toEqual({ additionalContext: 'ROLE-reviewer' });
+});
+test('role 10: deadline gan het => bo qua job, khong goi run', async () => {
+  const { ctx, calls } = mkR();
+  await handle('SessionStart', S(), ctx);
+  const r = await handle('SubagentStart', S({ agent_type: 'reviewer' }), { ...ctx, deadline: Date.now() + 350 });
+  expect(r).toEqual({ additionalContext: 'common' });
+  expect(roleCalls(calls)).toHaveLength(0);
+});
+test('role 11: ext {agent_type} khong co SubagentStart => khong chay o SessionStart', async () => {
+  const { ctx, calls } = mkR({ readManifest: (r) => (r === 'role' ? { ...RINJ, inject: { ...RINJ.inject, events: ['SessionStart'] } } : INJ) });
+  expect(await handle('SessionStart', S(), ctx)).toEqual({ additionalContext: 'common' });
+  expect(roleCalls(calls)).toHaveLength(0);
+});
