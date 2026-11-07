@@ -134,7 +134,7 @@ export async function handle(event, input, ctx = {}) {
       const texts = [c.text];
       if (at) {
         const now = ctx.now ?? Date.now();
-        const timeoutMs = Number.isFinite(ctx.deadline) ? Math.max(100, Math.min(cfg.roleTimeoutMs, ctx.deadline - now - 300)) : cfg.roleTimeoutMs;
+        const left = () => (Number.isFinite(ctx.deadline) ? ctx.deadline - Date.now() - 300 : Infinity); // job tuan tu: tinh lai truoc moi job
         const run = ctx.run || defaultRun;
         for (const j of c.roleJobs) {
           try {
@@ -142,7 +142,7 @@ export async function handle(event, input, ctx = {}) {
             const key = crypto.createHash('sha256').update([norm(ws), j.key, j.domain, ...j.args, at].join('\0')).digest('hex').slice(0, 32);
             let t = readOutCache(cdir, key, now, cfg.cacheTtlMs ?? OUT_TTL_MS);
             if (t === null) {
-              const o = await run(j.domain, args, { cwd: ws, timeoutMs, maxBytes: j.maxBytes, env });
+              const timeoutMs = Math.min(cfg.roleTimeoutMs, left()); if (timeoutMs < 100) break; const o = await run(j.domain, args, { cwd: ws, timeoutMs, maxBytes: j.maxBytes, env });
               if (typeof o !== 'string') continue;
               t = clip(o, j.maxLines, j.maxBytes);
               writeOutCache(cdir, key, t, now);
@@ -169,8 +169,8 @@ export async function handle(event, input, ctx = {}) {
         const m = readManifest(e.root);
         const inj = parseInject(m);
         if (!inj) continue;
-        const isRole = inj.events.includes('SubagentStart') && inj.args.some((a) => a.includes('{agent_type}')); // spawn theo vai tro o SubagentStart, khong chay o SessionStart
-        if (!isRole && !inj.events.includes(event)) continue;
+        const hasAt = inj.args.some((a) => a.includes('{agent_type}')), isRole = hasAt && inj.events.includes('SubagentStart'); // spawn theo vai tro o SubagentStart, khong chay o SessionStart
+        if (hasAt ? !isRole : !inj.events.includes(event)) continue;
         if (hashOf(e.root) !== e.hash) continue; // drift/chua duyet/thieu: bo qua
         parts.push(e.root, e.hash, JSON.stringify(inj));
         core = core === undefined ? (ctx.core ? ctx.core() : coreDomains()) : core;
@@ -196,6 +196,7 @@ export async function handle(event, input, ctx = {}) {
     const text = (outs || []).filter(Boolean).join('\n\n');
     const complete = !!outs && outs.every((o) => o !== null); // chi cache khi MOI ext thanh cong; loi/timeout -> khong cache (lan sau thu lai)
     if (sid && complete) writeCache(cdir, sid, ws, text, roleJobs);
+    else if (sid && roleJobs.length) writeCache(cdir, sid, ws, '', roleJobs); // ext thuong loi: van giu role job (khong luu text do)
     if (ckey && complete) writeOutCache(cdir, ckey, text, ctx.now ?? Date.now());
     return text ? { additionalContext: text } : {};
   } catch { return {}; }
