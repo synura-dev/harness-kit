@@ -159,9 +159,8 @@ test('adapters/agy: handles lifecycle events SessionStart, Stop, PostInvocation'
   const stopEv = lines.find((l) => l.event === 'Stop');
   expect(stopEv.type).toBe('session');
   expect(stopEv.dur_ms).toBe(2500);
-  expect(stopEv.tokens_in).toBe(500);
-  expect(stopEv.tokens_out).toBe(150);
-  expect(stopEv.turns).toBe(3);
+  // Task 0: payload agy khong co usage -> khong doc usage tu payload (token lay tu transcript)
+  expect(stopEv.tokens_in).toBeNull();
 
   const postEv = lines.find((l) => l.event === 'PostInvocation');
   expect(postEv.type).toBe('session');
@@ -242,4 +241,109 @@ test('adapters/agy: HUB_AGY_CAPTURE ghi stdin tho (mac dinh tat)', () => {
   expect(fs.existsSync(cap)).toBe(false);
   spawnSync(process.execPath, [script], { input: inp, encoding: 'utf8', env: { ...process.env, CLAUDE_AUDIT_DIR: root, HUB_AGY_CAPTURE: cap } });
   expect(JSON.parse(fs.readFileSync(cap, 'utf8').trim()).toolCall.name).toBe('run_command');
+});
+
+// ---- Task 3: noi parser transcript (usage, dur, exit code, Stop) ----
+import { handle } from './agy.mjs';
+import * as auditMod from '../audit.mjs';
+import { agyTranscriptPath } from './agy-usage.mjs';
+
+const mkRoot = () => fs.mkdtempSync(path.join(os.tmpdir(), 'agy3-'));
+const model = (i, inp, out, cr) => JSON.stringify({ source: 'MODEL', step_index: i, input_tokens: inp, output_tokens: out, cache_read_tokens: cr });
+const gen = (i, extra = '') => JSON.stringify({ type: 'GENERIC', step_index: i, content: `Created At: 2026-11-07T10:00:00+07:00\nCompleted At: 2026-11-07T10:00:02+07:00\n${extra}` });
+const call = (inp, ctx) => handle(undefined, { conversationId: 'c1', modelName: 'gem-x', ...inp }, { cfg: auditMod.readAuditConfig(), write: false, ...ctx }).record;
+const fwd = (p) => p.replace(/\\/g, '/');
+
+test('agyTranscriptPath: thuan', () => {
+  expect(agyTranscriptPath('abc', 'hh')).toBe(path.join('hh', '.gemini', 'antigravity-cli', 'brain', 'abc', '.system_generated', 'logs', 'transcript_full.jsonl'));
+});
+
+test('Stop: usage delta theo transcript, lan hai chi buoc moi, model', () => {
+  const root = mkRoot(); const f = path.join(root, 't.jsonl');
+  fs.writeFileSync(f, model(1, 100, 10, 50) + '\n' + model(2, 200, 20, 60) + '\n');
+  const stop = { hookEventName: 'Stop', transcriptPath: fwd(f), terminationReason: 'NO_TOOL_CALL', executionNum: 0, error: '', fullyIdle: true };
+  const r1 = call(stop, { root });
+  expect(r1.data.usage.input).toBe(300); expect(r1.data.usage.output).toBe(30); expect(r1.data.usage.cache_read).toBe(110);
+  expect(r1.tokens_in).toBe(300); expect(r1.tokens_out).toBe(30); expect(r1.model).toBe('gem-x');
+  fs.appendFileSync(f, model(3, 5, 1, 2) + '\n');
+  const r2 = call(stop, { root });
+  expect(r2.data.usage.input).toBe(5); expect(r2.data.usage.output).toBe(1);
+});
+
+test('Stop: terminationReason -> ok/stop_reason/exec_num/fully_idle/signal', () => {
+  const root = mkRoot();
+  const s = (terminationReason, extra = {}) => call({ hookEventName: 'Stop', terminationReason, executionNum: 2, error: '', fullyIdle: true, ...extra }, { root });
+  const e = s('ERROR');
+  expect(e.ok).toBe(false); expect(e.data.stop_reason).toBe('ERROR'); expect(e.data.exec_num).toBe(2); expect(e.data.fully_idle).toBe(true);
+  expect(s('MAX_INVOCATIONS').ok).toBe(false);
+  expect(s('NO_TOOL_CALL').ok).not.toBe(false);
+  expect(s('USER_CANCELED').data.signal).toBe('interrupt');
+  expect(s('NO_TOOL_CALL', { error: 'boom' }).ok).toBe(false);
+});
+
+test('Stop: transcript thieu -> van ghi, usage_reason', () => {
+  const root = mkRoot();
+  const r = call({ hookEventName: 'Stop', transcriptPath: fwd(path.join(root, 'none.jsonl')), terminationReason: 'NO_TOOL_CALL' }, { root });
+  expect(r).toBeDefined(); expect(r.data.usage_reason).toBeTruthy();
+});
+
+test('Stop: transcript 2MB < 1500ms', () => {
+  const root = mkRoot(); const f = path.join(root, 'big.jsonl');
+  const filler = JSON.stringify({ source: 'SYSTEM', step_index: 0, content: 'x'.repeat(900) }) + '\n';
+  fs.writeFileSync(f, filler.repeat(2300) + model(1, 7, 1, 0) + '\n');
+  const t = Date.now();
+  const r = call({ hookEventName: 'Stop', transcriptPath: fwd(f), terminationReason: 'NO_TOOL_CALL' }, { root });
+  expect(Date.now() - t).toBeLessThan(1500);
+  expect(r).toBeDefined();
+});
+
+test('Post: dur tu transcript (duong dan suy tu conversationId), dur_src, exit code', () => {
+  const root = mkRoot(); const home = mkRoot();
+  const f = agyTranscriptPath('c1', home); fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, gen(4, 'Command exited with code 3.') + '\n');
+  const r = call({ toolCall: { name: 'run_command', args: { CommandLine: 'x' } }, stepIdx: 4 }, { root, home });
+  expect(r.dur_ms).toBe(2000); expect(r.data.dur_src).toBe('transcript'); expect(r.data.exit_code).toBe(3);
+});
+
+test('Post: exit code khac 0 tu transcript -> ok:false/status error; exit 0 giu ok', () => {
+  const root = mkRoot(); const home = mkRoot();
+  const f = agyTranscriptPath('c1', home); fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, gen(4, 'Command exited with code 3.') + '\n' + gen(5, 'Command exited with code 0.') + '\n');
+  const p = { toolCall: { name: 'run_command', args: { CommandLine: 'x' } }, error: '' };
+  const bad = call({ ...p, stepIdx: 4 }, { root, home });
+  expect(bad.ok).toBe(false); expect(bad.status).toBe('error'); expect(bad.data.exit_code).toBe(3);
+  const good = call({ ...p, stepIdx: 5 }, { root, home });
+  expect(good.ok).not.toBe(false); expect(good.status).not.toBe('error');
+});
+
+test('Post: conversationId co .. -> khong suy duong dan transcript', () => {
+  const root = mkRoot(); const home = mkRoot();
+  const f = path.join(home, '.gemini', 'antigravity-cli', 'brain', 'x', '.system_generated', 'logs', 'transcript_full.jsonl');
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, gen(1) + '\n');
+  for (const id of ['..', 'a/../b', '../brain/x']) {
+    const r = call({ conversationId: id, toolCall: { name: 'read_file', args: { Path: 'a' } }, stepIdx: 1 }, { root, home });
+    expect(r.dur_ms == null).toBe(true);
+  }
+  expect(call({ conversationId: 'x', toolCall: { name: 'read_file', args: { Path: 'a' } }, stepIdx: 1 }, { root, home }).dur_ms).toBe(2000);
+});
+
+test('Post: marker thang transcript; khong transcript -> fail-open', () => {
+  const root = mkRoot(); const home = mkRoot();
+  handle('pre', { conversationId: 'c1', stepIdx: 9 }, { root, mode: 'pre' });
+  const p = { toolCall: { name: 'read_file', args: { Path: 'a' } }, stepIdx: 9 };
+  const r = call(p, { root, home });
+  expect(r.data.dur_src).toBe('marker'); expect(r.dur_ms).not.toBeNull();
+  const r2 = call({ ...p, stepIdx: 10 }, { root, home });
+  expect(r2).toBeDefined(); expect(r2.data.dur_src).toBeUndefined();
+});
+
+test('Post: loi chuoi tu do ok:false khong exit_code; "exit status N" -> exit_code', () => {
+  const root = mkRoot(); const home = mkRoot();
+  const p = { toolCall: { name: 'read_file', args: { Path: 'a' } }, stepIdx: 1 };
+  const a = call({ ...p, error: 'file does not exist' }, { root, home });
+  expect(a.ok).toBe(false); expect(a.data.exit_code).toBeUndefined();
+  // shortcut: "exit status N" theo tai lieu, chua thay that
+  const b = call({ ...p, error: 'exit status 1' }, { root, home });
+  expect(b.ok).toBe(false); expect(b.data.exit_code).toBe(1);
 });
