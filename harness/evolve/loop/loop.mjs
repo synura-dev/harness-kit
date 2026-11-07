@@ -30,7 +30,7 @@ export const ctx = (o = {}) => {
   const audits = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);
   return { hub, evo, audits, base: path.resolve(o.dataBase || dataDir()) };
 };
-const appendLog = (c, rec) => { try { fs.mkdirSync(c.evo, { recursive: true }); fs.appendFileSync(path.join(c.evo, 'applied.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...rec }) + '\n'); } catch {} };
+export const appendLog = (c, rec) => { try { fs.mkdirSync(c.evo, { recursive: true }); fs.appendFileSync(path.join(c.evo, 'applied.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...rec }) + '\n'); } catch {} };
 
 // ---- redact ----
 // Che secret: maskSecrets cua core (key=value, Authorization, bearer, ghp_/sk-/AKIA, URL user:pass@) + bo sung o day

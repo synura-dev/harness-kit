@@ -1,5 +1,5 @@
 // Autopilot tien hoa: ledger (open/warned, action=propose) -> de xuat -> phan muc tat dinh.
-//   Tu ap dung (muc 1): CHI luat canh bao (file JSON evolve/rules/evolve-*.json), rollback duoc; tu rollback sau 7 ngay neu count fp khong giam.
+//   Tu ap dung (muc 1): CHI luat canh bao (file JSON evolve/rules/evolve-*.json), rollback duoc; do hieu qua sau >= 7 ngay (effect.mjs: rate/1000 call, truoc vs sau), unchanged/worse -> tu rollback.
 //   Moi thu khac (inject, skill, code, delete, gate) -> hang cho TTY (muc 2). Cam (muc 0): guard/approval/bash-guard/data-gate/model-policy, push/deploy.
 // KHONG goi model. Toi da 1 lan/24h, timeout cung, khoa chong chay trung. Chi import core + evolve (hop dong import).
 import fs from 'node:fs';
@@ -7,12 +7,13 @@ import crypto from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
-import { findCandidates, propose, check, apply, rollback, ctx, classifyTarget } from './loop.mjs';
+import { findCandidates, propose, check, apply, rollback, ctx, classifyTarget, listProposals, appendLog } from './loop.mjs';
+import { measureDue } from './effect.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { withLock } from '../../core/runtime/lockfile.mjs';
 
 export const CFG = Object.freeze({
-  intervalHours: 24, timeoutS: 100, maxProposals: 5, rollbackAfterDays: 7,
+  intervalHours: 24, timeoutS: 100, maxProposals: 5,
   autonomy: 1, // 0 = chi xep hang (khong tu ap gi); 1 = tu ap luat canh bao, con lai xep hang
   oracleDays: 30, lockStaleS: 300, maxQueue: 200, maxApplied: 100,
 });
@@ -47,17 +48,6 @@ export function classifyChange(change = {}) {
   if (!lv) return { level: 2, reason: `loai thay doi la (${kind || '-'}) -> cho duyet` };
   if (lv === 1 && !/^(?:[^/]+\/)*rules\/evolve-[^/]+\.json$/.test(rel)) return { level: 2, reason: `muc 1 chi file luat evolve-*.json, dich ${rel} -> cho duyet` };
   return { level: lv, reason: lv === 1 ? 'chi them luat canh bao' : `${kind} -> cho duyet` };
-}
-
-/** Candidate khop moc (fp chinh tac hoac error_fp cu cua nhom, hai chieu). */
-export const matchCand = (items, rec) => {
-  const mine = new Set([rec.fp, ...(rec.legacy_fps || [])].filter(Boolean));
-  return (items || []).find((x) => mine.has(x.fp) || (x.legacy_fps || []).some((l) => mine.has(l)));
-};
-/** Quyet dinh rollback cho 1 moc: count fp khong giam sau N ngay. Thuan. */
-export function shouldRollback(rec, countNow) {
-  if (!(countNow < rec.count_before)) return { rollback: true, reason: `count fp khong giam (${rec.count_before} -> ${countNow})` };
-  return { rollback: false, reason: null };
 }
 
 // ---- trang thai ----
@@ -146,22 +136,29 @@ export async function runAutopilot(o = {}) {
     if (!dry) { st.lastRun = nowMs; if (!save()) return res; } // chiem moc ngay: loi giua chung cung khong chay lai trong 24h
     if (!dry) { const rec = recoverApplying(o, st); if (rec.changed) { res.errors.push(...rec.notes); save(); } }
     if (weekKey(nowMs) !== st.week.key) st.week = { key: weekKey(nowMs), proposals: 0 };
+    const record = (p, effect) => { // effect -> proposal JSON (nguon su that) + dong op:effect trong applied.jsonl
+      wr(path.join(ctx(o).evo, 'proposals', `${p.id}.json`), { ...p, effect });
+      appendLog(ctx(o), { op: 'effect', id: p.id, ver: p.ver, verdict: effect.verdict, action: effect.action, reason: effect.reason });
+    };
 
-    // 1) Tu rollback cac moc muc 1 da >= N ngay.
-    const due = st.applied.filter((a) => a.status === 'applied' && nowMs - Date.parse(a.ts) >= cfg.rollbackAfterDays * DAY);
-    if (due.length) {
-      const cands = await findCandidates({ ...o, days: cfg.rollbackAfterDays, threshold: 1, nowMs, timeoutMs: 15000 });
-      for (const a of due) {
-        if (timeUp()) { res.errors.push('timeout'); break; }
-        const now = matchCand(cands.items, a);
-        const d = shouldRollback(a, now ? now.count : 0);
-        if (!d.rollback) { res.kept.push({ ver: a.ver, fp: a.fp }); if (!dry) a.status = 'kept'; continue; }
-        if (dry) { res.rolledBack.push({ ver: a.ver, fp: a.fp, reason: d.reason, dry: true }); continue; }
-        const r = rollback(a.ver, { ...o, approve: true });
-        a.status = r.ok ? 'rolled_back' : 'rollback_failed'; a.reason = r.ok ? d.reason : r.reason;
-        (r.ok ? res.rolledBack : res.errors).push(r.ok ? { ver: a.ver, fp: a.fp, reason: d.reason } : `rollback ${a.ver}: ${r.reason}`);
-        if (a.entry_id) notes.set(a.entry_id, { status: r.ok ? 'rolled_back' : 'rollback_failed', reason: a.reason, ver: a.ver });
-      }
+    // 1) Do hieu qua luat da ap (effect.mjs, MOT luot doc audit): proposal.effect la nguon su that; keep/rollback theo verdict.
+    const pend = listProposals(o).filter((p) => p.kind === 'rule' && p.status === 'applied');
+    for (const { id, effect } of pend.length ? measureDue(pend, nowMs, o) : []) {
+      if (timeUp()) { res.errors.push('timeout'); break; }
+      const p = pend.find((x) => x.id === id);
+      const a = st.applied.find((x) => x.pid === id);
+      const who = { ver: p.ver, fp: p.evidence && p.evidence.fp };
+      const roll = effect.action === 'rollback';
+      // chi tu rollback luat muc 1; muc 2 chi ghi effect, nguoi tu quyet
+      if (roll && classifyChange({ kind: p.kind, target: p.change && p.change.target }).level !== 1) { res.refused.push({ entry: id, reason: `${effect.verdict}: rollback can nguoi (khong phai muc 1)` }); if (!dry) record(p, effect); continue; }
+      if (dry) { if (roll) res.rolledBack.push({ ...who, reason: effect.reason, verdict: effect.verdict, dry: true }); else if (effect.action === 'keep') res.kept.push({ ...who, verdict: effect.verdict, dry: true }); continue; }
+      record(p, effect);
+      if (effect.action === 'keep') { res.kept.push({ ...who, verdict: effect.verdict }); if (a) a.status = 'kept'; continue; }
+      if (!roll) continue; // insufficient: do lai lan sau
+      const r = rollback(p.ver, { ...o, approve: true });
+      if (a) { a.status = r.ok ? 'rolled_back' : 'rollback_failed'; a.reason = r.ok ? effect.reason : r.reason; }
+      (r.ok ? res.rolledBack : res.errors).push(r.ok ? { ...who, reason: effect.reason, verdict: effect.verdict } : `rollback ${p.ver}: ${r.reason}`);
+      if (a && a.entry_id) notes.set(a.entry_id, { status: r.ok ? 'rolled_back' : 'rollback_failed', reason: a.reason, ver: p.ver });
     }
 
     // 2) Muc ledger can de xuat.
@@ -193,7 +190,7 @@ export async function runAutopilot(o = {}) {
       }
       if (!toQueue && p) {
         // Ghi moc 'applying' (fp, dich, count truoc) vao state TRUOC khi apply: crash giua chung van con moc de rollback/hoan tat.
-        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), count_before: cand.count, legacy_fps: cand.legacy_fps || [], status: 'applying', target: p.change.target };
+        const rec = { pid: p.id, ver: null, fp: e.fp, entry_id: e.id, ts: new Date(nowMs).toISOString(), status: 'applying', target: p.change.target };
         st.applied.push(rec);
         if (!save()) { st.applied.pop(); notes.set(e.id, { status: 'refused', reason: 'khong ghi duoc moc applying' }); continue; }
         const r = apply(p.id, { ...o, approve: true }); // autopilot LA cong duyet cua muc 1 (bang phan muc tat dinh); policy van chan cam
