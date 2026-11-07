@@ -83,6 +83,12 @@ test('agy init native: da cai / tat / chua cai + canh bao .agents/hooks.json cu'
   const off = native({ dir: d, inj: { list: () => JSON.stringify([{ name: 'harness-kit', enabled: false }]) } });
   expect(off.code).toBe(1); expect(off.lines.join('\n')).toContain('agy plugin enable');
   const no = native({ dir: d, inj: { list: () => '[{"name":"egm","enabled":true}]' } });
-  expect(no.code).toBe(1); expect(no.lines.join('\n')).toContain('agy plugin install');
+  expect(no.code).toBe(1); expect(no.lines.join('\n')).toContain('git clone');
+  expect(no.lines.join('\n')).toMatch(/plugins[\/]harness-kit/);
+  // project scope: plugin.json trong .agents/plugins/harness-kit -> OK, khong can agy list
+  const pj = path.join(d, '.agents', 'plugins', 'harness-kit', '.antigravity-plugin');
+  fs.mkdirSync(pj, { recursive: true }); fs.writeFileSync(path.join(pj, 'plugin.json'), '{}');
+  const pr = native({ dir: d, inj: { list: () => { throw new Error('khong duoc goi'); } } });
+  expect(pr.code).toBe(0); expect(pr.lines.join('\n')).toContain('pull');
   expect(fs.readFileSync(path.join(d, '.agents', 'hooks.json'), 'utf8')).toBe('{"harness-kit":{}}'); // khong ghi file
 });

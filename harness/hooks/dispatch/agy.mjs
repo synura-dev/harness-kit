@@ -78,11 +78,6 @@ const SESSION_AGY = {
       const u = await (await import('../../build/user-shim/hook.mjs')).default.handle('SessionStart', {}, {});
       if (u && u.additionalContext) process.stderr.write(u.additionalContext + '\n');
     } catch { /* fail-open */ }
-    try { // (legacy) tu sinh lai shim + local.json neu thieu (chi khi du an da dung hook agy cua harness-kit)
-      const ws = (process.env.CLAUDE_PROJECT_DIR || '').trim();
-      const hj = ws && path.join(ws, '.agents', 'hooks.json');
-      if (hj && fs.existsSync(hj) && /"harness-kit"/.test(fs.readFileSync(hj, 'utf8'))) { const { init } = await import('../../cli/commands/agy.mjs'); init({ dir: ws }); }
-    } catch (e) { process.stderr.write('HKERR ' + JSON.stringify({ code: 'HK-AGY-003', severity: 'warn', cause: 'khong tu sinh duoc shim agy: ' + String(e && e.message).slice(0, 120), fix_command: 'harness agy init', next_step: 'chay lenh fix_command trong du an', safe: true, source: 'hooks/dispatch/agy.mjs' }) + '\n'); }
     const r = spawnSync(process.execPath, [DOCTOR], { encoding: 'utf8', timeout: 8000, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
     const out = String(r.stdout || '');
     if (/\[MISS\]|\[LOI\]/.test(out)) process.stderr.write(out);
