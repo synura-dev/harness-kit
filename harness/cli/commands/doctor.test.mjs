@@ -17,6 +17,7 @@ if (process.platform === 'win32') Object.assign(baseEnv, { USERPROFILE: SHIM_HOM
 baseEnv.CLAUDE_CONFIG_DIR = process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), '.claude');
 const SHIM_BIN = defaultShimDir({ env: baseEnv, home: SHIM_HOME });
 applyShim(planShim({ dir: SHIM_BIN }));
+fs.writeFileSync(path.join(SHIM_BIN, 'roots.json'), JSON.stringify({ agy: { root: REPO_DIR } })); // root hop le -> doctor khong canh bao roots
 baseEnv.PATH = [SHIM_BIN, process.env.PATH].join(path.delimiter);
 const runDoctor = (hub) => spawnSync('node', [DOCTOR], { encoding: 'utf8', timeout: 60000, env: { ...baseEnv, HUB_DIR: hub } });
 const fixHub = (withFile) => {
@@ -172,6 +173,20 @@ test('doctor: di san agy -> dung 1 dong [warn], exit code khong doi; sach -> kho
   expect(w[0].startsWith('[warn]')).toBe(true);
   expect(a.stdout).not.toContain('di san agy cu');
   expect(b.status).toBe(a.status);
+}, 120000);
+
+test('doctor: roots.json thieu / khong co root hop le -> [warn] shim stale; co root hop le -> khong canh bao roots', async () => {
+  const hub = await fixHub(true);
+  const rf = path.join(SHIM_BIN, 'roots.json');
+  const run = () => spawnSync('node', [DOCTOR, '--plugin-dir', REPO_DIR], { encoding: 'utf8', timeout: 60000, env: { ...baseEnv, HUB_DIR: hub } });
+  const rootsWarn = (o) => o.stdout.split('\n').filter((l) => l.includes('roots.json'));
+  fs.rmSync(rf, { force: true });
+  const a = rootsWarn(run());
+  expect(a.length).toBe(1); expect(a[0].startsWith('[warn]')).toBe(true);
+  fs.writeFileSync(rf, JSON.stringify({ agy: { root: path.join(SHIM_HOME, 'da-vang') } }));
+  expect(rootsWarn(run()).length).toBe(1);
+  fs.writeFileSync(rf, JSON.stringify({ agy: { root: REPO_DIR } }));
+  expect(rootsWarn(run()).length).toBe(0);
 }, 120000);
 
 test('doctor: stamp tool kia moi hon (version/schema) -> dung 1 dong [warn] lech ban, exit khong doi; khong stamp -> khong dong', async () => {

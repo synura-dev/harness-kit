@@ -9,12 +9,13 @@ export const UNSAFE_RULE = 'harness-unsafe';
 export const ALLOW = Object.freeze({
   doctor: null,
   data: ['ls', 'stat', 'scan'],
-  observe: ['usage', 'report'],
+  // observe report BO: ghi .md, xoa file cu, --weekly/--out ghi ra Obsidian. data ls/stat/scan chi ghi vet noi bo (access log + scan cache trong data root, duong co dinh). knowledge fact set bi chan rieng.
+  observe: ['usage'],
   knowledge: ['search', 'get', 'fact', 'role'],
   projects: ['list', 'get', 'tasks'],
 });
 const DOCTOR_ARGS = ['--json'];
-const TOKEN = /^[A-Za-z0-9_.:=,@+/-]+$/; // moi ky tu shell / quote / backslash / bien (% $) nam ngoai tap nay
+const TOKEN = /^[A-Za-z0-9_.:=+/-]+$/; // moi ky tu shell / quote / backslash / bien (% $) nam ngoai tap nay
 const DANGER_FLAG = /^(--(apply|yes|force)(=|$)|-[yf]$)/;
 const FAKE_HARNESS = /(^|[\\/])harness(\.[A-Za-z0-9]+)?$/i;
 
@@ -35,5 +36,6 @@ export function classifyHarnessCommand(cmd, { allow = ALLOW } = {}) {
   const subs = allow[domain];
   if (subs === null) return rest.length === 0 && (sub === undefined || DOCTOR_ARGS.includes(sub)) ? { kind: 'safe', argv, reason: 'lenh doc trong allowlist' } : no(`${domain}: chi cho phep ${DOCTOR_ARGS.join('|')}`);
   if (!sub || !subs.includes(sub)) return no(`${domain} ${String(sub || '').slice(0, 30)}: lenh con ngoai allowlist chi-doc`);
+  if (domain === 'knowledge' && sub === 'fact' && rest[0] === 'set') return no('knowledge fact set la lenh ghi');
   return { kind: 'safe', argv, reason: 'lenh doc trong allowlist' };
 }

@@ -140,6 +140,7 @@ try {
 if (pluginSeen) try {
   const { shimStatus, realTerminalLine } = await import('../../core/runtime/user-shim.mjs');
   const s = shimStatus({ pluginRoot: REPO_DIR });
+  if (s.state !== 'missing' && s.state !== 'foreign') { const rs = (await import('../../core/runtime/user-shim.mjs')).rootsStatus(s.dir); if (rs !== 'ok') warn('shim', `roots.json ${rs === 'missing' ? 'thieu' : 'khong co root hop le'} (${s.dir}): shim khong tim thay harness-kit -> stale; hook SessionStart tu sua o phien sau, hoac chay: harness install --shim`); }
   const fix = 'hook SessionStart tu sua o phien sau, hoac chay: harness install --shim';
   if (s.state === 'missing') warn('shim', `chua co shim \`harness\` (${s.file}): PowerShell/cmd/bash ngoai Claude khong goi duoc harness -> ${fix}`);
   else if (s.state === 'stale') warn('shim', `shim ${s.file} lech ban hien tai -> ${fix}`);

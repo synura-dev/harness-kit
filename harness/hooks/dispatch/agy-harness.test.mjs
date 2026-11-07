@@ -7,7 +7,7 @@ const kind = (s) => c(s).kind;
 test('safe: chi lenh doc trong allowlist da duyet', () => {
   for (const s of [
     'harness doctor', 'harness doctor --json', 'harness data ls', 'harness data stat x.json', 'harness data scan',
-    'harness observe usage', 'harness observe report --days=7', 'harness knowledge search audit', 'harness knowledge get architecture',
+    'harness observe usage', 'harness knowledge search audit', 'harness knowledge get architecture',
     'harness knowledge fact foo', 'harness knowledge role builder', 'harness projects list', 'harness projects get hub', 'harness projects tasks hub',
     '  harness   doctor  ',
   ]) expect([s, kind(s)]).toEqual([s, 'safe']);
@@ -27,7 +27,8 @@ test('unsafe: ky tu shell (ke ca sau lenh doc)', () => {
 test('unsafe: lenh ghi / ext / cai / co hieu pha', () => {
   for (const s of ['harness ext approve x', 'harness ext register p', 'harness ext remove x', 'harness ext list', 'harness install', 'harness install --shim', 'harness data adopt', 'harness data clean',
     'harness doctor --apply', 'harness knowledge get x --yes', 'harness projects list --force', 'harness knowledge search x --apply=1', 'harness doctor -y', 'harness doctor --fix',
-    'harness observe query', 'harness knowledge add x', 'harness projects add-task x', 'harness projects set-task x'])
+    'harness observe query', 'harness observe report', 'harness observe report --weekly', 'harness observe report --out=x', 'harness knowledge fact set k v', 'harness knowledge add x',
+    'harness doctor x,--apply', 'harness doctor @a', 'harness knowledge get a,b', 'harness projects add-task x', 'harness projects set-task x'])
     expect([s, kind(s)]).toEqual([s, 'unsafe']);
 });
 

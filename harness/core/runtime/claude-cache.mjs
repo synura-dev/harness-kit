@@ -1,4 +1,4 @@
-// Core (khong tren duong agy): tim thu muc cache plugin Claude (noi duy nhat user-shim biet duong cai cua Claude). Duong agy KHONG import file nay.
+// Tim thu muc cache plugin Claude (noi duy nhat user-shim biet duong cai cua Claude). build/user-shim/hook.mjs import file nay (tinh) cho ca hai tool, nhung chi GOI no o nhanh tool claude; duong agy khong doc thu muc do.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

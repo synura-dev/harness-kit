@@ -88,6 +88,7 @@
   "reserved": [
     "README.md",
     "_inbox",
-    ".state"
+    ".state",
+    ".harness-writers.json"
   ]
 }
