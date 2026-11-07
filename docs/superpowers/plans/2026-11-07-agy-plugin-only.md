@@ -142,4 +142,12 @@ Chay tren HEAD da merge (khong trong worktree: cai tu goc repo plugin da merge, 
 - Moi tien trinh nen/`agy` do minh bat phai dung truoc bao cao cuoi.
 
 ## Ket qua T0
-(main dien sau khi T0 xong)
+(2026-11-07, agy 1.5.2; da khoi phuc: `agy plugin list --json` byte-identical, config.json cmp identical)
+- Shell cua run_command = PowerShell 5.1 (khong co `head`; dung `Select-Object -First`).
+- agy tu dua `bin/` cua MOI plugin da cai vao PATH cua shell run_command (`where.exe harness` -> `~/.gemini/config/plugins/harness-kit/bin/harness(.cmd)`). => `harness` goi duoc ngay phien dau, KHONG can shim/overwrite cho agy.
+- Lop quyen o may nay KHONG chan `harness doctor`, `node --version` hay lenh pipe ngay ca khi hook im lang (baseline) -> E1-E5 deu chay; chua do duoc allow/overrides co hieu luc tren cau hinh quyen chat. E6 hook deny: lenh KHONG chay, agent nhan "tool call denied by pre-tool hook: <reason>".
+- Payload Pre dung `toolCall` (khong phai toolInput); `workspacePaths[0]` dang `C:/.../W` (dau `/`); hook cwd = `~/.gemini/config/plugins/<ten trong plugin.json>` (on dinh, cai lai = replace cung duong, khong doi theo version).
+- SessionStart `injectSteps.systemMessage` HIEN cho agent; `rules/AGENTS.md` trong plugin DUOC nap. Stop + PostInvocation ban o `-p`.
+- Hook agy ghi duoc `~/.harness-kit/bin` va HKCU; phien hien tai khong thay bien HKCU moi.
+- `CLAUDE_CONFIG_DIR` rong -> hook agy van chay day du.
+**Quyet dinh:** T2 = A1 (allow [+ permissionOverrides `command(harness)`] cho lenh doc trong allowlist), KHONG A2/overwrite; them `rules/AGENTS.md` ngan (cach goi harness doc + kho tri thuc chung) vi agy nap duoc. T2 thu hieu luc A1 bang `agy -p --settings <file allow rong>` (khong sua settings global); khong tai hien duoc chan thi ghi ro "chua do". T8: shim chi phuc vu shell nguoi dung/CLI khac; duong agy dung `bin/` cua plugin.
