@@ -71,3 +71,18 @@ test('maintenance: threshold configurable, groups by session+turn, distinct file
   const same = Array.from({ length: 6 }, () => rd('same.md'));
   assert.equal(filterMaintenance(same).maintenance_dropped, 0);
 });
+
+test('dedupe key is kind:callId (same callId different kind both count)', () => {
+  const r = countEvents([ev({ kind: 'skill', callId: 'x' }), ev({ kind: 'command', callId: 'x' })]);
+  assert.equal(r.duplicates_dropped, 0); assert.equal(r.items.size, 2);
+});
+test('turn null / empty session never grouped as bulk', () => {
+  const rd = (n, x) => Array.from({ length: n }, (_, i) => ev({ channel: 'read', file: `f${i}`, ...x }));
+  assert.equal(filterMaintenance(rd(6, { session: 's', turn: undefined })).maintenance_dropped, 0);
+  assert.equal(filterMaintenance(rd(6, { session: '', turn: 1 })).maintenance_dropped, 0);
+});
+test('first/last via Date.parse; invalid ts skipped', () => {
+  const r = countEvents([ev({ ts: '2026-11-01T10:00:00+07:00' }), ev({ ts: 'garbage' }), ev({ ts: '2026-11-01T04:00:00Z' })]);
+  const it = [...r.items.values()][0];
+  assert.equal(it.first_ts, '2026-11-01T10:00:00+07:00'); assert.equal(it.last_ts, '2026-11-01T04:00:00Z');
+});

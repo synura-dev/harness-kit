@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readTranscripts } from './transcripts.mjs';
+import { readTranscripts, compactMsg } from './transcripts.mjs';
 
 const NOW = Date.parse('2026-11-07T00:00:00Z');
 function mk() { return fs.mkdtempSync(path.join(os.tmpdir(), 'tr-')); }
@@ -92,7 +92,7 @@ test('cache: compact record shape', async () => {
     { type: 'text', text: 'blah' }] } };
   put(r, 'p/s.jsonl', [asst, prompt('2026-11-06T10:01:00Z')], NOW - 1000);
   const o = await cached(r, c);
-  assert.deepEqual(o.records[0].msg, { type: 'assistant', message: { role: 'assistant', content: [
+  assert.deepEqual(o.records[0].msg, { type: 'assistant', uuid: 'u', message: { role: 'assistant', content: [
     { type: 'tool_use', id: 't1', name: 'Skill', input: { skill: 'a' } },
     { type: 'tool_use', id: 't2', name: 'Read', input: { file_path: '/x/SKILL.md' } }] } });
   assert.deepEqual(o.records[1].msg.message.content, [{ type: 'text', text: '<command-name>/a</command-name>' }]);
@@ -111,4 +111,9 @@ test('subagents subfolder read, own turns', async () => {
   const f = put(r, 'p/sess/subagents/agent-1.jsonl', [prompt('2026-11-06T10:00:00Z')], NOW - 1000);
   const o = await run(r);
   assert.equal(o.records[0].turn, `${f}#1`);
+});
+
+test('compactMsg keeps uuid and isSidechain', () => {
+  const c = compactMsg({ type: 'user', uuid: 'u1', isSidechain: true, message: { role: 'user', content: 'hi' } });
+  assert.equal(c.uuid, 'u1'); assert.equal(c.isSidechain, true);
 });

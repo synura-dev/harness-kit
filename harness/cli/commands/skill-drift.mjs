@@ -5,7 +5,7 @@ import crypto from 'node:crypto';
 
 const IGNORE = new Set(['.generated.json']);
 
-/** sha1 over sorted rel paths + CRLF-normalized content; null neu vuot gioi han (budget.stop dat). */
+/** sha1 over sorted rel paths + raw bytes (CRLF-normalized chi voi van ban); null neu vuot gioi han (budget.stop dat). */
 export function hashSkillDir(dir, budget) {
   const files = [];
   const walk = (d, rel) => {
@@ -24,8 +24,12 @@ export function hashSkillDir(dir, budget) {
   if (budget.stop) return null;
   const h = crypto.createHash('sha1');
   for (const r of files.sort()) {
+    if (Date.now() > budget.deadline) { budget.stop = 'timeout'; return null; }
     h.update(r + '\0');
-    h.update(fs.readFileSync(path.join(dir, ...r.split('/'))).toString('utf8').replace(/\r\n/g, '\n') + '\0');
+    let buf = fs.readFileSync(path.join(dir, ...r.split('/')));
+    // CRLF chi chuan hoa cho van ban (khong co byte NUL); nhi phan hash nguyen
+    if (!buf.includes(0)) buf = Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'));
+    h.update(buf); h.update('\0');
   }
   return h.digest('hex');
 }
@@ -36,6 +40,9 @@ export function skillDrift({ projectDir, pluginSkillsDir = null, maxFiles = 2000
   const roots = [['.claude/skills', path.join(projectDir, '.claude', 'skills')], ['.agents/skills', path.join(projectDir, '.agents', 'skills')]];
   const names = new Set();
   for (const [, r] of roots) { try { for (const e of fs.readdirSync(r, { withFileTypes: true })) if (e.isDirectory()) names.add(e.name); } catch { /* khong co */ } }
+  // thu muc goc vang hoan toan (vd khong co .agents/skills) -> khong bao 'thieu ban sao'
+  const existing = new Set(roots.filter(([, r]) => { try { return fs.statSync(r).isDirectory(); } catch { return false; } }).map(([l]) => l));
+  existing.add('plugin-cache');
   const findings = [];
   for (const n of [...names].sort()) {
     const copies = roots.map(([label, r]) => [label, path.join(r, n)]);
@@ -43,7 +50,7 @@ export function skillDrift({ projectDir, pluginSkillsDir = null, maxFiles = 2000
     const have = [], missing = [];
     for (const [label, d] of copies) {
       let ok = false; try { ok = fs.statSync(d).isDirectory(); } catch { /* thieu */ }
-      if (!ok) { missing.push(label); continue; }
+      if (!ok) { if (existing.has(label)) missing.push(label); continue; }
       const h = hashSkillDir(d, budget);
       if (budget.stop) return { findings, truncated: budget.stop };
       have.push([label, h]);

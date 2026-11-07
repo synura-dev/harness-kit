@@ -223,7 +223,7 @@ try {
   const { skillDrift } = await import('./skill-drift.mjs');
   const { pluginCacheDir } = await import('../../core/runtime/user-shim.mjs');
   let pluginSkillsDir = isPluginMode() ? path.join(REPO_DIR, 'skills') : null;
-  if (!pluginSkillsDir) { const c = pluginCacheDir(REPO_DIR); try { const v = fs.readdirSync(c).sort().pop(); if (v) pluginSkillsDir = path.join(c, v, 'skills'); } catch { /* khong co cache */ } }
+  if (!pluginSkillsDir) { const c = pluginCacheDir(REPO_DIR); try { const v = fs.readdirSync(c).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0]; if (v) pluginSkillsDir = path.join(c, v, 'skills'); } catch { /* khong co cache */ } }
   const sd = skillDrift({ projectDir: HUB_ROOT, pluginSkillsDir });
   for (const f of sd.findings) if (f.level === 'warn') warn('skill-drift', `skill-drift ${f.skill}: ${f.detail}`); else if (f.level === 'info') console.log(`[info] skill-drift ${f.skill}: ${f.detail}`);
   if (sd.truncated) console.log(`[warn] skill-drift truncated: ${sd.truncated}`);
