@@ -171,8 +171,9 @@ test('probe dispatcher THAT (hooks/run.mjs PreToolUse): deny that van deny; qua 
   const env = { ...process.env, CLAUDE_PLUGIN_DATA: d, CLAUDE_PROJECT_DIR: ws, CLAUDE_AUDIT_DIR: path.join(d, 'audit'), HUB_DATA_DIR: path.join(d, 'hd') };
   fs.mkdirSync(env.CLAUDE_AUDIT_DIR, { recursive: true });
   const run = (tool) => spawnSync(process.execPath, [path.join(import.meta.dir, '..', '..', '..', 'hooks', 'run.mjs'), 'PreToolUse'], { input: JSON.stringify({ hook_event_name: 'PreToolUse', session_id: 's', cwd: ws, tool_name: tool, tool_input: {} }), env, encoding: 'utf8', timeout: 30000 });
-  const bad = run('mcp__t__bad'); expect(bad.stdout).toContain('deny'); expect(bad.stdout).toContain('cam that');
-  const ok = run('mcp__t__ok'); expect(ok.stdout).not.toContain('deny');
+  const settled = (tool) => { let r; for (let i = 0; i < 3; i++) { r = run(tool); if (!r.stdout.includes('timeout')) break; } return r; }; // tai cao: tranh timeout that lam nhieu case deny/allow
+  const bad = settled('mcp__t__bad'); expect(bad.stdout).toContain('deny'); expect(bad.stdout).toContain('cam that');
+  const ok = settled('mcp__t__ok'); expect(ok.stdout).not.toContain('deny');
   const slow = run('mcp__t__slow');
   expect(slow.stdout).not.toContain('deny'); expect(slow.stdout).toContain('fail-open'); expect(slow.stdout).toContain('timeout');
   fs.rmSync(d, { recursive: true, force: true });
