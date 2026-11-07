@@ -138,8 +138,8 @@ try {
 
 // Shim `harness` cho shell cua user (hook SessionStart build/user-shim tu duy tri): thieu/lech/chua tren PATH -> canh bao mem kem lenh sua.
 if (pluginSeen) try {
-  const { shimStatus, pluginCacheDir, realTerminalLine } = await import('../../core/runtime/user-shim.mjs');
-  const s = shimStatus({ cacheDir: pluginCacheDir(REPO_DIR), pluginRoot: REPO_DIR });
+  const { shimStatus, realTerminalLine } = await import('../../core/runtime/user-shim.mjs');
+  const s = shimStatus({ pluginRoot: REPO_DIR });
   const fix = 'hook SessionStart tu sua o phien sau, hoac chay: harness install --shim';
   if (s.state === 'missing') warn('shim', `chua co shim \`harness\` (${s.file}): PowerShell/cmd/bash ngoai Claude khong goi duoc harness -> ${fix}`);
   else if (s.state === 'stale') warn('shim', `shim ${s.file} lech ban hien tai -> ${fix}`);
@@ -214,7 +214,7 @@ try {
 // skill-drift: ban sao skill (.claude/skills, .agents/skills, plugin cache) lech hash -> warn; thieu ban sao -> info.
 try {
   const { skillDrift } = await import('./skill-drift.mjs');
-  const { pluginCacheDir } = await import('../../core/runtime/user-shim.mjs');
+  const { pluginCacheDir } = await import('../../core/runtime/claude-cache.mjs');
   let pluginSkillsDir = isPluginMode() ? path.join(REPO_DIR, 'skills') : null;
   if (!pluginSkillsDir) { const c = pluginCacheDir(REPO_DIR); try { const v = fs.readdirSync(c).sort((a, b) => b.localeCompare(a, undefined, { numeric: true }))[0]; if (v) pluginSkillsDir = path.join(c, v, 'skills'); } catch { /* khong co cache */ } }
   const sd = skillDrift({ projectDir: HUB_ROOT, pluginSkillsDir });

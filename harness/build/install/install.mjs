@@ -59,8 +59,8 @@ export function install({ root, apply = true, skipDoctor = false, timeoutS = 60,
  * cung logic core/runtime/user-shim.mjs syncUserShim (ghi shim, them thu muc vao PATH user, xoa shim cu cua ta). Chay lai khong doi gi.
  */
 export function installShim({ dir = null, apply = true, force = false, pluginRoot = REPO_DIR, ...inj } = {}) {
-  const s = syncUserShim({ dir: dir && path.resolve(dir), apply, force, pluginRoot, ...inj });
-  const lines = [`thu muc: ${s.dir}`, `chay: ${s.cacheDir ? `ban harness-kit moi nhat trong ${s.cacheDir}` : `co dinh ${path.join(pluginRoot, 'bin', 'harness')} (khong thay cache plugin)`}`];
+  const s = syncUserShim({ dir: dir && path.resolve(dir), apply, force, pluginRoot, tool: 'local', ...inj });
+  const lines = [`thu muc: ${s.dir}`, `chay: ${path.join(pluginRoot, 'bin', 'harness')} (khoa local trong roots.json; chay lai phien CLI/hook cua tool de them khoa khac)`];
   const verb = { create: apply ? 'tao' : 'se tao', update: apply ? 'cap nhat' : 'se cap nhat', same: 'khop (bo qua)', foreign: 'LOI file la cung ten, khong ghi de (them --force)' };
   for (const f of s.files) lines.push(`  ${verb[f.action]}: ${f.file}`);
   if (s.path) lines.push({ present: `PATH: da co (${s.path.where})`, planned: `PATH: se them vao ${s.path.where}`, added: `PATH: da them vao ${s.path.where} (mo terminal moi de dung)`, error: `LOI PATH (${s.path.where}): ${s.path.error}` }[s.path.state]);

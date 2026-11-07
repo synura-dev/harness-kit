@@ -3,7 +3,7 @@
 // vao Packages\Claude_*\LocalCache\Local nen shell that khong thay; goc %USERPROFILE% khong bi ao hoa), POSIX ~/.local/bin. Muc PATH cu %LOCALAPPDATA%\harness-kit\bin duoc thay (migrate). syncUserShim = logic duy nhat, dung boi hook SessionStart
 // (build/user-shim, tu dong) va `harness install --shim` (tay): ghi shim, dam bao thu muc co tren PATH user (Windows: HKCU\Environment Path,
 // giu REG_EXPAND_SZ, khong setx; POSIX: mot dong co marker trong ~/.profile | ~/.zprofile), xoa shim CUA TA o cho khac (vd %APPDATA%\npm cu).
-// Shim chon ban harness-kit moi nhat trong cache plugin luc chay (so sanh so: 0.1.10 > 0.1.9) nen nang cap plugin khong can cai lai.
+// Shim TOOL-NEUTRAL: doc roots.json canh no ({agy|claude|local: {root, version}}, moi CLI chi ghi khoa cua minh), bo qua root da vang, chon version cao nhat (so sanh so: 0.1.10 > 0.1.9).
 // File co dong SHIM_MARK = cua ta; khong co = file la, chi ghi de khi force. Moi IO tiem duoc (platform/env/home/regPath/setUserPath) de test.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,36 +20,42 @@ const pathDirs = (platform, env) => String(env.PATH || env.Path || '').split(pla
 /** Ten file shim theo nen: Windows ghi ca harness.cmd (PowerShell/cmd) va harness (Git Bash), nhu npm. File dau = file chinh. */
 const shimNames = (platform) => (platform === 'win32' ? ['harness.cmd', 'harness'] : ['harness']);
 
-/** Thu muc cache chua cac ban harness-kit (<config>/plugins/cache/<mkt>/harness-kit) hoac null (chay tu nguon, chua cai plugin). */
-export function pluginCacheDir(pluginRoot, { env = process.env, home = os.homedir() } = {}) {
-  const parent = path.dirname(path.resolve(pluginRoot));
-  if (path.basename(parent) === 'harness-kit' && path.basename(path.dirname(path.dirname(parent))) === 'cache') return parent;
-  const cache = path.join(env.CLAUDE_CONFIG_DIR || path.join(home, '.claude'), 'plugins', 'cache');
-  let mkts = [];
-  try { mkts = fs.readdirSync(cache).sort(); } catch { return null; }
-  for (const m of mkts) if (isDir(path.join(cache, m, 'harness-kit'))) return path.join(cache, m, 'harness-kit');
-  return null;
+/** Ban cua plugin tai root (doc plugin.json cua plugin) hoac duoi cung thu muc neu la so ban; '' khi khong ro. Dung de shim chon root moi nhat. */
+export function rootVersion(root) {
+  try { const v = JSON.parse(read(path.join(root, '.antigravity-plugin', 'plugin.json')) || '{}').version; if (v) return String(v); } catch { /* hong */ }
+  const b = path.basename(path.resolve(root));
+  return /^\d/.test(b) ? b : '';
 }
 
-// JS chay bang `node -e`: khong dung " % $ ` (an toan trong ca cmd lan sh). D = thu muc cache, F = bin co dinh (khi khong co cache).
-const js = (D, F) => [
+/** Duong roots.json nam canh shim (shim doc luc chay; moi CLI ghi khoa cua chinh no). */
+export const rootsFile = (dir, platform = process.platform) => pp(platform).join(dir, 'roots.json');
+
+const readRoots = (file) => { try { const o = JSON.parse(read(file) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } };
+
+// JS chay bang `node -e`: khong dung " % $ ` (an toan trong ca cmd lan sh). R = duong roots.json ({tool:{root,version}|{scan}}):
+// bo qua khoa co root da vang, chon version cao nhat (so sanh so: 0.1.10 > 0.1.9); het root -> thong bao + exit 3.
+const js = (R) => [
   "const f=require('fs'),p=require('path'),c=require('child_process');",
-  `const D='${D}';let b='${F}';`,
-  "if(!b){let v;try{v=f.readdirSync(D).filter(x=>f.existsSync(p.join(D,x,'bin','harness'))).sort((x,y)=>x.localeCompare(y,'en',{numeric:true})).pop()}catch(e){}",
-  "if(!v){console.error('harness: khong tim thay plugin harness-kit trong '+D);process.exit(3)}b=p.join(D,v,'bin','harness')}",
-  "const r=c.spawnSync(process.execPath,[b,...process.argv.slice(1)],{stdio:'inherit'});process.exit(r.status==null?1:r.status)",
+  `const R='${R}';let r={};try{r=JSON.parse(f.readFileSync(R,'utf8'))}catch(e){}`,
+  "let L=[];for(const k of Object.keys(r)){const e=r[k]||{};if(e.scan){let d=[];try{d=f.readdirSync(e.scan)}catch(x){}for(const v of d)L.push({root:p.join(e.scan,v),version:v})}else if(e.root)L.push(e)}",
+  "L=L.filter(e=>f.existsSync(p.join(e.root,'bin','harness')));",
+  "if(!L.length){console.error('harness: khong tim thay plugin harness-kit (roots.json: '+R+'); chay lai phien CLI de shim tu cap nhat');process.exit(3)}",
+  "L.sort((x,y)=>String(x.version||'').localeCompare(String(y.version||''),'en',{numeric:true}));",
+  "const b=p.join(L.pop().root,'bin','harness');",
+  "const s=c.spawnSync(process.execPath,[b,...process.argv.slice(1)],{stdio:'inherit'});process.exit(s.status==null?1:s.status)",
 ].join('');
 const lit = (s) => String(s || '').replace(/\\/g, '/').replace(/'/g, "\\'");
 
-/** [{name, content}] cho nen; noi dung tat dinh theo (cacheDir, pluginRoot). */
-export function renderShims({ platform = process.platform, cacheDir, pluginRoot }) {
-  const code = js(lit(cacheDir), cacheDir ? '' : lit(path.join(pluginRoot, 'bin', 'harness')));
+/** [{name, content}] cho nen; noi dung tat dinh theo (dir): shim khong chua root, doc roots.json canh no. */
+export function renderShims({ platform = process.platform, dir = '' }) {
+  const code = js(lit(rootsFile(dir, platform)));
   const head = `${SHIM_MARK} (sinh boi harness-kit: hook SessionStart / harness install --shim). Go: xoa file nay.`;
   const sh = { name: 'harness', content: `#!/bin/sh\n# ${head}\nexec node -e "${code.replace(/[\\"$`]/g, '\\$&')}" -- "$@"\n` };
   if (platform !== 'win32') return [sh];
   const cmd = ['@echo off', `rem ${head}`, `node -e "${code.replace(/%/g, '%%')}" -- %*`, 'exit /b %ERRORLEVEL%', ''].join('\r\n');
   return [{ name: 'harness.cmd', content: cmd }, sh];
 }
+
 
 /** Thu muc co dinh cua shim. Windows: %USERPROFILE%\.harness-kit\bin (khong bi MSIX ao hoa), POSIX: ~/.local/bin. */
 export function defaultShimDir({ platform = process.platform, home = os.homedir() } = {}) {
@@ -157,8 +163,8 @@ export function ensureUserPath(dir, { platform = process.platform, env = process
 }
 
 /** Ke hoach ghi: {dir, files:[{file, content, action: create|update|same|foreign}], blocked}. blocked = co file la ma khong force. */
-export function planShim({ dir, platform = process.platform, cacheDir, pluginRoot, force = false }) {
-  const files = renderShims({ platform, cacheDir, pluginRoot }).map(({ name, content }) => {
+export function planShim({ dir, platform = process.platform, force = false }) {
+  const files = renderShims({ platform, dir }).map(({ name, content }) => {
     const file = pp(platform).join(dir, name);
     const cur = read(file);
     const action = cur == null ? 'create' : cur === content ? 'same' : cur.includes(SHIM_MARK) || force ? 'update' : 'foreign';
@@ -194,17 +200,32 @@ export function strayShims(dir, { platform = process.platform, env = process.env
   return out;
 }
 
+/** Ghi khoa `tool` vao roots.json canh shim, giu khoa khac; -> true neu file doi. pluginRoot rong -> khong ghi. */
+function writeRoot(dir, tool, pluginRoot, platform, scan) {
+  if (!pluginRoot) return false;
+  const file = rootsFile(dir, platform);
+  const roots = readRoots(file);
+  const root = path.resolve(pluginRoot);
+  const next = { ...roots, [tool]: scan ? { scan: path.resolve(scan) } : { root, version: rootVersion(root) } };
+  const text = `${JSON.stringify(next, null, 2)}\n`;
+  if (read(file) === text) return false;
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(file, text);
+  return true;
+}
+
 /**
  * Logic DUY NHAT cai/duy tri shim: ghi shim vao dir (mac dinh co dinh), dam bao PATH user, xoa shim cua ta o cho khac.
- * -> {ok, dir, cacheDir, files, blocked, path:{state, where, error?}, removed[]}. apply=false: chi bao, khong ghi gi.
+ * -> {ok, dir, tool, files, blocked, path:{state, where, error?}, removed[], rootsChanged}. apply=false: chi bao, khong ghi gi.
+ * scan (tuy chon) = thu muc cha cac ban (plugin hay bi doi/xoa thu muc ban cu): khoa ghi {scan}, shim quet chon ban cao nhat co bin/harness; khong co -> {root, version}.
+ * tool = khoa trong roots.json ('agy' | 'claude' | 'local' cho `harness install --shim` tay): chi ghi/cap nhat khoa cua minh, giu khoa tool khac.
  */
-export function syncUserShim({ dir, apply = true, force = false, platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath, pluginRoot }) {
+export function syncUserShim({ dir, apply = true, force = false, platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath, pluginRoot, tool = 'local', scan }) {
   const target = dir || defaultShimDir({ platform, env, home });
-  const cacheDir = pluginCacheDir(pluginRoot, { env, home });
-  const plan = planShim({ dir: target, platform, cacheDir, pluginRoot, force });
-  const res = { ok: !plan.blocked, dir: target, cacheDir, files: plan.files, blocked: plan.blocked, path: null, removed: [] };
+  const plan = planShim({ dir: target, platform, force });
+  const res = { ok: !plan.blocked, dir: target, tool, files: plan.files, blocked: plan.blocked, path: null, removed: [], rootsChanged: false };
   if (plan.blocked) return res;
-  if (apply) applyShim(plan);
+  if (apply) { applyShim(plan); res.rootsChanged = writeRoot(target, tool, pluginRoot, platform, scan); }
   res.path = ensureUserPath(target, { platform, env, home, regPath, setUserPath, apply });
   res.removed = strayShims(target, { platform, env, home });
   if (apply) for (const f of res.removed) try { fs.unlinkSync(f); } catch { /* bo qua */ }
@@ -225,15 +246,16 @@ export function virtualizedDir(dir, { platform = process.platform, env = process
  * Trang thai cho doctor (chi doc): {state: ok|missing|stale|foreign|nopath, dir, file, risk}.
  * risk (Windows) = {why} khi thu muc shim duoi %LOCALAPPDATA%/%APPDATA% hoac tien trinh chay trong goi MSIX: shell that co the khong thay shim/PATH.
  */
-export function shimStatus({ platform = process.platform, env = process.env, home = os.homedir(), regPath, cacheDir, pluginRoot, execPath, readdir, exists }) {
+export function shimStatus({ platform = process.platform, env = process.env, home = os.homedir(), regPath, pluginRoot, tool, execPath, readdir, exists }) {
   const dir = defaultShimDir({ platform, home });
   const msix = msixInfo({ platform, env, home, ...(execPath ? { execPath } : {}), ...(readdir ? { readdir } : {}), ...(exists ? { exists } : {}) });
   const risk = virtualizedDir(dir, { platform, env }) ? { why: `thu muc shim ${dir} nam duoi %LOCALAPPDATA%/%APPDATA% (bi MSIX ao hoa)` } : msix.msix ? { why: msix.reason } : null;
-  const plan = planShim({ dir, platform, cacheDir, pluginRoot });
+  const plan = planShim({ dir, platform });
   const file = plan.files[0].file;
   if (plan.files[0].action === 'create') return { state: 'missing', dir, file, risk };
   if (plan.blocked) return { state: 'foreign', dir, file, risk };
-  if (plan.files.some((f) => f.action !== 'same')) return { state: 'stale', dir, file, risk };
+  const rootOk = !tool || !pluginRoot || readRoots(rootsFile(dir, platform))[tool]?.root === path.resolve(pluginRoot);
+  if (!rootOk || plan.files.some((f) => f.action !== 'same')) return { state: 'stale', dir, file, risk };
   const p = ensureUserPath(dir, { platform, env, home, regPath, apply: false });
   return { state: p.state === 'present' ? 'ok' : 'nopath', dir, file, risk };
 }
