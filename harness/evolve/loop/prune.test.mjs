@@ -344,3 +344,17 @@ test('cache-only (job nen): khong co cache -> khong doc transcript, skill insuff
   assert.equal(nc.dep('old').status, 'insufficient_window');
   assert.equal(fs.existsSync(cf), false);
 });
+
+test('cache-only: file moi/doi chua co trong cache -> skill insufficient_window (khong pending); cache day du -> pending', async () => {
+  const proj = tmp(), auditDir = tmp(), trDir = tmp(), cf = path.join(tmp(), 'tc.jsonl');
+  wr(path.join(proj, '.claude/skills/old/SKILL.md'), 'x');
+  const dir = path.join(trDir, projectFolder(proj));
+  wr(path.join(dir, 'a.jsonl'), asst(ISO(NOW - 40 * DAY), 's0', [skillUse('t0', 'other')]));
+  const run = (o) => pruneCandidates({ pluginRoot: tmp(), projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], transcriptCache: cf, gateWindow: true, nowMs: NOW, order: {}, ...o });
+  await run({}); // lam am cache
+  const full = await run({ transcriptCacheOnly: true });
+  assert.equal(full.items.find((i) => i.id === 'skill:old').status, 'pending');
+  wr(path.join(dir, 'b.jsonl'), asst(ISO(NOW - DAY), 's1', [skillUse('t1', 'old')])); // moi, chua cache
+  const miss = await run({ transcriptCacheOnly: true });
+  assert.equal(miss.items.find((i) => i.id === 'skill:old').status, 'insufficient_window');
+});

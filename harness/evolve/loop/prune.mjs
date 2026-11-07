@@ -35,7 +35,7 @@ const pluginName = (root) => {
   if (!PN.has(root)) { let n = null; try { n = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).name || null; } catch { /* khong co plugin.json */ } PN.set(root, n); }
   return PN.get(root);
 };
-const readInstalledPlugins = () => { try { return JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8')); } catch { return null; } };
+const readInstalledPlugins = () => { try { return JSON.parse(fs.readFileSync(path.join(path.dirname(defaultTranscriptRoot()), 'plugins', 'installed_plugins.json'), 'utf8')); } catch { return null; } };
 const normP = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 const isUnder = (p, root) => { const a = normP(p), b = normP(root); return !!b && (a === b || a.startsWith(b + '/')); };
 /** Nguon + hanh dong cua mot duong dan: chi project|plugin(so huu) moi go truc tiep duoc; con lai report_only. */
@@ -306,7 +306,7 @@ export async function pruneCandidates(o = {}) {
   const trunc = r.truncated || (tr && tr.truncated) || null;
   const src = { ...u.sources, audit: { earliest: r.earliest_ts, window_days: daysSince(r.earliest_ts, nowMs) } };
   if (tr) src.transcript = { earliest: tr.earliest_ts, window_days: daysSince(tr.earliest_ts, nowMs), files: tr.files_read, cache_hits: tr.cache_hits, cache_trimmed: tr.cache_trimmed, truncated: tr.truncated };
-  const skillE = tr ? tr.earliest_ts : (o.transcriptCacheOnly ? null : r.earliest_ts);
+  const skillE = tr ? (o.transcriptCacheOnly && tr.cache_misses > 0 ? null : tr.earliest_ts) : (o.transcriptCacheOnly ? null : r.earliest_ts);
   const window = o.gateWindow !== false ? { skill: { earliest: skillE }, agent: { earliest: r.earliest_ts }, command: { earliest: r.earliest_ts }, hook: { earliest: r.hookrun_earliest || src.hookrun_since } } : undefined;
   const b = buildCandidates({ inv, usage, state: o.state || {}, caps: o.caps, nowMs, days, waitDays: o.waitDays, skipDeprecate: !!trunc, window });
   const used = {}, usage_counts = {};

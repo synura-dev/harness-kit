@@ -12,14 +12,21 @@ import { acquireLock } from '../../core/runtime/lockfile.mjs';
 import { isAlive } from '../../core/runtime/proc.mjs';
 
 const LOCK_MS = 600000;
-const lockInfo = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+const rawOf = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
+const lockInfo = (f) => { try { return JSON.parse(rawOf(f)); } catch { return null; } };
 
 // Quet day du chay duoi khoa canh cache (transcripts.lock: pid + ts). Khoa song (pid con + < 10 phut) -> {busy: pid}; cu/pid chet -> don va lay. Luon nha trong finally.
 export async function withScanLock(dir, fn) {
   const base = path.join(dir, 'transcripts'), lf = `${base}.lock`;
-  const cur = lockInfo(lf);
+  const raw = rawOf(lf), cur = lockInfo(lf);
   if (cur && Number.isInteger(cur.pid) && isAlive(cur.pid) && Date.now() - cur.ts < LOCK_MS) return { busy: cur.pid };
-  if (cur) { try { fs.unlinkSync(lf); } catch { /* da mat */ } }
+  if (raw !== null) { // don khoa cu: rename sang ten rieng (chi mot ben thang); neu lo rename nham khoa moi cua ben khac -> tra lai va bao busy
+    const tomb = `${lf}.stale.${process.pid}`;
+    try { fs.renameSync(lf, tomb); } catch { /* ben khac don truoc */ }
+    const moved = rawOf(tomb);
+    if (moved !== null && moved !== raw) { try { fs.linkSync(tomb, lf); } catch { /* lf da co khoa moi */ } try { fs.unlinkSync(tomb); } catch { /* bo qua */ } return { busy: lockInfo(lf)?.pid ?? '?' }; }
+    try { fs.unlinkSync(tomb); } catch { /* bo qua */ }
+  }
   const release = acquireLock(base, { staleMs: LOCK_MS, retries: 0 });
   if (!release) return { busy: lockInfo(lf)?.pid ?? '?' };
   try { return { value: await fn() }; } finally { release(); }

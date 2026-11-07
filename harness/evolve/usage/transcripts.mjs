@@ -87,7 +87,7 @@ export async function readTranscripts({ roots = [defaultTranscriptRoot()], fromM
   const cold = !!cache && cache.size === 0; // khong co entry hop le -> tran lon de lan dau (hoac doi dinh dang) khong bi cat
   const L = { ...(cold ? TRANSCRIPTS.coldLimits : TRANSCRIPTS.limits), ...limits };
   const deadline = Date.now() + L.timeoutMs;
-  const records = []; let cache_trimmed = 0, cache_hits = 0, files_parsed = 0, bytes_parsed = 0, truncated = null;
+  const records = []; let cache_trimmed = 0, cache_hits = 0, files_parsed = 0, bytes_parsed = 0, cache_misses = 0, truncated = null;
   let earliest = Infinity, latest = -Infinity, eTs = null, lTs = null;
   const seen = new Set(); const fresh = new Map();
   const allSess = new Map(); // sessionId -> ts lon nhat tren MOI dong (khong chi dong khop prefilter) -> total_sessions chinh xac
@@ -108,14 +108,15 @@ export async function readTranscripts({ roots = [defaultTranscriptRoot()], fromM
   outer: for (const root of roots) {
     const all = []; walk(root, all);
     for (const f of all) {
+      if (cacheOnly && Date.now() > deadline) { truncated = 'timeout'; cache_misses++; break outer; } // cache-only van co tran thoi gian khi di cay
       let st; try { st = fs.statSync(f); } catch { continue; }
       if (st.mtimeMs < fromMs) continue;
       seen.add(f);
       const rel = path.relative(root, f).split(path.sep);
       const project = rel.length > 1 ? rel[0] : '';
       const hit = cache?.get(f);
-      if (hit && (cacheOnly || (hit.mtimeMs === st.mtimeMs && hit.size === st.size))) { cache_hits++; mergeSess(hit.sess, project); for (const r of hit.records) add(r); continue; }
-      if (cacheOnly) continue;
+      if (hit && (cacheOnly || (hit.mtimeMs === st.mtimeMs && hit.size === st.size))) { if (cacheOnly && !(hit.mtimeMs === st.mtimeMs && hit.size === st.size)) cache_misses++; cache_hits++; mergeSess(hit.sess, project); for (const r of hit.records) add(r); continue; }
+      if (cacheOnly) { cache_misses++; continue; } // file chua/khong con khop cache: job nen khong parse, bao thieu phu
       if (files_parsed >= L.maxFiles) { truncated = 'max_files'; break outer; }
       if (bytes_parsed + st.size > L.maxBytes) { truncated = 'max_bytes'; break outer; }
       bytes_parsed += st.size; files_parsed++;
@@ -164,5 +165,5 @@ export async function readTranscripts({ roots = [defaultTranscriptRoot()], fromM
   let total_sessions = 0; for (const v of allSess.values()) if (inWin(v)) total_sessions++;
   const project_sessions = {};
   for (const [pr, m] of projSess) { let n = 0; for (const v of m.values()) if (inWin(v)) n++; if (n) project_sessions[pr] = n; }
-  return { records, total_sessions, project_sessions, cold, truncated, cache_trimmed, files_read: cache_hits + files_parsed, cache_hits, files_parsed, bytes_parsed, earliest_ts: eTs, latest_ts: lTs };
+  return { records, total_sessions, project_sessions, cold, truncated, cache_trimmed, files_read: cache_hits + files_parsed, cache_hits, files_parsed, bytes_parsed, cache_misses, earliest_ts: eTs, latest_ts: lTs };
 }
