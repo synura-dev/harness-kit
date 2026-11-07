@@ -60,9 +60,9 @@ Files: `harness/observe/audit/usage-tail.mjs`, `harness/observe/audit/audit.mjs`
 
 ### Task 2: Parser transcript agy, thuan (RED/GREEN) [song song Task 1, 4]
 Files: tao `harness/observe/audit/adapters/agy-usage.mjs`, `agy-usage.test.mjs`. Fixture: chuoi jsonl nho tu tao trong test (khong chep file that, khong noi dung that).
-- [ ] Test do truoc: (a) `sumAgyUsage(text, deadline)` cong `input_tokens/output_tokens/cache_read_tokens` cua dong co so token (source MODEL), tra cung shape `sumUsage`: `{input, output, cache_read, cache_creation:0, total_tokens, msgs, model:null}`; (b) dedupe theo `step_index` (lap -> lay output lon nhat; ca transcript va transcript_full); (c) dong SYSTEM/GENERIC/JSON hong bi bo; (d) het `deadline` -> null; (e) `stepDurations(text)` -> Map `step_index -> ms` tu `Created At/Completed At` (ISO co mui gio +07:00; thieu Completed -> khong co); (f) `exitCodeOf(content)` tu `Command exited with code N.` va `exitStatusOf(err)` tu `exit status N` (khong khop -> null).
-- [ ] Code: chi ham thuan, prefilter chuoi (`"input_tokens"`, `Created At:`) truoc `JSON.parse`. Them `agyTranscriptPath` neu Task 0 (a) yeu cau.
-- [ ] Chay: `timeout 120 bun test harness/observe/audit/adapters/agy-usage.test.mjs`.
+- [x] Test do truoc: (a) `sumAgyUsage(text, deadline)` cong `input_tokens/output_tokens/cache_read_tokens` cua dong co so token (source MODEL), tra cung shape `sumUsage`: `{input, output, cache_read, cache_creation:0, total_tokens, msgs, model:null}`; (b) dedupe theo `step_index` (lap -> lay output lon nhat; ca transcript va transcript_full); (c) dong SYSTEM/GENERIC/JSON hong bi bo; (d) het `deadline` -> null; (e) `stepDurations(text)` -> Map `step_index -> ms` tu `Created At/Completed At` (ISO co mui gio +07:00; thieu Completed -> khong co); (f) `exitCodeOf(content)` tu `Command exited with code N.` va `exitStatusOf(err)` tu `exit status N` (khong khop -> null).
+- [x] Code: chi ham thuan, prefilter chuoi (`"input_tokens"`, `Created At:`) truoc `JSON.parse`. Them `agyTranscriptPath` neu Task 0 (a) yeu cau.
+- [x] Chay: `timeout 120 bun test harness/observe/audit/adapters/agy-usage.test.mjs`.
 - Done: test xanh; file khong import fs/audit.
 
 ### Task 3: Noi adapter agy (RED/GREEN) [phu thuoc Task 0, 1, 2]
