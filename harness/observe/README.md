@@ -38,10 +38,14 @@ Layout cũ `type=<t>/date=<d>/<sid>.jsonl` không còn được ghi; query/prune
 `defaults.mjs` là nguồn sự thật; `audit.config.json` (hiện chỉ `{"retention_days":30}`) ghi đè, `audit.config.local.json` ghi đè cục bộ (gitignore); env `CLAUDE_AUDIT_RETENTION_DAYS`, `CLAUDE_AUDIT_MAX_FILE_BYTES`. Khóa mới: `base_path`, `transcript_max_bytes`, `limits.digest_max_rows`. Config thiếu/hỏng -> mặc định.
 Thêm loại mới (không sửa code): `events` (event->type), `tools` (`match`, `target`, `kind`, `data`, `len`), `redact`, `sensitive_files`, `retention_days`, `max_file_bytes`.
 
-### agy: payload that va loi
+### agy: payload that va loi (agy 1.5.x, kiem that 2026-11-07)
 - `HUB_AGY_CAPTURE=<file>` (mac dinh TAT): adapters/agy.mjs ghi them stdin tho da redact, moi dong 1 payload.
-- Pre that (2026-10-27, agy 1.4.3): conversationId, stepIdx, toolCall{name,args}, workspacePaths, modelName, transcriptPath, lastUserInput. Post that (suy tu payload_keys da audit): cung cac khoa + `error`; KHONG co toolResult/output/exit code. Nen `data.error` agy thuong rong va khong co exit_code: khong phan loai duoc loi Bash tu payload Post. Chua bat duoc payload Post tho (agy -p bi auto-deny run_command, khong bypass); `error` rong nhung ok=false chua giai thich duoc.
-- detectError van doc error/toolResult neu agy ve sau co cung cap.
+- Payload chung: conversationId, workspacePaths, transcriptPath (SessionStart/PostInvocation/Stop; Post tool KHONG co -> adapter suy `~/.gemini/antigravity-cli/brain/<conversationId>/.system_generated/logs/transcript_full.jsonl`, convId chi `[\w-]+`), modelName -> `model`.
+- Post: `error` chuoi tu do (vd "file does not exist") -> ok:false + `data.error`. Exit code khac 0 (tu "exit status N" theo tai lieu, chua thay that; hoac "Command exited with code N." trong transcript) -> ok:false, status error, `data.exit_code`.
+- Stop: terminationReason/executionNum/fullyIdle -> `data.stop_reason`/`exec_num`/`fully_idle`; ERROR, MAX_* -> ok:false; USER_CANCELED -> `data.signal` interrupt.
+- Token: lay tu transcript qua parser `adapters/agy-usage.mjs` (`sumAgyUsage`), delta theo offset trong `data.usage`. `tokens_in/out` o Stop la cong don ca transcript -> bao cao dung `data.usage` (muc report `cost-cli` tach theo cli).
+- `dur_ms`: marker Pre (chi run_command/write_file/edit_file) -> `data.dur_src` = `marker`; con lai doc duoi transcript (64KB/100ms) theo stepIdx -> `transcript`.
+- Them tool moi: (1) adapter rieng cho tool do; (2) parser tinh token truyen vao `buildEnvelope` qua `opts.usage.sum`; (3) core `audit.mjs`/`usage-tail.mjs` khong biet ten tool, khong sua.
 
 ### Bật
 `node harness/cli/commands/doctor.mjs` in khối `hooks` đúng đường dẫn máy (danh sách event/matcher/timeout ở `hook_events` trong `defaults.mjs`; đã thêm `Stop`). Cần node trong PATH.
