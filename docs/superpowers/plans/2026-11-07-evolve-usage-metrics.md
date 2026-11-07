@@ -16,9 +16,9 @@ Layout: new `harness/evolve/usage/` (`collect.mjs` generic counter + window + ma
 
 ### Task 1: Generic counter with sessions, last_ts, window (RED/GREEN)
 Files: create `harness/evolve/usage/collect.mjs`, `collect.test.mjs`.
-- [ ] Failing tests first: (a) 3 events, 2 distinct `session` -> `sessions===2`, `count===3`; (b) `last_ts` = max ts even when events arrive unordered; (c) `window` per origin = `{earliest, latest, n}` from the earliest event; (d) missing session id is not counted as a session.
-- [ ] Implement `countEvents(events)` -> `{items: Map<"kind:id",{count,sessions,first_ts,last_ts,channels,projects}>, window:{[origin]:{earliest,latest,n}}}`; events carry `origin` (audit|transcript|gateway).
-- [ ] Run: `node --test harness/evolve/usage/collect.test.mjs` (red, then green).
+- [x] Failing tests first: (a) 3 events, 2 distinct `session` -> `sessions===2`, `count===3`; (b) `last_ts` = max ts even when events arrive unordered; (c) `window` per origin = `{earliest, latest, n}` from the earliest event; (d) missing session id is not counted as a session.
+- [x] Implement `countEvents(events)` -> `{items: Map<"kind:id",{count,sessions,first_ts,last_ts,channels,projects}>, window:{[origin]:{earliest,latest,n}}}`; events carry `origin` (audit|transcript|gateway).
+- [x] Run: `node --test harness/evolve/usage/collect.test.mjs` (red, then green).
 
 ### Task 2: Wire counter into prune.mjs; honest window gating (RED/GREEN)
 Files: `harness/evolve/loop/prune.mjs`, `prune.test.mjs`, `prune-cli.mjs`.
@@ -41,9 +41,9 @@ Files: create `harness/evolve/usage/detectors/skill.mjs`, `skill.test.mjs`, `det
 
 ### Task 5: Maintenance filter (RED/GREEN)
 Files: `harness/evolve/usage/collect.mjs`, `collect.test.mjs`.
-- [ ] Failing tests: (a) one turn with 5 `read` events on distinct definition files (SKILL.md / agent .md) -> all 5 dropped as maintenance (counted in `maintenance_dropped`, not in usage); (b) 4 reads kept; (c) a `tool` or `slash` event in the same turn is never dropped; (d) threshold configurable (`maintenanceReads`, default 5).
-- [ ] Implement generic `filterMaintenance(events,{threshold})` grouped by session+turn, only channel `read`, kind-agnostic.
-- [ ] Run: `node --test harness/evolve/usage/collect.test.mjs`.
+- [x] Failing tests: (a) one turn with 5 `read` events on distinct definition files (SKILL.md / agent .md) -> all 5 dropped as maintenance (counted in `maintenance_dropped`, not in usage); (b) 4 reads kept; (c) a `tool` or `slash` event in the same turn is never dropped; (d) threshold configurable (`maintenanceReads`, default 5).
+- [x] Implement generic `filterMaintenance(events,{threshold})` grouped by session+turn, only channel `read`, kind-agnostic.
+- [x] Run: `node --test harness/evolve/usage/collect.test.mjs`.
 
 ### Task 6: Source classification and action (RED/GREEN)
 Files: create `harness/evolve/usage/source.mjs`, `source.test.mjs`; edit `prune.mjs` inventory and `buildCandidates`.
