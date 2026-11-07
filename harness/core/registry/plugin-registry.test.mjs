@@ -34,7 +34,7 @@ test('loadHarnessRegistry: 3 vung + cli, khong loi, drift = 0', async () => {
   expect(r.domains.observe).toMatch(/observe[\\/]views[\\/]observe\.mjs$/);
   expect(r.domains.constrain).toMatch(/constrain[\\/]cli[\\/]cli\.mjs$/);
   expect(Object.keys(r.aliases)).toEqual(expect.arrayContaining(["config"]));
-  expect(Object.keys(r.domains).filter((d) => !r.ext[d]).sort()).toEqual(["agy", "constrain", "data", "doctor", "evolve", "ext", "install", "observe"]); // plugin mode ship ext, khong ship tool plugin (xuat)
+  expect(Object.keys(r.domains).filter((d) => !r.ext[d]).sort()).toEqual(["constrain", "data", "doctor", "evolve", "ext", "install", "observe"]); // plugin mode ship ext, khong ship tool plugin (xuat)
   expect(r.manifests.map((m) => m.dir)).toContain('harness/hooks/dispatch');
 });
 

@@ -158,3 +158,18 @@ test('doctor unused: thieu dau vet ledger-warn -> [info] (khong [warn]) kem su k
   expect(text).not.toContain('modules.mjs');
   for (const id of ['data-check (', 'user-shim (', 'model-policy (', 'proc-orphans (', 'audit (', 'guard (', 'worktree-hook (', 'approval (', 'bash-guard (', 'data-gate (']) expect(text).not.toContain(id);
 }, 60000);
+
+test('doctor: di san agy -> dung 1 dong [warn], exit code khong doi; sach -> khong dong nao', async () => {
+  const clean = await fixHub(true);
+  const dirty = await fixHub(true);
+  fs.mkdirSync(path.join(dirty, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dirty, '.agents', 'harness-agy-shim.mjs'), '');
+  fs.writeFileSync(path.join(dirty, '.agents', 'harness-agy.local.json'), '{}');
+  const a = runDoctor(clean);
+  const b = runDoctor(dirty);
+  const w = b.stdout.split('\n').filter((l) => l.includes('di san agy cu'));
+  expect(w.length).toBe(1);
+  expect(w[0].startsWith('[warn]')).toBe(true);
+  expect(a.stdout).not.toContain('di san agy cu');
+  expect(b.status).toBe(a.status);
+}, 120000);

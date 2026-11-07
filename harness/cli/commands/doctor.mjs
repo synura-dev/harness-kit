@@ -57,7 +57,7 @@ try {
 } catch (e) {
   if (e && e.code !== 'ENOENT') { process.exitCode = 1; console.log('[LOI]   .agents/hooks.json khong doc/parse duoc - ' + (e.message || e)); }
 }
-{ const { legacyHooksWarn } = await import('./agy.mjs'); const w = legacyHooksWarn(HUB_ROOT); if (w) line(false, '.agents/hooks.json khoa harness-kit cu (hook chay doi)', w); }
+{ const { legacySummary } = await import('../../core/agy/legacy.mjs'); const w = legacySummary(HUB_ROOT); if (w) console.log(w); }
 for (const b of findBadHookCommands(path.join(HUB_ROOT, '.agents', 'hooks.json'), HUB_ROOT)) {
   const why = b.problem === 'ngoai-hub' ? 'tro ngoai hubDir' : b.problem === 'agents-prefix' ? 'command bat dau bang .agents/ (agy cwd = .agents/, dung "node ../harness/hooks/...")' : 'duong dan tuyet doi';
   line(false, `.agents/hooks.json ${why}`, b.command);

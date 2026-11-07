@@ -12,12 +12,6 @@
       "desc": "dang ky extension lop may (hash ghim, ask/TTY)",
       "cmds": "register <path> | approve <id> | remove <id> [--yes] | list | verify",
       "default": "index"
-    },
-    "agy": {
-      "file": "commands/agy.mjs",
-      "desc": "agy: hook + rule allow",
-      "cmds": "init [--check] [--dir <p>] | rules [--print|--apply]",
-      "default": "index"
     }
   },
   "files": {
@@ -27,8 +21,7 @@
       "commands/worktree.mjs",
       "commands/config.mjs",
       "commands/ext-registry.mjs",
-      "ext-runner.mjs",
-      "commands/agy.mjs"
+      "ext-runner.mjs"
     ]
   },
   "tests": [
@@ -37,8 +30,7 @@
     "commands/adapters.test.mjs",
     "commands/worktree.test.mjs",
     "commands/config.test.mjs",
-    "commands/ext-registry.test.mjs",
-    "commands/agy.test.mjs"
+    "commands/ext-registry.test.mjs"
   ],
   "config": {
     "defaults": null,
