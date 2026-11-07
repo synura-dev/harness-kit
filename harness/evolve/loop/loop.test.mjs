@@ -361,7 +361,7 @@ test('E2E du an sach (khong harness/): CLI scan -> propose -> check (SKIPPED) ->
       try { expect(apply(q.id, { approve: true }).code).toBe(3); } finally { for (const k of Object.keys(env)) { if (k in saved) process.env[k] = saved[k]; else delete process.env[k]; } }
     }
   } finally { fs.rmSync(proj, { recursive: true, force: true }); }
-});
+}, 30000); // ~12 lan spawn node (do 4.6-7.8s ca truoc tinh nang effect); mac dinh 5s qua sat
 
 test('candidates --source loc theo nguon ext:<id>; mac dinh khong loc', async () => {
   const ev = (ts, src) => ({ ...fail(ts, 'sx', 'gggggggggg', 'ext boom'), ...(src ? { source: src } : {}) });
