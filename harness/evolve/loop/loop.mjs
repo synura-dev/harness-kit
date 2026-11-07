@@ -30,7 +30,7 @@ export const ctx = (o = {}) => {
   const audits = o.auditDir ? [path.resolve(o.auditDir)] : (dataReadRoots('audit').length ? dataReadRoots('audit') : [auditRoot()]);
   return { hub, evo, audits, base: path.resolve(o.dataBase || dataDir()) };
 };
-const appendLog = (c, rec) => { try { fs.mkdirSync(c.evo, { recursive: true }); fs.appendFileSync(path.join(c.evo, 'applied.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...rec }) + '\n'); } catch {} };
+export const appendLog = (c, rec) => { try { fs.mkdirSync(c.evo, { recursive: true }); fs.appendFileSync(path.join(c.evo, 'applied.jsonl'), JSON.stringify({ ts: new Date().toISOString(), ...rec }) + '\n'); } catch {} };
 
 // ---- redact ----
 // Che secret: maskSecrets cua core (key=value, Authorization, bearer, ghp_/sk-/AKIA, URL user:pass@) + bo sung o day
@@ -122,10 +122,10 @@ const pFile = (c, id) => path.join(c.evo, 'proposals', `${id}.json`);
 const assertSafeId = (id) => { if (typeof id !== 'string' || !/^[A-Za-z0-9_.-]{1,80}$/.test(id)) throw new Error(`id khong hop le: ${String(id).slice(0, 80)}`); return id; };
 function loadProposal(id, o = {}) { const j = readJson(pFile(ctx(o), assertSafeId(id))); if (!j) throw new Error(`khong tim thay de xuat ${id}`); return j; }
 const saveProposal = (p, o) => writeJson(pFile(ctx(o), p.id), p);
-export function listProposals(o = {}) {
+export function listProposals(o = {}, max = LIMITS.listLimit) { // max: autopilot truyen tran cao hon de khong bo sot de xuat cu
   const d = path.join(ctx(o).evo, 'proposals');
   let names = []; try { names = fs.readdirSync(d).filter((n) => n.endsWith('.json')).sort(); } catch {}
-  return names.slice(-LIMITS.listLimit).map((n) => readJson(path.join(d, n))).filter(Boolean);
+  return names.slice(-max).map((n) => readJson(path.join(d, n))).filter(Boolean);
 }
 
 // Doc dich chi khi qua policy (khong doc file ngoai allowlist).

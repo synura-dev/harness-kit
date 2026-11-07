@@ -67,3 +67,20 @@ test('runPrune: khoa quet transcript — khoa song -> busy (khong quet/ghi); kho
     expect(fs.existsSync(lock)).toBe(false);
   }
 });
+
+test('evolve list co cot verdict (trong neu chua do); evolve log hien dong effect', async () => {
+  const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ecli-'));
+  const wj = (f, j) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(j)); };
+  const base = { kind: 'rule', change: { target: 'evolve/rules/evolve-x.json' } };
+  wj(path.join(data, 'proposals', 'p1.json'), { ...base, id: 'p1', status: 'applied', ver: 'v1', effect: { verdict: 'worse', action: 'rollback' } });
+  wj(path.join(data, 'proposals', 'p2.json'), { ...base, id: 'p2', status: 'checked' });
+  fs.writeFileSync(path.join(data, 'applied.jsonl'), JSON.stringify({ ts: '2026-11-07T00:00:00Z', op: 'effect', id: 'p1', ver: 'v1', verdict: 'worse', action: 'rollback', reason: 'rate 1.00 -> 2.00 /1000' }) + '\n');
+  const l = await render({ cmd: 'list', dataRoot: data });
+  const rows = l.summary.split('\n');
+  expect(rows.find((r) => r.startsWith('p1'))).toContain('verdict=worse');
+  expect(rows.find((r) => r.startsWith('p2'))).not.toContain('verdict');
+  expect(l.data.find((p) => p.id === 'p1').effect.verdict).toBe('worse');
+  const g = await render({ cmd: 'log', dataRoot: data });
+  expect(g.summary).toMatch(/effect .*worse\/rollback/);
+  fs.rmSync(data, { recursive: true, force: true });
+});

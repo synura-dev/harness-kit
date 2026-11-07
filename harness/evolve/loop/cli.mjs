@@ -113,12 +113,12 @@ export async function render(o) {
   }
   if (o.cmd === 'log') {
     const r = readLog(o);
-    const lines = [`evolve log: ${r.items.length}/${r.total}`, ...r.items.map((x) => `${x.ts}  ${x.op.padEnd(8)} ${x.ok === false ? 'FAIL' : 'ok  '} ${x.id || x.ver || ''} ${x.ver && x.id ? x.ver : ''} ${x.reason || x.target || ''}`)];
+    const lines = [`evolve log: ${r.items.length}/${r.total}`, ...r.items.map((x) => `${x.ts}  ${x.op.padEnd(8)} ${x.ok === false ? 'FAIL' : 'ok  '} ${x.id || x.ver || ''} ${x.ver && x.id ? x.ver : ''} ${x.op === 'effect' ? `${x.verdict}/${x.action} ` : ''}${x.reason || x.target || ''}`)];
     return { code: 0, summary: capLines(lines, 40).join('\n'), data: r, truncated: r.truncated };
   }
   if (o.cmd === 'list') {
     const ps = listProposals(o);
-    const lines = [`evolve proposals: ${ps.length}`, ...ps.map((p) => `${p.id}  ${p.status}  ${p.kind} -> ${p.change.target}${p.ver ? `  ver=${p.ver}` : ''}`)];
+    const lines = [`evolve proposals: ${ps.length}`, ...ps.map((p) => `${p.id}  ${p.status}  ${p.kind} -> ${p.change.target}${p.ver ? `  ver=${p.ver}` : ''}${p.effect && p.effect.verdict ? `  verdict=${p.effect.verdict}` : ''}`)];
     return { code: 0, summary: capLines(lines, 40).join('\n'), data: ps.map(({ change, ...p }) => ({ ...p, target: change.target })) };
   }
   throw new Error(`lenh la: ${o.cmd ?? '(trong)'}\n${USAGE}`);
