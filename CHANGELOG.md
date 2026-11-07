@@ -2,6 +2,11 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.12
+- evolve deprecate do dung that: cua so du lieu thuc theo nguon, doc transcript Claude co cache tang dan, kenh tool/slash/read/preload, loc doc bao tri, khu trung theo callId, nguon -> hanh dong (project/plugin/account/builtin/third_party), chi phi ngu canh theo phien nap; co `--cost`, `--by-project`, `--detail kind:id`; canh bao trung mo ta. Job nen SessionStart chi dung cache (khong parse transcript); CLI quet co khoa. Doctor them `skill-drift`.
+- evolve-effect: chup baseline khi apply, do lai sau 7 ngay, rollback theo effect (ton trong autonomy, nguong mau, doc audit mot lan).
+- observe: audit agy ngang Claude (parser transcript agy, report theo cli).
+
 ## 0.3.11
 - ext-inject: placeholder `{agent_type}` trong `inject.args`, nap ngu canh theo vai tro o SubagentStart (cache theo vai tro 30 phut, tran rieng moi ext kep 30 dong/3KB, fail-open).
 
