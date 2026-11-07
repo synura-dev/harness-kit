@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { manifestDomains } from '../../core/ext/manifest-domains.mjs';
-import { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted, guardDecl, readAll, writeAll, findKey, readEntries, extensionStatus } from '../../core/ext/ext-trust.mjs';
+import { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted, guardDecl, mirrorRegistry, seedFromCopies, readAll, writeAll, findKey, readEntries, extensionStatus } from '../../core/ext/ext-trust.mjs';
 
 export { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted };
 
@@ -107,6 +107,14 @@ function confirmTty(msg, opts) {
   }));
 }
 
+/** Sao chep ban chinh sang CLI khac; CHI goi sau khi nguoi dung da xac nhan o TTY. Chep loi => code 1 (ban chinh da ghi). */
+function syncCopies(opts, res) {
+  const m = mirrorRegistry(opts);
+  if (m.unmatched) return { ...res, text: `${res.text} (canh bao: ${m.failed[0]})` }; // ngoai data da dang ky (vd env/cay code la): giu ban chinh, khong chep, khong coi la loi
+  if (m.failed.length) return { code: 1, text: `${res.text}\next: ban chinh da ghi nhung SAO CHEP LOI: ${m.failed.join('; ')}. CLI do chua dong bo; sua roi chay lai \`harness ext approve <id>\` o terminal.` };
+  return m.mirrored.length ? { ...res, text: `${res.text} (dong bo: ${m.mirrored.join(',')})` } : res;
+}
+
 /** register <path>: ask (TTY). -> {code, text} */
 export async function register(p, opts = {}) {
   const ws = path.resolve(opts.workspace || process.cwd());
@@ -123,20 +131,20 @@ export async function register(p, opts = {}) {
   if (ok === null) return { code: 2, text: 'ext register: can TTY de xac nhan (agent khong tu duyet)' };
   if (!ok) return { code: 1, text: 'ext register: tu choi' };
   const { base } = registryWorkspace(ws);
-  let all; try { all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext register: ${e.message}` }; }
+  let all; try { seedFromCopies({ ...opts, base }); all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext register: ${e.message}` }; }
   const k = findKey(all, base) || path.resolve(base);
   const list = (Array.isArray(all.extensions[k]) ? all.extensions[k] : []).filter((x) => x && x.id !== sc.id);
   list.push({ id: sc.id, root: rel, hash: t.hash, approvedAt: new Date().toISOString(), ...(sc.guard ? { guard: sc.guard } : {}) });
   all.extensions[k] = list; writeAll({ ...opts, base }, all);
   audit(sc.id, 'register', rel, t.hash);
-  return { code: 0, text: `ext register: ${sc.id} ${rel} hash=${hash8(t.hash)}` };
+  return syncCopies({ ...opts, base }, { code: 0, text: `ext register: ${sc.id} ${rel} hash=${hash8(t.hash)}` });
 }
 
 /** approve <id>: ask (TTY); ghim lai hash hien tai sau khi code doi. */
 export async function approve(id, opts = {}) {
   const ws = path.resolve(opts.workspace || process.cwd());
   const { base } = registryWorkspace(ws);
-  let all; try { all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext approve: ${e.message}` }; }
+  let all; try { seedFromCopies({ ...opts, base }); all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext approve: ${e.message}` }; }
   const k = findKey(all, base);
   const e = k && (all.extensions[k] || []).find((x) => x && x.id === id);
   if (!e) return { code: 2, text: `ext approve: ${id} chua dang ky` };
@@ -150,7 +158,11 @@ export async function approve(id, opts = {}) {
   const manifestOk = !sc.error;
   const newGuard = manifestOk ? sc.guard : (e.guard || null);
   const guardChanged = manifestOk && JSON.stringify(newGuard) !== JSON.stringify(e.guard || null);
-  if (t.hash === e.hash && !guardChanged) return { code: 0, text: `ext approve: ${id} khong doi (${hash8(t.hash)})` };
+  if (t.hash === e.hash && !guardChanged) {
+    const same = { code: 0, text: `ext approve: ${id} khong doi (${hash8(t.hash)})` };
+    // Khong doi: neu nguoi dung xac nhan o TTY thi van dong bo ban chep sang CLI khac (sau khi cai agy / doi roots.json).
+    return (await confirmTty(`${id} khong doi. Dong bo ban dang ky hien tai sang thu muc du lieu cua CLI khac?`, opts)) === true ? syncCopies({ ...opts, base }, same) : same;
+  }
   const ok = await confirmTty(`Duyet code moi cua ${id}: hash ${hash8(e.hash)} -> ${hash8(t.hash)}. ${guardDiff(e.guard || null, newGuard)}. Dong y?`, opts);
   if (ok === null) return { code: 2, text: 'ext approve: can TTY de xac nhan (agent khong tu duyet)' };
   if (!ok) return { code: 1, text: 'ext approve: tu choi' };
@@ -158,28 +170,30 @@ export async function approve(id, opts = {}) {
   if (newGuard) e.guard = newGuard; else delete e.guard;
   writeAll({ ...opts, base }, all);
   audit(id, 'approve', e.root, t.hash);
-  return { code: 0, text: `ext approve: ${id} hash=${hash8(t.hash)}` };
+  return syncCopies({ ...opts, base }, { code: 0, text: `ext approve: ${id} hash=${hash8(t.hash)}` });
 }
 
 /** remove <id> [--yes]: go dang ky. Mac dinh dry-run; --yes (opts.yes) moi ghi. Khong guard: KHONG can TTY (giam quyen). Co guard: go guard = giam an toan => BAT BUOC TTY (tra Promise). */
 export function remove(id, opts = {}) {
   const ws = path.resolve(opts.workspace || process.cwd());
   const { base } = registryWorkspace(ws);
-  let all; try { all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext remove: ${e.message}` }; }
+  let all; try { seedFromCopies({ ...opts, base }); all = readAll({ ...opts, base }); } catch (e) { return { code: 2, text: `ext remove: ${e.message}` }; }
   const k = findKey(all, base);
   const e = k && (all.extensions[k] || []).find((x) => x && x.id === id);
   if (!id || !e) return { code: 2, text: `ext remove: ${id || '(thieu id)'} chua dang ky` };
   if (!opts.yes) return { code: 0, text: `ext remove: dry-run, se go ${id} (${e.root}); them --yes de go` };
-  const doRemove = () => {
+  const doRemove = (viaTty) => {
     all.extensions[k] = all.extensions[k].filter((x) => x && x.id !== id);
     writeAll({ ...opts, base }, all);
     audit(id, 'remove', e.root, e.hash);
-    return { code: 0, text: `ext remove: da go ${id} (${e.root})` };
+    const res = { code: 0, text: `ext remove: da go ${id} (${e.root})` };
+    // Khong qua TTY (khong guard) => KHONG chep sang CLI khac (agent goi duoc, khong duoc lan sang ban cua CLI khac).
+    return viaTty ? syncCopies({ ...opts, base }, res) : { ...res, text: `${res.text}; chua dong bo sang CLI khac (can TTY: harness ext approve)` };
   };
-  if (!e.guard) return doRemove();
+  if (!e.guard) return doRemove(false);
   return confirmTty(`Go extension ${id} KEM GUARD: ${fmtG(e.guard)}. Tool khop matcher se het duoc guard bao ve. Dong y?`, opts).then((ok) => {
     if (ok === null) return { code: 2, text: `ext remove: ${id} co guard, can TTY de xac nhan: chay trong PowerShell rieng (khong qua agent): harness ext remove ${id} --yes` };
-    return ok ? doRemove() : { code: 1, text: 'ext remove: tu choi' };
+    return ok ? doRemove(true) : { code: 1, text: 'ext remove: tu choi' };
   });
 }
 

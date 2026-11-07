@@ -30,7 +30,7 @@ export function rootVersion(root) {
 /** Duong roots.json nam canh shim (shim doc luc chay; moi CLI ghi khoa cua chinh no). */
 export const rootsFile = (dir, platform = process.platform) => pp(platform).join(dir, 'roots.json');
 
-const readRoots = (file) => { try { const o = JSON.parse(read(file) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } };
+export const readRoots = (file) => { try { const o = JSON.parse(read(file) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } };
 
 // JS chay bang `node -e`: khong dung " % $ ` (an toan trong ca cmd lan sh). R = duong roots.json ({tool:{root,version}|{scan}}):
 // bo qua khoa co root da vang, chon version cao nhat (so sanh so: 0.1.10 > 0.1.9); het root -> thong bao + exit 3.
@@ -209,12 +209,14 @@ export function rootsStatus(dir, platform = process.platform) {
 }
 
 /** Ghi khoa `tool` vao roots.json canh shim, giu khoa khac; -> true neu file doi. pluginRoot rong -> khong ghi. */
-function writeRoot(dir, tool, pluginRoot, platform, scan) {
+function writeRoot(dir, tool, pluginRoot, platform, scan, data) {
   if (!pluginRoot) return false;
   const file = rootsFile(dir, platform);
   const roots = readRoots(file);
   const root = path.resolve(pluginRoot);
-  const next = { ...roots, [tool]: scan ? { scan: path.resolve(scan) } : { root, version: rootVersion(root) } };
+  // data = thu muc du lieu plugin cua CLI nay (ext approve sao chep dang ky vao day); tao san de ban sao toi duoc (best-effort).
+  if (data) { try { fs.mkdirSync(data, { recursive: true }); } catch { /* khong tao duoc: ban sao se bo qua */ } }
+  const next = { ...roots, [tool]: { ...(scan ? { scan: path.resolve(scan) } : { root, version: rootVersion(root) }), ...(data ? { data: path.resolve(data) } : {}) } };
   const text = `${JSON.stringify(next, null, 2)}\n`;
   if (read(file) === text) return false;
   fs.mkdirSync(dir, { recursive: true });
@@ -229,12 +231,12 @@ function writeRoot(dir, tool, pluginRoot, platform, scan) {
  * scan (tuy chon) = thu muc cha cac ban (plugin hay bi doi/xoa thu muc ban cu): khoa ghi {scan}, shim quet chon ban cao nhat co bin/harness; khong co -> {root, version}.
  * tool = khoa trong roots.json ('agy' | 'claude' | 'local' cho `harness install --shim` tay): chi ghi/cap nhat khoa cua minh, giu khoa tool khac.
  */
-export function syncUserShim({ dir, apply = true, force = false, platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath, pluginRoot, tool = 'local', scan }) {
+export function syncUserShim({ dir, apply = true, force = false, platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath, pluginRoot, tool = 'local', scan, data }) {
   const target = dir || defaultShimDir({ platform, env, home });
   const plan = planShim({ dir: target, platform, force });
   const res = { ok: !plan.blocked, dir: target, tool, files: plan.files, blocked: plan.blocked, path: null, removed: [], rootsChanged: false };
   if (plan.blocked) return res;
-  if (apply) { applyShim(plan); res.rootsChanged = writeRoot(target, tool, pluginRoot, platform, scan); }
+  if (apply) { applyShim(plan); res.rootsChanged = writeRoot(target, tool, pluginRoot, platform, scan, data); }
   res.path = ensureUserPath(target, { platform, env, home, regPath, setUserPath, apply });
   res.removed = strayShims(target, { platform, env, home });
   if (apply) for (const f of res.removed) try { fs.unlinkSync(f); } catch { /* bo qua */ }

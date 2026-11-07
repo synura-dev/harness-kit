@@ -2,6 +2,19 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.1
+### Added
+- agy dung duoc extension da duyet: `harness ext approve|register|remove` (TTY) ghi dang ky vao thu muc du lieu cua CLI hien tai va sao nguyen van sang moi thu muc `data` da dang ky trong `roots.json` (SessionStart moi CLI ghi `data` cua minh). agy doc `plugin_data/<ten>` canh `plugins/`, khong cham `~/.claude`; thieu/khong doc duoc -> fail-closed, thong bao chay `harness ext approve` o terminal. Hash ghim van kiem luc chay.
+- Guard `ext-config-protect` chan them `plugin_data/<ten>/config/` va `bin/roots.json`.
+- `rules/AGENTS.md`: neu `harness` khong co tren PATH thi dung `node <goc plugin>/bin/harness`.
+### Security
+- Sao chep chi chay SAU buoc xac nhan TTY (register/approve/remove-co-guard; `remove --yes` khong guard khong chep) va chi khi thu muc du lieu cua tien trinh trung DUNG `data` da dang ky trong roots.json (env `CLAUDE_PLUGIN_DATA` hay cay code lech thi canh bao, khong chep). Nguon chep la ban chinh vua ghi, khong phai duong suy tu env.
+- Ban cua CLI chua co (ENOENT): lay nen ban sao moi nhat (mtime) truoc khi ap thao tac, khong de `{foo}` len ban co san. Rao chan: nguon it hon dich > 1 muc thi khong de, tra code 1. Chep loi hoac `data` khong ton tai -> code 1 kem thong bao. Tmp ngau nhien + `wx`.
+- Layout agy chi nhan `.gemini/config/plugins/<ten>`; `--plugin-dir` cua Claude giu hanh vi cu.
+- Guard: `EXT_CONFIG_RE` chay tren lenh goc (chi bo thong diep git commit/tag); chuan hoa `\.\` va `seg\..\`; tool ghi file resolve duong truoc khi khop; lenh shell nhac `plugin_data/<ten>`, `plugins/data/` hoac `.harness-kit/bin` kem dong tu ghi/doi ten/link bi chan (`2>&1`, `>$null`, `> NUL` khong tinh la ghi). Guard CHI la lop chan lenh ro rang, KHONG phai ranh gioi bao mat: `cd` tung cap, file script, bien gian tiep van lach duoc.
+### Migration
+- Nguoi dung chay lai `harness ext approve <id>` o terminal mot lan de dong bo dang ky sang agy.
+
 ## 0.4.0
 ### Added
 - agy chi can `agy plugin install <goc plugin>`: agy dua `bin/` cua plugin vao PATH va tu nap `rules/AGENTS.md`. Hook agy mac dinh bat, khong doc `.claude`; tat bang `HARNESS_AGY=0` hoac file `.harness/agy.off`.

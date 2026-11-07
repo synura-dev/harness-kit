@@ -18,7 +18,7 @@ export const EXIT = Object.freeze({ MISSING_CORE: 3, BAD_MANIFEST: 64, BAD_OUTPU
 export function blockExternal(ext, domain, status = 'drift') {
   const why = status === 'unregistered' ? 'chua dang ky' : status === 'id-mismatch' ? 'id manifest khac id dang ky' : 'hash lech/chua duyet';
   auditExt(ext.id, { ok: false, event: 'run', status: 'ext-blocked', target: domain, error: `blocked: ${why}`, data: { exit: EXIT.BLOCKED, reason: status } });
-  return { code: EXIT.BLOCKED, status: 'blocked', stdout: '', stderr: `ext ${ext.id}/${domain}: CHAN (${why}). Kiem tra code roi chay: harness ext approve ${ext.id}\n` };
+  return { code: EXIT.BLOCKED, status: 'blocked', stdout: '', stderr: `ext ${ext.id}/${domain}: CHAN (${why}). Kiem tra code roi chay: harness ext approve ${ext.id} (nguoi dung, o terminal; lenh nay cung dong bo dang ky sang thu muc du lieu cua moi CLI)\n` };
 }
 
 

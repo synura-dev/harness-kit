@@ -48,9 +48,9 @@ export function toClaudeInput(input, toolName = 'Bash') {
     const command = getCommand(tc.args);
     return { ...base, tool_name: toolName, tool_input: { command: typeof command === 'string' ? command : '' } };
   }
-  if (tc.name === 'write_file' || tc.name === 'edit_file') {
+  if (/^(write_file|edit_file|write_to_file|replace_file_content|multi_replace_file_content)$/.test(tc.name)) {
     const fp = pick('TargetFile', 'Path', 'FilePath', 'file_path', 'AbsolutePath');
-    return { ...base, tool_name: TOOL_MAP[tc.name], tool_input: { file_path: fp || '' } };
+    return { ...base, tool_name: TOOL_MAP[tc.name] || (tc.name === 'write_to_file' ? 'Write' : 'Edit'), tool_input: { file_path: fp || '' } };
   }
   return null;
 }

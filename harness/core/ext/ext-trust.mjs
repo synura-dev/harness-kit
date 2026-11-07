@@ -8,6 +8,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from '../runtime/proc.mjs';
 import { isPluginMode, REPO_DIR } from '../io/paths.mjs';
 import { pluginLayerDirs } from '../config/config.mjs';
+import { readRoots, rootsFile, defaultShimDir } from '../runtime/user-shim.mjs';
 
 const HASH_LIMITS = Object.freeze({ maxFiles: 5000, maxBytes: 32 * 1024 * 1024 });
 // Chi bo .git. node_modules DUOC hash: code import tu node_modules chay voi quyen extension, bo qua thi doi noi dung khong lech.
@@ -77,7 +78,7 @@ export function machineFile(opts = {}) {
 export function readAll(opts) {
   const f = machineFile(opts);
   let txt;
-  try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return { extensions: {} }; throw new Error(`dang ky extension khong doc duoc (${e && e.code}): ${f}`); }
+  try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return { extensions: {} }; throw new Error(`dang ky extension khong doc duoc (${e && e.code}): ${f}. CHAN (fail-closed). Nguoi dung chay \`harness ext approve <id>\` o terminal de dong bo dang ky vao thu muc du lieu cua CLI nay.`); }
   const broken = () => new Error(`dang ky extension hong (JSON loi/sai kieu): ${f}. KHONG ghi de; moi external bi CHAN. Nguoi dung sua tay hoac khoi phuc file (hoac xoa de dang ky lai tu dau) roi chay lai.`);
   let j; try { j = JSON.parse(txt.replace(/^﻿/, '')); } catch { throw broken(); }
   if (!j || typeof j !== 'object' || Array.isArray(j)) throw broken();
@@ -87,7 +88,66 @@ export function readAll(opts) {
 }
 export function writeAll(opts, j) {
   const f = machineFile(opts); fs.mkdirSync(path.dirname(f), { recursive: true });
-  const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(j, null, 2) + '\n'); fs.renameSync(t, f);
+  atomicWrite(f, JSON.stringify(j, null, 2) + '\n');
+}
+// tmp ngau nhien + 'wx' (khong theo link co san), roi rename.
+function atomicWrite(file, text) {
+  const t = `${file}.${crypto.randomUUID()}.tmp`;
+  try { fs.writeFileSync(t, text, { flag: 'wx' }); fs.renameSync(t, file); } catch (e) { try { fs.unlinkSync(t); } catch { /* khong co */ } throw e; }
+}
+const countEntries = (text) => { try { return Object.values(JSON.parse(text).extensions || {}).reduce((n, v) => n + (Array.isArray(v) ? v.length : 0), 0); } catch { return 0; } };
+
+/** Ban cua tien trinh chua co (ENOENT) ma data cua no da dang ky: lay lam nen ban sao con ton tai moi nhat (mtime) trong cac data khac, de register/approve khong de {foo} len ban co san. */
+export function seedFromCopies(opts = {}) {
+  const f = machineFile(opts);
+  if (fs.existsSync(f)) return false;
+  let roots; try { roots = readRoots(rootsFile(opts.shimDir || defaultShimDir({ home: opts.home }))); } catch { return false; }
+  const ents = Object.values(roots).filter((e) => e && typeof e.data === 'string' && e.data);
+  const cur = path.resolve(path.dirname(f), '..', '..');
+  if (!ents.some((e) => samePath(e.data, cur) && samePath(path.join(e.data, 'config', 'ext', 'local.json'), f))) return false;
+  let best = null;
+  for (const e of ents) {
+    if (samePath(e.data, cur)) continue;
+    const src = path.join(path.resolve(e.data), 'config', 'ext', 'local.json');
+    try { const m = fs.statSync(src).mtimeMs; if (!best || m > best.m) best = { src, m }; } catch { /* khong co */ }
+  }
+  if (!best) return false;
+  fs.mkdirSync(path.dirname(f), { recursive: true }); atomicWrite(f, fs.readFileSync(best.src, 'utf8'));
+  return true;
+}
+const samePath = (a, b) => { const x = path.resolve(a), y = path.resolve(b); return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y; };
+
+/**
+ * Sao nguyen van ban chinh vua ghi sang thu muc du lieu cua CLI khac (roots.json `data`), de CLI do (agy khong doc duoc ~/.claude) doc ban cua chinh no.
+ * CHI goi sau buoc nguoi dung xac nhan o TTY (register/approve/remove-co-guard). Chi chep khi thu muc du lieu cua tien trinh nay (suy tu machineFile) trung
+ * DUNG `data` cua mot tool trong roots.json (env CLAUDE_PLUGIN_DATA / code chep di noi khac => khong khop => khong chep). Ban chep khong phai nguon tin cay moi: hash ghim van kiem luc chay.
+ * -> {mirrored:[tool], failed:[mo ta]}; failed khac rong => caller tra ma khac 0.
+ */
+export function mirrorRegistry(opts = {}) {
+  const out = { mirrored: [], failed: [] };
+  const f = machineFile(opts);
+  let roots; try { roots = readRoots(rootsFile(opts.shimDir || defaultShimDir({ home: opts.home }))); } catch { return out; }
+  const ents = Object.entries(roots).filter(([, e]) => e && typeof e.data === 'string' && e.data);
+  const cur = path.resolve(path.dirname(f), '..', '..');
+  if (!ents.some(([, e]) => samePath(e.data, cur) && samePath(path.join(e.data, 'config', 'ext', 'local.json'), f))) {
+    if (!ents.length) return out; // chua tool nao dang ky data: khong co gi de chep
+    const msg = `thu muc du lieu hien tai (${cur}) khong khop data nao trong roots.json: KHONG sao chep sang CLI khac`;
+    console.error(`ext: canh bao: ${msg}`); out.failed.push(msg); out.unmatched = true; return out;
+  }
+  let text; try { text = fs.readFileSync(f, 'utf8'); } catch (e) { out.failed.push(`khong doc ban chinh ${f} (${e && e.code})`); return out; }
+  const srcN = countEntries(text);
+  for (const [tool, e] of ents) {
+    if (samePath(e.data, cur)) continue;
+    const dest = path.join(path.resolve(e.data), 'config', 'ext', 'local.json');
+    try {
+      if (!fs.existsSync(e.data)) throw Object.assign(new Error('data da dang ky khong ton tai'), { code: 'ENOENT' });
+      // Rao chan mat du lieu: nguon it hon dich > 1 muc (khong phai mot lan remove) -> khong de.
+      let dstN = 0; try { dstN = countEntries(fs.readFileSync(dest, 'utf8')); } catch { /* chua co ban dich */ }
+      if (srcN < dstN - 1) throw new Error(`nguon ${srcN} muc < dich ${dstN} muc (khong phai mot lan remove), KHONG de`);
+      fs.mkdirSync(path.dirname(dest), { recursive: true }); atomicWrite(dest, text); out.mirrored.push(tool);
+    } catch (err) { out.failed.push(`${tool}: ${dest} (${err && err.code || err && err.message})`); }
+  }
+  return out;
 }
 export const findKey = (all, ws) => Object.keys(all.extensions).find((k) => sameWs(k, ws));
 

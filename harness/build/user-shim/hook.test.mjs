@@ -59,7 +59,7 @@ const roots = () => JSON.parse(fs.readFileSync(rootsFile(shimDir()), 'utf8'));
 test('(i) claude: ghi khoa claude; claude-cache.pluginCacheDir suy tu pluginRoot trong cache, quet CLAUDE_CONFIG_DIR, null khi khong co', async () => {
   await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
   expect(Object.keys(roots())).toEqual(['claude']);
-  expect(roots().claude).toEqual({ scan: path.dirname(plug) });
+  expect(roots().claude).toEqual({ scan: path.dirname(plug), data: path.join(tmp, 'claude', 'plugins', 'data', 'harness-kit-mkt') }); // data = thu muc du lieu plugin cua Claude (ext approve sao chep vao day)
   const cache = path.dirname(plug);
   expect(pluginCacheDir(plug)).toBe(cache);
   const src = path.join(tmp, 'src', 'harness-kit'); fs.mkdirSync(src, { recursive: true });
