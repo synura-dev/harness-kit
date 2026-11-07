@@ -81,7 +81,7 @@ Files: tao `harness/observe/report/defaults/cost-cli.json`, `harness/observe/rep
 
 ### Task 5: README observe [phu thuoc Task 0, 3]
 Files: `harness/observe/README.md`.
-- [ ] Thay doan agy 41-44 bang ket qua Task 0 (agy 1.5.x): payload chung, Post `error` "exit status N" -> `data.exit_code`, Stop `stop_reason/exec_num/fully_idle`, token tu transcript (`agy-usage.mjs`, delta theo offset), `dur_ms` tu transcript (`data.dur_src`). Them 3 dong "them tool moi = adapter + parser `usage.sum`" (diem mo core Task 1). Giu `HUB_AGY_CAPTURE`.
+- [x] Thay doan agy 41-44 bang ket qua Task 0 (agy 1.5.x): payload chung, Post `error` "exit status N" -> `data.exit_code`, Stop `stop_reason/exec_num/fully_idle`, token tu transcript (`agy-usage.mjs`, delta theo offset), `dur_ms` tu transcript (`data.dur_src`). Them 3 dong "them tool moi = adapter + parser `usage.sum`" (diem mo core Task 1). Giu `HUB_AGY_CAPTURE`.
 - Done: khong con cau "KHONG co toolResult/exit code / error rong"; khong doi muc Claude.
 
 ### Task 6: Xac minh that sau merge (KHONG code; general-purpose) [phu thuoc Task 1-5 da merge vao main]
