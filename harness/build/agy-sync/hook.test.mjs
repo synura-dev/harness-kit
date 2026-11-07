@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import hook, { handle } from './hook.mjs';
+import hook, { handle, cmpVer, spawnArgs, inClaudeCache } from './hook.mjs';
 
 // KHONG cham ~/.gemini that, KHONG chay agy that: home/spawn/which luon duoc tiem.
 let tmp; let home; let plug; let calls; let inj;
@@ -29,6 +29,7 @@ test('version khac -> spawn dung mot lan + bao mot dong; stamp chan lan hai, het
   expect(calls.length).toBe(1);
   expect((await run({ now: 1e9 + 11 * 60e3 })).additionalContext).toContain('0.3.9 -> 0.4.0');
   expect(calls.length).toBe(2);
+  expect(fs.existsSync(path.join(home, '.harness-kit', 'agy-sync.lock'))).toBe(false);
 });
 
 test('cung version (ke ca file co BOM) -> khong spawn', async () => {
@@ -58,10 +59,84 @@ test('chay tu nguon (ngoai cache) / tat bang env / khong co agy tren PATH / tat 
   expect(calls).toEqual([]);
 });
 
-test('agy.cmd tren Windows -> qua cmd.exe /c', async () => {
-  await run({ platform: 'win32', which: () => 'C:\\bin\\agy.cmd', env: { ComSpec: 'cmd.exe' } });
-  expect(calls[0].cmd).toBe('cmd.exe');
-  expect(calls[0].args).toEqual(['/c', 'C:\\bin\\agy.cmd', 'plugin', 'install', plug]);
+test('agy.exe -> spawn thang bang mang args; agy.cmd -> cmd.exe /d /s /c verbatim, duong dan co dau cach va &', async () => {
+  await run({ platform: 'win32', which: () => 'C:\\Users\\a b\\agy.exe' });
+  expect(calls[0]).toEqual({ cmd: 'C:\\Users\\a b\\agy.exe', args: ['plugin', 'install', plug], key: 'agy-plugin-sync' });
+  const s = spawnArgs('C:\\Program Files\\a&b\\agy.cmd', 'C:\\x y\\p&q^r\\harness-kit\\1', { ComSpec: 'cmd.exe' });
+  expect(s).toEqual({ cmd: 'cmd.exe', args: ['/d', '/s', '/c', '""C:\\Program Files\\a&b\\agy.cmd" plugin install "C:\\x y\\p&q^r\\harness-kit\\1""'], verbatim: true });
+  expect(spawnArgs('C:\\a%b\\agy.cmd', 'C:\\p')).toBeNull(); // % khong thoat duoc an toan
+  expect(spawnArgs('C:\\a\\agy.cmd', 'C:\\p"q')).toBeNull();
+});
+
+test('chi nang cap: mine cu hon / bang / khong doc duoc -> khong spawn; moi hon -> spawn (semver so, 0.10 > 0.9)', async () => {
+  put(agyPlugin(home), { version: '0.5.0' });
+  expect(await run()).toEqual({});
+  put(agyPlugin(home), { version: 'abc' });
+  expect(await run()).toEqual({});
+  put(agyPlugin(home), { version: '0.4.0' });
+  expect(await run()).toEqual({});
+  expect(calls).toEqual([]);
+  expect(cmpVer('0.10.0', '0.9.9')).toBe(1);
+  expect(cmpVer('1.0.0', '0.99.99')).toBe(1);
+  expect(cmpVer('x', '1.0.0')).toBeNull();
+  put(agyPlugin(home), { version: '0.3.10' });
+  expect((await run()).additionalContext).toContain('0.3.10 -> 0.4.0');
+  expect(calls.length).toBe(1);
+});
+
+test('chi SessionStart source=startup (hoac thieu); resume/compact/clear -> khong spawn', async () => {
+  const h = (source) => handle('SessionStart', { source }, { cfg, pluginRoot: plug, inj });
+  for (const s of ['resume', 'compact', 'clear']) expect(await h(s)).toEqual({});
+  expect(calls).toEqual([]);
+  expect((await h('startup')).additionalContext).toBeTruthy();
+  expect(calls.length).toBe(1);
+});
+
+test('dau thoi gian: kiem truoc which; version khac -> lam moi; tuoi am = het han; lui 10p*2^fails', async () => {
+  const stamp = path.join(home, '.harness-kit', 'agy-sync.json');
+  let whichCalls = 0;
+  const which = () => { whichCalls++; return '/bin/agy'; };
+  put(stamp, { version: '0.4.0', at: 1e9 - 1000, fails: 0 });
+  expect(await run({ which })).toEqual({});
+  expect(whichCalls).toBe(0);
+  put(stamp, { version: '0.3.5', at: 1e9 - 1000, fails: 0 }); // dau cua version khac -> khong chan
+  expect((await run({ which })).additionalContext).toBeTruthy();
+  expect(JSON.parse(fs.readFileSync(stamp, 'utf8'))).toEqual({ version: '0.4.0', at: 1e9, fails: 0 });
+  put(stamp, { version: '0.4.0', at: 1e9 + 5000, fails: 0 }); // tuoi am
+  expect((await run()).additionalContext).toBeTruthy();
+  // that bai lien tiep: fails 0 -> 1 -> 2; cho 10p, 20p, 40p
+  put(stamp, { version: '0.4.0', at: 1e9, fails: 0 });
+  expect((await run({ now: 1e9 + 10 * 60e3 })).additionalContext).toBeTruthy();
+  expect(JSON.parse(fs.readFileSync(stamp, 'utf8')).fails).toBe(1);
+  expect(await run({ now: 1e9 + 29 * 60e3 })).toEqual({}); // 19p < 20p
+  expect((await run({ now: 1e9 + 31 * 60e3 })).additionalContext).toBeTruthy();
+  expect(JSON.parse(fs.readFileSync(stamp, 'utf8')).fails).toBe(2);
+  put(stamp, { version: '0.4.0', at: 1e9, fails: 99 }); // tran 24h
+  expect(await run({ now: 1e9 + 23 * 3600e3 })).toEqual({});
+  expect((await run({ now: 1e9 + 25 * 3600e3 })).additionalContext).toBeTruthy();
+});
+
+test('khong ghi duoc dau/khoa -> khong spawn; khoa dang giu -> khong spawn; khoa treo -> don', async () => {
+  fs.writeFileSync(path.join(home, '.harness-kit'), 'x'); // thu muc dau la file -> mkdir loi
+  expect(await run()).toEqual({});
+  fs.rmSync(path.join(home, '.harness-kit'));
+  put(path.join(home, '.harness-kit', 'agy-sync.lock'), '');
+  expect(await run()).toEqual({});
+  expect(calls).toEqual([]);
+  const old = new Date(Date.now() - 10 * 60e3);
+  fs.utimesSync(path.join(home, '.harness-kit', 'agy-sync.lock'), old, old);
+  expect((await run()).additionalContext).toBeTruthy();
+  expect(fs.existsSync(path.join(home, '.harness-kit', 'agy-sync.lock'))).toBe(false);
+});
+
+test('inClaudeCache: CLAUDE_CONFIG_DIR doi goc cache; ten gan giong khong khop', () => {
+  const alt = path.join(tmp, 'alt');
+  const p = path.join(alt, 'plugins', 'cache', 'm', 'harness-kit', '1.0.0');
+  expect(inClaudeCache(p, { env: { CLAUDE_CONFIG_DIR: alt }, home })).toBe(true);
+  expect(inClaudeCache(p, { env: {}, home })).toBe(false);
+  expect(inClaudeCache(plug, { env: { CLAUDE_CONFIG_DIR: alt }, home })).toBe(false);
+  expect(inClaudeCache(plug + '-x', { env: {}, home })).toBe(true);
+  expect(inClaudeCache(path.join(home, '.claude', 'plugins', 'cache-evil', 'x'), { env: {}, home })).toBe(false);
 });
 
 test('loi (spawn nem, spawn khong co pid, plugin.json hong, home sai) -> fail-open {}', async () => {

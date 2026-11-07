@@ -35,7 +35,42 @@ export function whichAgy({ env, platform }) {
   return null;
 }
 
-const defaultSpawn = ({ cmd, args, key }) => spawnBackground({ cmd, args, key, deadlineMs: 5 * 60e3 });
+const BACKOFF_CAP_MS = 24 * 3600e3;
+const LOCK_STALE_MS = 60e3;
+
+/** So sanh major.minor.patch (so): a>b 1, a<b -1, bang 0; khong doc duoc -> null. */
+export function cmpVer(a, b) {
+  const p = (v) => { const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v)); return m ? [+m[1], +m[2], +m[3]] : null; };
+  const x = p(a); const y = p(b);
+  if (!x || !y) return null;
+  for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] > y[i] ? 1 : -1;
+  return 0;
+}
+
+/** Khoa doc quyen (open 'wx'); khoa cu > 60s coi la treo -> xoa thu lai mot lan. Tra fd | null (nguoi khac giu). Loi khac -> nem. */
+function lockOpen(f) {
+  for (let i = 0; i < 2; i++) {
+    try { return fs.openSync(f, 'wx'); } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+      try { if (Date.now() - fs.statSync(f).mtimeMs > LOCK_STALE_MS) { fs.unlinkSync(f); continue; } } catch { /* mat khoa */ }
+      return null;
+    }
+  }
+  return null;
+}
+function lockClose(fd, f) { try { fs.closeSync(fd); } catch { /* bo qua */ } try { fs.unlinkSync(f); } catch { /* bo qua */ } }
+
+/**
+ * Lenh cai: .exe/khong duoi -> spawn thang (mang args, khong qua shell). .cmd/.bat -> cmd.exe /d /s /c "<dong day du co nhay kep>" + verbatim;
+ * tu choi (null) neu duong dan chua % hoac " (cmd khong thoat duoc an toan); & ^ trong nhay kep an toan.
+ */
+export function spawnArgs(agy, pluginRoot, env = process.env) {
+  if (!/\.(cmd|bat)$/i.test(agy)) return { cmd: agy, args: ['plugin', 'install', pluginRoot] };
+  if (/[%"\r\n]/.test(agy + pluginRoot)) return null;
+  return { cmd: env.ComSpec || 'cmd.exe', args: ['/d', '/s', '/c', `""${agy}" plugin install "${pluginRoot}""`], verbatim: true };
+}
+
+const defaultSpawn = ({ cmd, args, key, verbatim }) => spawnBackground({ cmd, args, key, verbatim, deadlineMs: 5 * 60e3 });
 
 /**
  * Hop dong HOOK_MODULE: handle(event, input, ctx) -> {} | {additionalContext}.
@@ -55,23 +90,42 @@ export async function handle(event, input, ctx = {}) {
     if (!inClaudeCache(pluginRoot, { env, home })) return {};
     const mine = versionOf(path.join(pluginRoot, '.claude-plugin', 'plugin.json'));
     if (!mine) return {};
+    // chi khi mo phien moi (startup); resume/compact/clear khong cai lai. Thieu source -> coi nhu startup.
+    const source = input && typeof input === 'object' ? input.source : undefined;
+    if (source !== undefined && source !== 'startup') return {};
     const installed = versionOf(path.join(home, '.gemini', 'config', 'plugins', 'harness-kit', '.antigravity-plugin', 'plugin.json'));
     if (installed === mine) return {};
     if (!installed && !fs.existsSync(path.join(home, '.gemini'))) return {}; // may khong co agy
-    const platform = inj.platform || process.platform;
-    const agy = (inj.which || whichAgy)({ env, platform });
-    if (!agy) return {};
+    // chi NANG CAP: da cai thi chi khi mine > installed (khong ha cap; version khong doc duoc -> bo qua)
+    if (installed) { const c = cmpVer(mine, installed); if (c === null || c <= 0) return {}; }
     const now = inj.now ?? Date.now();
-    const stampFile = path.join(home, '.harness-kit', 'agy-sync.json');
-    try { const s = JSON.parse(fs.readFileSync(stampFile, 'utf8')); if (s && s.version === mine && now - Number(s.at) < STAMP_TTL_MS) return {}; } catch { /* chua co dau */ }
-    try { fs.mkdirSync(path.dirname(stampFile), { recursive: true }); fs.writeFileSync(stampFile, JSON.stringify({ version: mine, at: now })); } catch { return {}; } // khong ghi duoc dau -> khong spawn (tranh lap vo han)
-    const install = ['plugin', 'install', pluginRoot];
-    // .cmd/.bat tren Windows khong spawn truc tiep duoc: qua cmd.exe /c
-    const cmd = /\.(cmd|bat)$/i.test(agy) ? (env.ComSpec || 'cmd.exe') : agy;
-    const args = cmd === agy ? install : ['/c', agy, ...install];
-    const pid = (inj.spawn || defaultSpawn)({ cmd, args, key: 'agy-plugin-sync' });
-    if (!pid) return {};
-    return { additionalContext: `agy plugin harness-kit: cap nhat ${installed || '(chua cai)'} -> ${mine}` };
+    const dir = path.join(home, '.harness-kit');
+    const stampFile = path.join(dir, 'agy-sync.json');
+    const lockFile = path.join(dir, 'agy-sync.lock');
+    let lock;
+    try { fs.mkdirSync(dir, { recursive: true }); lock = lockOpen(lockFile); } catch { return {}; } // khong ghi duoc -> khong spawn (tranh lap vo han)
+    if (lock === null) return {}; // phien khac dang phat
+    try {
+      let fails = 0;
+      try {
+        const s = JSON.parse(fs.readFileSync(stampFile, 'utf8'));
+        if (s && s.version === mine) {
+          const wait = Math.min(BACKOFF_CAP_MS, STAMP_TTL_MS * 2 ** Math.min(Number(s.fails) || 0, 30));
+          const age = now - Number(s.at);
+          if (age >= 0 && age < wait) return {}; // dang cho / lui (lan truoc khong cai duoc)
+          fails = (Number(s.fails) || 0) + 1; // lan truoc cung version ma van chua khop = that bai
+        }
+      } catch { /* chua co dau */ }
+      const platform = inj.platform || process.platform;
+      const agy = (inj.which || whichAgy)({ env, platform });
+      if (!agy) return {};
+      const sp = spawnArgs(agy, pluginRoot, env);
+      if (!sp) return {};
+      try { fs.writeFileSync(stampFile, JSON.stringify({ version: mine, at: now, fails })); } catch { return {}; }
+      const pid = (inj.spawn || defaultSpawn)({ ...sp, key: 'agy-plugin-sync' });
+      if (!pid) return {};
+      return { additionalContext: `agy plugin harness-kit: cap nhat ${installed || '(chua cai)'} -> ${mine}` };
+    } finally { lockClose(lock, lockFile); }
   } catch { return {}; } // fail-open
 }
 

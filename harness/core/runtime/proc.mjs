@@ -169,13 +169,13 @@ const scriptOf = (args) => { for (const a of args) { const s = String(a); if (/\
  * Chay tac vu nen: detached + unref + stdio ignore + ha uu tien; ghi so PID (kem script day du + startedAt); khoa theo key (dang chay thi bo qua).
  * Tra pid hoac null (bi khoa / loi). detached chi xuat hien o day.
  */
-export function spawnBackground({ cmd, args = [], key, deadlineMs = 10 * 60e3, dir, cwd, env, now = Date.now(), onError }) {
+export function spawnBackground({ cmd, args = [], key, deadlineMs = 10 * 60e3, dir, cwd, env, now = Date.now(), onError, verbatim }) {
   const fail = (why) => { try { if (typeof onError === 'function') onError(why); } catch { /* fail-open */ } return null; }; // bi khoa (dang chay) KHONG la loi
   try {
     if (key && isRunning(key, { dir, now })) return null;
     const penv = { ...(env || process.env), ...(key ? { HARNESS_BG_KEY: key } : {}), ...(dir ? { HARNESS_PROC_DIR: dir } : {}) };
     const startedAt = Date.now();
-    const p = cp.spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, cwd, env: penv });
+    const p = cp.spawn(cmd, args, { detached: true, stdio: 'ignore', windowsHide: true, cwd, env: penv, ...(verbatim ? { windowsVerbatimArguments: true } : {}) });
     p.on('error', (e) => fail('spawn: ' + (e && e.message))); p.unref();
     if (!p.pid) return fail('spawn: khong co pid');
     try { os.setPriority(p.pid, os.constants.priority.PRIORITY_BELOW_NORMAL); } catch { /* khong dat duoc */ }
