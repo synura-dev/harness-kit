@@ -3,8 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { workspaceOf, fallback, enabledIn, run as runFn } from './agy-native.mjs';
-import { native } from '../../cli/commands/agy.mjs';
+import { workspaceOf, fallback, isEnabled, run as runFn } from './agy-native.mjs';
 
 const SCRIPT = path.join(import.meta.dir, 'agy-native.mjs');
 const PLUGIN = path.resolve(import.meta.dir, '..', '..', '..');
@@ -44,48 +43,62 @@ test('thieu workspacePaths: khong dispatch, fail-open dung dinh dang IM LANG (kh
   expect(listAll(path.join(PLUGIN, '.harness')).length).toBe(before);
 });
 
-// Cong qua entry that (spawn agy-native.mjs): khong bat -> fallback, stderr rong, khong tao gi trong ws (ke ca .harness).
-test('cong du an (entry that): khong bat -> fallback im lang, khong ghi file; local false thang project true; BOM; JSON hong; gia tri khong boolean; enabledPlugins mang/null', () => {
-  const put = (ws, f, txt) => { fs.mkdirSync(path.join(ws, '.claude'), { recursive: true }); fs.writeFileSync(path.join(ws, '.claude', f), txt); };
-  const ep = (o) => JSON.stringify({ enabledPlugins: o });
-  const K = 'harness-kit@synura';
-  const off = {
-    thieu: () => {},
-    false: (w) => put(w, 'settings.json', ep({ [K]: false })),
-    'local false thang project true': (w) => { put(w, 'settings.json', ep({ [K]: true })); put(w, 'settings.local.json', ep({ [K]: false })); },
-    'JSON hong': (w) => put(w, 'settings.json', '{khong json'),
-    'chuoi "true"': (w) => put(w, 'settings.json', ep({ [K]: 'true' })),
-    'so 1': (w) => put(w, 'settings.json', ep({ [K]: 1 })),
-    null: (w) => put(w, 'settings.json', ep({ [K]: null })),
-    'enabledPlugins mang': (w) => put(w, 'settings.json', '{"enabledPlugins":["harness-kit@synura"]}'),
-    'enabledPlugins null': (w) => put(w, 'settings.json', '{"enabledPlugins":null}'),
-    'khoa khac': (w) => put(w, 'settings.json', ep({ 'x@y': true })),
-  };
-  for (const [name, setup] of Object.entries(off)) {
-    const ws = tmp(); fs.mkdirSync(path.join(ws, '.git')); setup(ws);
-    const before = listAll(ws);
-    const pay = JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')], toolCall: { name: 'run_command', args: { CommandLine: 'ls' } } });
-    const p = run('PreToolUse', pay);
-    expect(JSON.parse(p.stdout), name).toEqual({ decision: 'allow' }); expect(p.stderr, name).toBe(''); expect(p.status, name).toBe(0);
-    expect(JSON.parse(run('Stop', pay).stdout), name).toEqual({});
-    expect(listAll(ws), name).toEqual(before);
-    expect(fs.existsSync(path.join(ws, '.harness')), name).toBe(false);
-  }
-  // bat: BOM, local true thang project false, khoa thu hai = true
-  const on = {
-    project: (w) => put(w, 'settings.json', ep({ [K]: true })),
-    BOM: (w) => put(w, 'settings.json', '﻿' + ep({ [K]: true })),
-    'local true thang project false': (w) => { put(w, 'settings.json', ep({ [K]: false })); put(w, 'settings.local.json', ep({ [K]: true })); },
-    'local rieng khoa khac': (w) => { put(w, 'settings.json', ep({ 'harness-kit@a': false })); put(w, 'settings.local.json', ep({ 'harness-kit@b': true })); },
-  };
-  for (const [name, setup] of Object.entries(on)) {
-    const ws = tmp(); fs.mkdirSync(path.join(ws, '.git')); setup(ws);
-    expect(enabledIn(ws), name).toBe(true);
-  }
-  const ws = tmp(); fs.mkdirSync(path.join(ws, '.git')); on.BOM(ws);
-  const pay = JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')], toolCall: { name: 'run_command', args: { CommandLine: 'python -' } } });
-  expect(JSON.parse(run('PreToolUse', pay).stdout).decision).toBe('deny'); // bat that qua entry -> dispatch that
-}, 90000);
+// Cong workspace tool-neutral: mac dinh BAT; opt-out chi HARNESS_AGY=0 va <ws>/.harness/agy.off; KHONG doc .claude/*.
+const cleanWs = () => { const w = tmp(); fs.mkdirSync(path.join(w, '.git')); return w; };
+test('isEnabled (a)-(c): ws sach -> true; HARNESS_AGY=0 -> false; .harness/agy.off -> false', () => {
+  const home = tmp();
+  const ws = cleanWs();
+  expect(isEnabled(ws, { env: {}, home })).toBe(true);
+  expect(isEnabled(ws, { env: { HARNESS_AGY: '0' }, home })).toBe(false);
+  expect(isEnabled(ws, { env: { HARNESS_AGY: '1' }, home })).toBe(true);
+  fs.mkdirSync(path.join(ws, '.harness')); fs.writeFileSync(path.join(ws, '.harness', 'agy.off'), '');
+  expect(isEnabled(ws, { env: {}, home })).toBe(false);
+});
+
+test('isEnabled (d): khoa .claude cu khong con hieu luc va khong bi doc (spy fs)', async () => {
+  const home = tmp();
+  const ws = cleanWs();
+  fs.mkdirSync(path.join(ws, '.claude'));
+  fs.writeFileSync(path.join(ws, '.claude', 'settings.local.json'), JSON.stringify({ enabledPlugins: { 'harness-kit@synura': false } }));
+  const touched = [];
+  const restore = ['readFileSync', 'existsSync', 'statSync', 'lstatSync', 'readdirSync', 'openSync'].map((k) => {
+    const orig = fs[k];
+    fs[k] = (...a) => { touched.push(String(a[0])); return orig(...a); };
+    return () => { fs[k] = orig; };
+  });
+  try {
+    expect(isEnabled(ws, { env: {}, home })).toBe(true);
+    const pay = JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')] });
+    const r = await runFn('Stop', pay, { root: fakeRoot('console.log("{}")'), baseEnv: cleanEnv() });
+    expect(JSON.parse(r.stdout)).toEqual({});
+  } finally { restore.forEach((f) => f()); }
+  expect(touched.filter((t) => /[\\/]\.claude([\\/]|$)/.test(t))).toEqual([]);
+});
+
+test('isEnabled (f)(g): ws khong ton tai / la file / = home / goc o dia / = goc plugin -> false', () => {
+  const home = tmp();
+  const base = tmp();
+  const file = path.join(base, 'f.txt'); fs.writeFileSync(file, 'x');
+  expect(isEnabled(path.join(base, 'khong-co'), { env: {}, home })).toBe(false);
+  expect(isEnabled(file, { env: {}, home })).toBe(false);
+  expect(isEnabled(home, { env: {}, home })).toBe(false);
+  expect(isEnabled(path.parse(base).root, { env: {}, home })).toBe(false);
+  expect(isEnabled('', { env: {}, home })).toBe(false);
+  expect(isEnabled(PLUGIN, { env: {}, home })).toBe(false);
+  const root = cleanWs();
+  expect(isEnabled(root, { env: {}, home, root })).toBe(false);
+});
+
+test('run() (h): ws sach -> dispatch chay; agy.off -> fallback im lang; thieu workspacePaths -> im lang', async () => {
+  const ws = cleanWs();
+  const pay = JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')] });
+  const root = fakeRoot('console.log(JSON.stringify({ok:1}))');
+  expect(JSON.parse((await runFn('Stop', pay, { root, baseEnv: cleanEnv() })).stdout)).toEqual({ ok: 1 });
+  expect(await runFn('PreToolUse', pay, { root, baseEnv: { ...cleanEnv(), HARNESS_AGY: '0' } })).toEqual({ stdout: fallback('PreToolUse'), stderr: '' });
+  fs.mkdirSync(path.join(ws, '.harness')); fs.writeFileSync(path.join(ws, '.harness', 'agy.off'), '');
+  expect(await runFn('PreToolUse', pay, { root, baseEnv: cleanEnv() })).toEqual({ stdout: fallback('PreToolUse'), stderr: '' });
+  expect(await runFn('Stop', '{}', { root, baseEnv: cleanEnv() })).toEqual({ stdout: '{}\n', stderr: '' });
+});
 
 const fakeRoot = (agyBody) => {
   const root = tmp();
@@ -116,25 +129,4 @@ test('hooks.json goc plugin: 5 su kien, lenh tuong doi toi agy-native.mjs ton ta
   expect(j.SessionStart[0].timeout).toBeGreaterThanOrEqual(30);
   expect(fs.existsSync(path.join(PLUGIN, 'harness', 'hooks', 'dispatch', 'agy-native.mjs'))).toBe(true);
   expect(JSON.parse(fs.readFileSync(path.join(PLUGIN, '.antigravity-plugin', 'plugin.json'), 'utf8')).version).toBe(JSON.parse(fs.readFileSync(path.join(PLUGIN, '.claude-plugin', 'plugin.json'), 'utf8')).version);
-});
-
-test('agy init native: global da cai / lech version / tat / chua cai + cong du an + clone cu + hooks.json cu', () => {
-  const d = tmp();
-  fs.mkdirSync(path.join(d, '.agents'));
-  fs.writeFileSync(path.join(d, '.agents', 'hooks.json'), '{"harness-kit":{}}');
-  const L = (o) => ({ root: '/p/root', version: '0.3.9', list: () => JSON.stringify(o) });
-  const txt = (r) => r.lines.join('\n');
-  const no = native({ dir: d, inj: L([{ name: 'egm', enabled: true }]) });
-  expect(no.code).toBe(1); expect(txt(no)).toContain('agy plugin install "/p/root"'); expect(txt(no)).toContain('[warn] ' + path.join(d, '.agents', 'hooks.json'));
-  expect(txt(no)).toContain('enabledPlugins');
-  const off = native({ dir: d, inj: L([{ name: 'harness-kit', enabled: false, version: '0.3.9' }]) });
-  expect(off.code).toBe(1); expect(txt(off)).toContain('agy plugin enable');
-  const old = native({ dir: d, inj: L([{ name: 'harness-kit', enabled: true, version: '0.3.8' }]) });
-  expect(txt(old)).toContain('0.3.8 != plugin nay 0.3.9'); expect(txt(old)).toContain('agy plugin install');
-  enable(d);
-  const ok = native({ dir: d, inj: L([{ name: 'harness-kit', enabled: true, version: '0.3.9' }]) });
-  expect(ok.code).toBe(0); expect(txt(ok)).toContain('[OK] agy da cai'); expect(txt(ok)).toContain('du an nay da bat'); expect(txt(ok)).not.toContain('clone');
-  fs.mkdirSync(path.join(d, '.agents', 'plugins', 'harness-kit'), { recursive: true });
-  expect(txt(native({ dir: d, inj: L([{ name: 'harness-kit', enabled: true, version: '0.3.9' }]) }))).toContain('ban clone theo du an');
-  expect(fs.readFileSync(path.join(d, '.agents', 'hooks.json'), 'utf8')).toBe('{"harness-kit":{}}'); // khong ghi file
 });
