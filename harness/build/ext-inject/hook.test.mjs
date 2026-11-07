@@ -288,3 +288,20 @@ test('role 8: timeout spawn = min(roleTimeoutMs, deadline - now - 300)', async (
   await handle('SubagentStart', S({ agent_type: 'builder' }), ctx);
   expect(roleCalls(calls)[1].o.timeoutMs).toBe(DEFAULTS.roleTimeoutMs);
 });
+test('role 9: ext thuong loi o SessionStart van giu role job', async () => {
+  const { ctx, calls } = mkR({ run: async (d, a) => { calls.push({ domain: d, args: a }); return d === 'role-dom' ? `ROLE-${a[1]}` : null; } });
+  await handle('SessionStart', S(), ctx);
+  expect(await handle('SubagentStart', S({ agent_type: 'reviewer' }), ctx)).toEqual({ additionalContext: 'ROLE-reviewer' });
+});
+test('role 10: deadline gan het => bo qua job, khong goi run', async () => {
+  const { ctx, calls } = mkR();
+  await handle('SessionStart', S(), ctx);
+  const r = await handle('SubagentStart', S({ agent_type: 'reviewer' }), { ...ctx, deadline: Date.now() + 350 });
+  expect(r).toEqual({ additionalContext: 'common' });
+  expect(roleCalls(calls)).toHaveLength(0);
+});
+test('role 11: ext {agent_type} khong co SubagentStart => khong chay o SessionStart', async () => {
+  const { ctx, calls } = mkR({ readManifest: (r) => (r === 'role' ? { ...RINJ, inject: { ...RINJ.inject, events: ['SessionStart'] } } : INJ) });
+  expect(await handle('SessionStart', S(), ctx)).toEqual({ additionalContext: 'common' });
+  expect(roleCalls(calls)).toHaveLength(0);
+});
