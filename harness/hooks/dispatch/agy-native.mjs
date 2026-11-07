@@ -1,4 +1,4 @@
-// harness-kit: entry hook cho plugin agy NATIVE. Cai GLOBAL (`agy plugin install <goc plugin>`, nguon = cache Claude); agy khong bat theo du an nen hook chay moi workspace -> cong theo du an: chi dispatch khi <ws>/.claude/settings.local.json|settings.json co enabledPlugins["harness-kit@..."] = true (local thang project neu co khoa).
+// harness-kit: entry hook cho plugin agy NATIVE. Cai GLOBAL (`agy plugin install`); agy khong bat theo du an nen hook chay moi workspace -> cong workspace tool-neutral (isEnabled): mac dinh bat, tat bang HARNESS_AGY=0 hoac <ws>/.harness/agy.off; khong doc .claude/*.
 // <plugin>/hooks.json goi `node ./harness/hooks/dispatch/agy-native.mjs <Event>` (cwd hook agy = goc plugin).
 // Goc plugin = suy tu vi tri file nay; workspace = workspacePaths[0] trong stdin (agy khong co env workspace).
 // Thieu/khong hop le -> KHONG dispatch (cwd = goc plugin, audit se ghi nham vao plugin): HKERR + fail-open.
@@ -6,6 +6,7 @@
 // Timeout con: Pre/Post 3500ms (< 5s hooks.json), SessionStart 25000ms (< 30s hooks.json; user-shim goi reg/powershell dong bo).
 // Fail-open: loi -> PreToolUse in {"decision":"allow"}, event khac {}; mot dong HKERR ra stderr; exit 0.
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 // shortcut: spawnSync truc tiep, khong qua core/runtime/proc.mjs (killTree taskkill dong bo toi 10s + khoi dong them lam hook vuot timeout hooks.json); co trong PROC_EXCEPTIONS.
 import { spawnSync } from 'node:child_process';
@@ -26,24 +27,24 @@ export function workspaceOf(input) {
   } catch { return ''; }
 }
 
-/** Du an bat plugin kieu Claude? Moi khoa /^harness-kit@/ trong enabledPlugins: gia tri local (settings.local.json) de len project (settings.json) cho CUNG khoa; bat khi co khoa nao === true. Thieu/BOM/JSON hong/khong phai object = khong bat. */
-export function enabledIn(ws) {
-  const eff = {};
-  for (const f of ['settings.json', 'settings.local.json']) {
-    try {
-      const ep = JSON.parse(fs.readFileSync(path.join(ws, '.claude', f), 'utf8').replace(/^﻿/, '')).enabledPlugins;
-      if (ep && typeof ep === 'object' && !Array.isArray(ep)) for (const k of Object.keys(ep)) if (/^harness-kit@/.test(k)) eff[k] = ep[k];
-    } catch { /* thieu/hong -> bo qua file */ }
-  }
-  return Object.values(eff).some((v) => v === true);
+/** Cong workspace tool-neutral: mac dinh BAT. Tat: env HARNESS_AGY=0 hoac <ws>/.harness/agy.off. Khong bat o: ws khong ton tai/khong phai thu muc, = home, goc o dia, = goc plugin. KHONG doc file cua tool khac. */
+export function isEnabled(ws, { env = process.env, home = os.homedir(), root = ROOT } = {}) {
+  try {
+    if (!ws || env.HARNESS_AGY === '0') return false;
+    const w = path.resolve(ws);
+    const same = (x) => !!x && path.relative(path.resolve(x), w) === '';
+    if (path.parse(w).root === w || same(home) || same(root)) return false;
+    if (!fs.statSync(w).isDirectory()) return false;
+    return !fs.existsSync(path.join(w, '.harness', 'agy.off'));
+  } catch { return false; }
 }
 
 export async function run(event, input, { root = ROOT, baseEnv = process.env } = {}) {
   const fail = (cause) => ({ stdout: fallback(event), stderr: hkerr(cause) });
   if (!/^[A-Za-z]+$/.test(event)) return fail('su kien khong hop le: ' + String(event).slice(0, 40));
   const ws = workspaceOf(input);
-  // Cong truoc: plugin global khong biet du an -> thieu workspacePaths hoac du an chua bat = fail-open IM LANG (khong HKERR, khong ghi gi).
-  if (!ws || !enabledIn(ws)) return { stdout: fallback(event), stderr: '' };
+  // Cong truoc: thieu workspacePaths hoac ws bi tat/khong hop le = fail-open IM LANG (khong HKERR, khong ghi gi).
+  if (!ws || !isEnabled(ws, { env: baseEnv, root })) return { stdout: fallback(event), stderr: '' };
   const env = { ...baseEnv, HARNESS_PLUGIN_DIR: root, CLAUDE_PROJECT_DIR: ws };
   try { (await import(pathToFileURL(path.join(root, 'harness', 'core', 'io', 'paths.mjs')).href)).applyWorkspaceEnv(env, ws); } catch { /* plugin mode mac dinh */ }
   const r = spawnSync(process.execPath, [path.join(root, 'harness', 'hooks', 'dispatch', 'agy.mjs'), event], { input, cwd: root, env, encoding: 'utf8', timeout: event === 'SessionStart' ? 25000 : 3500, windowsHide: true });
