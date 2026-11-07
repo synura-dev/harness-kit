@@ -89,8 +89,7 @@ const SESSION_AGY = {
   id: 'session-agy', events: ['SessionStart'], timeoutMs: 20000, onError: 'open', // < 25s con cua agy-native.mjs (user-shim goi reg/powershell dong bo + doctor)
   async handle() {
     try { // duy tri shim `harness` tren PATH user (cung ham voi duong Claude); thong bao -> stderr (log agy)
-      // shortcut: chay tu staging agy khong co cache plugin Claude -> user-shim bo qua (khong tro shim vao staging: duong dan staging khong on dinh, de len shim cua Claude)
-      const u = await (await import('../../build/user-shim/hook.mjs')).default.handle('SessionStart', {}, {});
+      const u = await (await import('../../build/user-shim/hook.mjs')).default.handle('SessionStart', {}, { tool: 'agy', pluginRoot: path.resolve(HERE, '..', '..', '..') });
       if (u && u.additionalContext) process.stderr.write(u.additionalContext + '\n');
     } catch { /* fail-open */ }
     try { // stamp ban du lieu khoa `agy` (data-stamp, T9); cung dataRoot voi duong audit agy (HUB_DATA_DIR da dat boi agy-native)

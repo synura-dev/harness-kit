@@ -75,6 +75,16 @@ test('renderAgy: allow giu permissionOverrides (marker safe trong records); ask 
   expect(JSON.parse(renderAgy('PostToolUse', safe).stdout)).toEqual({});
 });
 
+test('SessionStart agy: user-shim ghi roots.json khoa agy -> goc plugin (home tam, shim dir da tren PATH nen khong ghi PATH that)', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-shim-')); const home = path.join(d, 'home');
+  const shimDir = path.join(home, process.platform === 'win32' ? '.harness-kit' : '.local', 'bin'); fs.mkdirSync(shimDir, { recursive: true });
+  const e = { ...process.env, NODE_ENV: '', HOME: home, USERPROFILE: home, LOCALAPPDATA: path.join(d, 'Local'), PATH: shimDir, Path: shimDir, HUB_DATA_DIR: path.join(d, 'data'), CLAUDE_AUDIT_DIR: path.join(d, 'audit') };
+  delete e.HOOK_USER_SHIM_ENABLED;
+  spawn(NEW, ['SessionStart', 'session-agy'], JSON.stringify({ conversationId: 'c-shim' }), e);
+  const roots = JSON.parse(fs.readFileSync(path.join(shimDir, 'roots.json'), 'utf8'));
+  expect(roots.agy.root).toBe(path.resolve(import.meta.dir, '..', '..', '..'));
+}, 60000);
+
 test('SessionStart agy ghi stamp khoa agy vao data root (fail-open)', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'agy-stamp-')); const data = path.join(d, 'data');
   const e = { ...process.env, HUB_DATA_DIR: data, CLAUDE_AUDIT_DIR: path.join(d, 'audit'), HOOK_USER_SHIM_ENABLED: '0' };
