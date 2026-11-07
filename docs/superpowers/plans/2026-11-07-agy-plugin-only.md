@@ -111,10 +111,10 @@ Files: `harness/core/io/data-stamp.mjs` + `data-stamp.test.mjs` (moi), `harness/
 
 ### Task 6: Tai lieu + version [sau T1-T5, T8, T9]
 Files: `README.md` (:26 viet lai: "agy: `agy plugin install <goc plugin>`, het"; muc cai gate/opt-out `HARNESS_AGY=0`, `.harness/agy.off`; cap nhat = chay lai lenh; muc cau truc), `harness/hooks/README.md:28`, `harness/hooks/dispatch/README.md`, `harness/constrain/README.md`, `harness/build/README.md`, `harness/observe/README.md` (chi sua cau lien quan cai dat/ cong; khong sua ket luan ky thuat), `CHANGELOG.md` (Added/Changed/Removed/Migration), `.claude-plugin/plugin.json` + `.antigravity-plugin/plugin.json` (cung version, theo cau hoi 5).
-- [ ] Grep `harness agy`, `agy-sync`, `enabledPlugins`, `HARNESS_AGY_AUTOSYNC`, `agy init`, `agy rules` trong *.md (bo docs/superpowers + docs/plans/zero-setup.md ban lich su) = rong.
-- [ ] Chay: `timeout 120 bun test dev/checks` (ref-check/link) neu co kiem tai lieu; hai plugin.json cung version (`node -e` doc 2 file, in ==).
+- [x] Grep `harness agy`, `agy-sync`, `enabledPlugins`, `HARNESS_AGY_AUTOSYNC`, `agy init`, `agy rules` trong *.md (bo docs/superpowers + docs/plans/zero-setup.md ban lich su) = rong.
+- [x] Chay: `timeout 120 bun test dev/checks` (ref-check/link) neu co kiem tai lieu; hai plugin.json cung version (`node -e` doc 2 file, in ==).
 - Done: grep rong; hai version bang nhau; test dev/checks xanh.
-- [ ] Commit: `docs: agy chi can agy plugin install; changelog + version`.
+- [x] Commit: `docs: agy chi can agy plugin install; changelog + version`.
 
 ### Task 7: Acceptance cai sach THAT + rollback drill (builder co `agy`; sau khi main merge T1-T6)
 Chay tren HEAD da merge (khong trong worktree: cai tu goc repo plugin da merge, hoac tu `git clone` HEAD vao scratchpad `P`). Ghi trang thai ban dau theo S0.

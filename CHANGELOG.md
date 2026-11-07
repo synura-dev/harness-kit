@@ -2,6 +2,20 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.0
+### Added
+- agy chi can `agy plugin install <goc plugin>`: agy dua `bin/` cua plugin vao PATH va tu nap `rules/AGENTS.md`. Hook agy mac dinh bat, khong doc `.claude`; tat bang `HARNESS_AGY=0` hoac file `.harness/agy.off`.
+- Hook tu cho phep cac lenh `harness` chi-doc theo allowlist chat (hieu luc tren cau hinh quyen chat chua do duoc).
+- Shim `harness` dung chung cac CLI qua `roots.json` (claude `{scan}`, agy `{root}`).
+- Moi CLI ghi stamp phien ban du lieu; `harness doctor` canh bao mot dong khi hai ben lech.
+### Changed
+- Moi CLI cai doc lap; hai CLI dung chung du lieu harness. Cap nhat agy = chay lai `agy plugin install`.
+### Removed
+- `harness agy`, `agy-sync` (hook SessionStart cua Claude), `HARNESS_AGY_AUTOSYNC`, cong `enabledPlugins` cho agy, adapter dong bo `.agents`. Doctor canh bao di san mot dong.
+### Migration
+- Don file di san bang tay (neu doctor bao): xoa `<du an>/.agents/plugins/harness-kit`, khoa `harness-kit` cu trong `<du an>/.agents/hooks.json`, `.agents/harness-agy-shim.mjs`; sau do chay `agy plugin install <goc plugin>`.
+- Rollback: `git checkout pre-agy-plugin-only` trong repo plugin roi `agy plugin install <goc repo do>`.
+
 ## 0.3.12
 - evolve deprecate do dung that: cua so du lieu thuc theo nguon, doc transcript Claude co cache tang dan, kenh tool/slash/read/preload, loc doc bao tri, khu trung theo callId, nguon -> hanh dong (project/plugin/account/builtin/third_party), chi phi ngu canh theo phien nap; co `--cost`, `--by-project`, `--detail kind:id`; canh bao trung mo ta. Job nen SessionStart chi dung cache (khong parse transcript); CLI quet co khoa. Doctor them `skill-drift`.
 - evolve-effect: chup baseline khi apply, do lai sau 7 ngay, rollback theo effect (ton trong autonomy, nguong mau, doc audit mot lan).

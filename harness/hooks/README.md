@@ -4,7 +4,7 @@ Từ Đợt 5 mọi hook chạy qua MỘT dispatcher: `harness/hooks/dispatch/`.
 Mẫu nhóm, giá trị `adapters` và cách thêm CLI: xem [../README.md](../README.md).
 
 ## Hiện có
-- `dispatch/` — entrypoint duy nhất. `run.mjs <Event>` (Claude, đăng ký `.claude/settings.json`), `agy.mjs <Event>` (agy, đăng ký `.agents/hooks.json`), `modules.mjs` (bảng module theo sự kiện, thứ tự, budget), `merge.mjs` (gộp quyết định).
+- `dispatch/` — entrypoint duy nhất. `run.mjs <Event>` (Claude, đăng ký `.claude/settings.json`), `agy-native.mjs <Event>` (agy, plugin native, `hooks.json` ở gốc plugin), `modules.mjs` (bảng module theo sự kiện, thứ tự, budget), `merge.mjs` (gộp quyết định).
 - `_shared/` — helper agy (`agy.mjs`) và test cấu hình dùng chung. Không phải hook.
 - Module thật nằm ở các nhóm harness, không ở đây:
   - `constrain/`: guard, approval, bash-guard, model-policy, verify-gate, proc-orphans, worktree.
@@ -25,7 +25,7 @@ Mẫu nhóm, giá trị `adapters` và cách thêm CLI: xem [../README.md](../RE
 
 ## Quy tắc
 - Quy ước command: agy chạy hook với cwd = `.agents/`, nên command luôn là `../harness/...`. Claude dùng `$CLAUDE_PROJECT_DIR`. Hook agy không dựa vào `process.cwd()`.
-- agy dùng plugin native: clone vào `<dự án>/.agents/plugins/harness-kit` (hook từ `hooks.json` gốc repo -> `dispatch/agy-native.mjs`); `harness agy init` chỉ kiểm cài đặt và cảnh báo khoá `harness-kit` cũ trong `.agents/hooks.json`. Lưu ý agy 1.4.12 KHÔNG mở rộng `%USERPROFILE%`, `$HOME`, `~`, `${env:...}` trong command hook; command không chứa ngoặc kép hay đường dẫn tuyệt đối.
+- agy dùng plugin native, cài bằng `agy plugin install <gốc plugin>` (hook từ `hooks.json` gốc plugin -> `dispatch/agy-native.mjs`, không đọc `.claude`); tắt bằng `HARNESS_AGY=0` hoặc `.harness/agy.off`. Đã bỏ domain CLI `agy` và đồng bộ `.agents`; doctor cảnh báo một dòng khi còn file di sản. Lưu ý agy 1.4.12 KHÔNG mở rộng `%USERPROFILE%`, `$HOME`, `~`, `${env:...}` trong command hook; command không chứa ngoặc kép hay đường dẫn tuyệt đối.
 - Hook phải fail-open (lỗi nội bộ -> `{}`, exit 0), trừ guard có chủ đích chặn.
 - Mỗi module có config JSON + giá trị mặc định (`DEFAULTS`) trong code; chạy được khi config thiếu/hỏng. File JSON chỉ là lớp ghi đè (`*.config.local.json` cho ghi đè cục bộ, đã gitignore).
 - Thiết kế theo hành vi tổng quát (event -> hành động qua config), không hard-code một mục đích cụ thể.

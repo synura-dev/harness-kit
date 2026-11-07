@@ -1,7 +1,7 @@
 # dispatch - 1 hook cho moi su kien (Dot 5.2b)
 
-`node harness/hooks/dispatch/run.mjs <Event> [module-id]` (Claude), `node ../harness/hooks/dispatch/agy.mjs <Event>` (agy, cwd = `.agents/`).
-Da duoc noi: `.claude/settings.json` va `.agents/hooks.json` deu tro vao dispatcher (1 muc/su kien, tu 5.3).
+`node harness/hooks/dispatch/run.mjs <Event> [module-id]` (Claude), `node ./harness/hooks/dispatch/agy-native.mjs <Event>` (agy, plugin native; cai bang `agy plugin install <goc plugin>`, tat bang `HARNESS_AGY=0` / `.harness/agy.off`).
+Da duoc noi: `.claude/settings.json` (Claude) va `hooks.json` o goc plugin (agy) deu tro vao dispatcher (1 muc/su kien).
 
 ## Cach chay
 1. Doc stdin 1 lan (tran `maxInputBytes`, `stdinTimeoutMs`). JSON hong / rong / qua lon / qua han -> fail-open `{}` exit 0 + vet gate `dispatch:fail-open` (chi ly do ngan, KHONG ghi stdin). WorktreeCreate -> exit 1 + stderr nhu hook cu.
