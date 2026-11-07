@@ -71,9 +71,14 @@ const GUARD_AGY = {
 
 /** session agy: doctor luc SessionStart, MISS/LOI -> stderr; khong chan phien. */
 const SESSION_AGY = {
-  id: 'session-agy', events: ['SessionStart'], timeoutMs: 9000, onError: 'open',
+  id: 'session-agy', events: ['SessionStart'], timeoutMs: 20000, onError: 'open', // < 25s con cua agy-native.mjs (user-shim goi reg/powershell dong bo + doctor)
   async handle() {
-    try { // tu sinh lai shim + local.json neu thieu (chi khi du an da dung hook agy cua harness-kit)
+    try { // duy tri shim `harness` tren PATH user (cung ham voi duong Claude); thong bao -> stderr (log agy)
+      // shortcut: chay tu staging agy khong co cache plugin Claude -> user-shim bo qua (khong tro shim vao staging: duong dan staging khong on dinh, de len shim cua Claude)
+      const u = await (await import('../../build/user-shim/hook.mjs')).default.handle('SessionStart', {}, {});
+      if (u && u.additionalContext) process.stderr.write(u.additionalContext + '\n');
+    } catch { /* fail-open */ }
+    try { // (legacy) tu sinh lai shim + local.json neu thieu (chi khi du an da dung hook agy cua harness-kit)
       const ws = (process.env.CLAUDE_PROJECT_DIR || '').trim();
       const hj = ws && path.join(ws, '.agents', 'hooks.json');
       if (hj && fs.existsSync(hj) && /"harness-kit"/.test(fs.readFileSync(hj, 'utf8'))) { const { init } = await import('../../cli/commands/agy.mjs'); init({ dir: ws }); }

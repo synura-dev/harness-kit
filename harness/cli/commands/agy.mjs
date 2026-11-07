@@ -7,8 +7,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
 
+// harness agy init: mac dinh = kiem plugin native (agy plugin install <repo>), khong ghi file. --legacy = che do shim/.agents/hooks.json ben duoi.
 const PLUGIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 export const HOOK_KEY = 'harness-kit';
 export const SHIM = 'harness-agy-shim.mjs';
@@ -55,7 +57,31 @@ export function mergeHooks(existing) {
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
 const parse = (s) => JSON.parse(String(s).replace(/^﻿/, ''));
 
-/** init: { dir, check, pluginRoot } -> { code, lines } */
+/** native: agy da cai plugin harness-kit chua (`agy plugin list --json`) + canh bao hooks.json cu cua du an (hook doi).
+ *  inj.list = () => stdout JSON (test). Khong ghi file. -> { code, lines } */
+export function native({ dir, pluginRoot = PLUGIN, inj = {} } = {}) {
+  const lines = [];
+  let code = 0;
+  let installed = null;
+  let disabled = false;
+  try {
+    const out = inj.list ? inj.list() : spawnSync('agy', ['plugin', 'list', '--json'], { encoding: 'utf8', timeout: 15000, windowsHide: true, shell: process.platform === 'win32' }).stdout;
+    const j = JSON.parse(String(out || ''));
+    // agy 1.5.2: JSON array [{name, enabled, version, path, skills...}]
+    const arr = Array.isArray(j) ? j : (j && (j.plugins || j.items)) || [];
+    const me = arr.find((p) => (p && typeof p === 'object' ? p.name === 'harness-kit' : p === 'harness-kit'));
+    installed = !!me;
+    if (me && typeof me === 'object' && me.enabled === false) disabled = true;
+  } catch { /* khong co agy / khong parse duoc */ }
+  if (installed === true && disabled) { code = 1; lines.push('[warn] plugin harness-kit da cai nhung dang tat (enabled=false) -> hook khong chay', '-> chay: agy plugin enable harness-kit'); }
+  else if (installed === true) lines.push('[OK] agy da cai plugin harness-kit (native)');
+  else { code = 1; lines.push(installed === null ? '[?] khong doc duoc `agy plugin list --json` (agy chua cai?)' : '[THIEU] agy chua cai plugin harness-kit', `-> chay: agy plugin install "${path.resolve(pluginRoot)}"`); }
+  const raw = read(path.join(dir, '.agents', 'hooks.json'));
+  if (raw && /"harness-kit"/.test(raw)) lines.push(`[warn] ${path.join(dir, '.agents', 'hooks.json')} con khoa "${HOOK_KEY}" cu -> hook chay doi khi plugin da cai; xoa khoa do (va .agents/${SHIM}, .agents/${LOCAL}) bang tay`);
+  return { code, lines };
+}
+
+/** init (legacy, shim theo du an; dung `harness agy init --legacy`): { dir, check, pluginRoot } -> { code, lines } */
 export function init({ dir, check = false, pluginRoot = PLUGIN } = {}) {
   const ag = path.join(dir, '.agents');
   const lines = [];
@@ -120,7 +146,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const sub = a[0] && !a[0].startsWith('--') ? a[0] : 'index';
   const di = a.indexOf('--dir');
   const dir = path.resolve(di >= 0 && a[di + 1] ? a[di + 1] : (process.env.CLAUDE_PROJECT_DIR || '').trim() || process.cwd());
-  if (sub === 'init') { const r = init({ dir, check: a.includes('--check') }); console.log(`du an: ${dir}`); for (const l of r.lines) console.log(l); process.exit(r.code); }
+  if (sub === 'init') { const r = a.includes('--legacy') ? init({ dir, check: a.includes('--check') }) : native({ dir }); console.log(`du an: ${dir}`); for (const l of r.lines) console.log(l); process.exit(r.code); }
   else if (sub === 'rules') process.exit(await rules(a.includes('--apply')));
-  else { console.log('harness agy init [--check] [--dir <du an>] | rules [--print|--apply]'); process.exit(sub === 'index' ? 0 : 2); }
+  else { console.log('harness agy init [--dir <du an>] [--legacy [--check]] | rules [--print|--apply]'); process.exit(sub === 'index' ? 0 : 2); }
 }
