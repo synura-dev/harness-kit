@@ -10,7 +10,6 @@ const PLUGIN = path.resolve(import.meta.dir, '..', '..', '..');
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'hk-agynat-'));
 const cleanEnv = () => { const e = { ...process.env }; for (const k of ['CLAUDE_AUDIT_DIR', 'HUB_DATA_DIR', 'HARNESS_CONFIG_DIR', 'CLAUDE_PROJECT_DIR', 'HARNESS_PLUGIN_DIR']) delete e[k]; return e; };
 const run = (event, input) => spawnSync(process.execPath, [SCRIPT, event], { input, cwd: PLUGIN, env: cleanEnv(), encoding: 'utf8', timeout: 30000 });
-const enable = (ws, v = true, f = 'settings.json') => { fs.mkdirSync(path.join(ws, '.claude'), { recursive: true }); fs.writeFileSync(path.join(ws, '.claude', f), JSON.stringify({ enabledPlugins: { 'harness-kit@synura': v } })); };
 const listAll = (d) => (fs.existsSync(d) ? fs.readdirSync(d, { recursive: true }).map((p) => String(p).replace(/\\/g, '/')) : []);
 
 test('workspaceOf: workspacePaths[0] (dau /); thieu/khong hop le -> rong (khong cwd)', () => {
@@ -28,7 +27,6 @@ test('fallback: Pre = allow, con lai {}', () => {
 test('PreToolUse that: ls -> allow; python - -> deny; audit that roi vao workspace tu stdin (khong override env)', () => {
   const ws = tmp();
   fs.mkdirSync(path.join(ws, '.git')); // dau hieu workspace de applyWorkspaceEnv dat du lieu trong <ws>
-  enable(ws);
   const pay = (cmd) => JSON.stringify({ conversationId: 'c1', workspacePaths: [ws.replace(/\\/g, '/')], toolCall: { name: 'run_command', args: { CommandLine: cmd } } });
   expect(JSON.parse(run('PreToolUse', pay('ls')).stdout)).toEqual({ decision: 'allow' });
   expect(JSON.parse(run('PreToolUse', pay('python -')).stdout).decision).toBe('deny');
@@ -72,7 +70,19 @@ test('isEnabled (d): khoa .claude cu khong con hieu luc va khong bi doc (spy fs)
     const r = await runFn('Stop', pay, { root: fakeRoot('console.log("{}")'), baseEnv: cleanEnv() });
     expect(JSON.parse(r.stdout)).toEqual({});
   } finally { restore.forEach((f) => f()); }
+  expect(touched.some((t) => t.includes('agy.off'))).toBe(true); // doi chung duong: spy that su bat duoc cham fs
   expect(touched.filter((t) => /[\\/]\.claude([\\/]|$)/.test(t))).toEqual([]);
+});
+
+test('isEnabled: loi fs la (EPERM) -> false + dung 1 dong HKERR; ENOENT -> false im lang', () => {
+  const home = tmp();
+  const ws = cleanWs();
+  const logs = [];
+  const eperm = () => { throw Object.assign(new Error('EPERM: operation not permitted'), { code: 'EPERM' }); };
+  expect(isEnabled(ws, { env: {}, home, stat: eperm, log: (s) => logs.push(s) })).toBe(false);
+  expect(logs.length).toBe(1); expect(logs[0].startsWith('HKERR ')).toBe(true); expect(logs[0]).toContain('EPERM');
+  expect(isEnabled(path.join(ws, 'khong-co'), { env: {}, home, log: (s) => logs.push(s) })).toBe(false);
+  expect(logs.length).toBe(1);
 });
 
 test('isEnabled (f)(g): ws khong ton tai / la file / = home / goc o dia / = goc plugin -> false', () => {
@@ -107,7 +117,7 @@ const fakeRoot = (agyBody) => {
   if (agyBody != null) fs.writeFileSync(path.join(dir, 'agy.mjs'), agyBody);
   return root;
 };
-const runFake = (body, ev) => { const ws = tmp(); enable(ws); return runFn(ev, JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')] }), { root: fakeRoot(body), baseEnv: cleanEnv() }); };
+const runFake = (body, ev) => { const ws = tmp(); return runFn(ev, JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')] }), { root: fakeRoot(body), baseEnv: cleanEnv() }); };
 
 test('run(): dispatch thieu / exit != 0 / output khong phai JSON -> fail-open + HKERR; output JSON hop le duoc giu', async () => {
   for (const body of [null, 'process.exit(3)', 'console.log("khong json")']) {

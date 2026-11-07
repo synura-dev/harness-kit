@@ -28,15 +28,19 @@ export function workspaceOf(input) {
 }
 
 /** Cong workspace tool-neutral: mac dinh BAT. Tat: env HARNESS_AGY=0 hoac <ws>/.harness/agy.off. Khong bat o: ws khong ton tai/khong phai thu muc, = home, goc o dia, = goc plugin. KHONG doc file cua tool khac. */
-export function isEnabled(ws, { env = process.env, home = os.homedir(), root = ROOT } = {}) {
+export function isEnabled(ws, { env = process.env, home = os.homedir(), root = ROOT, stat = fs.statSync, log = (s) => process.stderr.write(s) } = {}) {
   try {
     if (!ws || env.HARNESS_AGY === '0') return false;
     const w = path.resolve(ws);
     const same = (x) => !!x && path.relative(path.resolve(x), w) === '';
     if (path.parse(w).root === w || same(home) || same(root)) return false;
-    if (!fs.statSync(w).isDirectory()) return false;
+    if (!stat(w).isDirectory()) return false;
     return !fs.existsSync(path.join(w, '.harness', 'agy.off'));
-  } catch { return false; }
+  } catch (e) {
+    // ENOENT/ENOTDIR = ws khong hop le (im lang); loi khac (EPERM/EACCES...) = fail-open nhung ghi 1 dong HKERR.
+    if (!e || (e.code !== 'ENOENT' && e.code !== 'ENOTDIR')) log(hkerr('cong workspace loi fs: ' + ((e && (e.code || e.message)) || e)));
+    return false;
+  }
 }
 
 export async function run(event, input, { root = ROOT, baseEnv = process.env } = {}) {
