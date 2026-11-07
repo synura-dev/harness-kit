@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 import { TOP_FILES } from '../../core/config/constants.mjs';
 import { dataRoot, workspaceRoot, toPosix, REPO_DIR } from '../../core/io/paths.mjs';
+import { stampSession } from '../../core/io/data-stamp.mjs';
 import { SCAN_CACHE_REL, formatWarn } from '../../core/registry/data-registry.mjs';
 import { isStdRootFile } from '../storage/std-root.mjs';
 import { doctorAuto } from './doctor-auto.mjs';
@@ -113,6 +114,7 @@ export function pruneState(dd, cfg = {}, now = Date.now()) {
 
 async function sessionStart(input, cfg, ctx) {
   const dd = dataRoot(null, ctx.env ? { env: ctx.env } : {});
+  stampSession('claude', { dataRoot: dd }); // stamp ban du lieu (data-stamp); duong agy: xem SESSION_AGY
   const file = path.join(dd, SCAN_CACHE_REL);
   const scan = rd(file);
   const age = scan && scan.ts ? Date.now() - Date.parse(scan.ts) : Infinity;

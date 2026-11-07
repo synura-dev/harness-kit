@@ -1,4 +1,4 @@
-// Antigravity (AGY) lifecycle hook adapter for audit logging (lives with the audit group; no import from .claude).
+// Antigravity (AGY) lifecycle hook adapter for audit logging (lives with the audit group; tool-neutral).
 // Receives AGY hook JSON on stdin, normalizes fields for audit.mjs, and records audit envelope.
 // Always outputs {} and exits 0 (fail-open).
 

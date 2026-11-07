@@ -1,4 +1,4 @@
-// harness-kit: entry hook cho plugin agy NATIVE. Cai GLOBAL (`agy plugin install`); agy khong bat theo du an nen hook chay moi workspace -> cong workspace tool-neutral (isEnabled): mac dinh bat, tat bang HARNESS_AGY=0 hoac <ws>/.harness/agy.off; khong doc .claude/*.
+// harness-kit: entry hook cho plugin agy NATIVE. Cai GLOBAL (`agy plugin install`); agy khong bat theo du an nen hook chay moi workspace -> cong workspace tool-neutral (isEnabled): mac dinh bat, tat bang HARNESS_AGY=0 hoac <ws>/.harness/agy.off; khong doc file cau hinh cua tool khac.
 // <plugin>/hooks.json goi `node ./harness/hooks/dispatch/agy-native.mjs <Event>` (cwd hook agy = goc plugin).
 // Goc plugin = suy tu vi tri file nay; workspace = workspacePaths[0] trong stdin (agy khong co env workspace).
 // Thieu/khong hop le -> KHONG dispatch (cwd = goc plugin, audit se ghi nham vao plugin): HKERR + fail-open.
