@@ -220,5 +220,5 @@ export const DUP_ALLOW = Object.freeze([
   { name: 'log', files: ['harness/constrain/guard/hook.mjs', 'harness/constrain/worktree/hook.mjs'], reason: 'ghi nhat ky rieng cua tung hook; hook doc lap, fail-open, khong import hook khac' },
   { name: 'rel', files: ['harness/core/checks/scan-input.mjs', 'harness/tools/adapters/_util.mjs'], reason: 'tools/adapters khong import core vi sync.test copy rieng tools/ (than ham giong het)' },
   { name: 'handle', files: ['harness/constrain/bash-guard/hook.mjs', 'harness/constrain/bash-guard/adapters/agy.mjs', 'harness/constrain/guard/hook.mjs', 'harness/constrain/model-policy/hook.mjs', 'harness/constrain/proc-orphans/hook.mjs', 'harness/constrain/worktree/hook.mjs', 'harness/observe/audit/audit.mjs', 'harness/observe/audit/adapters/agy.mjs'], reason: 'giao dien chung HOOK_MODULE handle(event, input, ctx) (+ adapter agy cung ten): moi module hook doc lap (cam import hook khac), dispatcher goi cung ten; vinh vien' },
-  { name: 'run', files: ['harness/tools/adapters/agy.mjs', 'harness/tools/adapters/claude.mjs'], reason: 'giao dien adapter chung run({root,check}) do sync.mjs goi; khong phai entry CLI' },
+  { name: 'run', files: ['harness/tools/adapters/claude.mjs'], reason: 'giao dien adapter chung run({root,check}) do sync.mjs goi; khong phai entry CLI' },
 ]);
