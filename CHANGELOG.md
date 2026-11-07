@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.11
+- ext-inject: placeholder `{agent_type}` trong `inject.args`, nap ngu canh theo vai tro o SubagentStart (cache theo vai tro 30 phut, tran rieng moi ext kep 30 dong/3KB, fail-open).
+
 ## 0.3.10
 - ext-guard fail-open khi timeout: dispatcher va ext-guard khong con deny khi guard/module het gio hoac loi spawn (cho qua + canh bao + audit `rule=fail-open`); chi chan khi co tin hieu vi pham ro (hash ext lech/chua duyet: kiem het truoc khi spawn; guard exit 2: tra ngay, guard chay song song nen ext treo khong lam mat deny that). Thong bao va hanh vi nhat quan.
 - agy-sync: hook SessionStart cua Claude tu chay `agy plugin install "<cache plugin>"` (nen, chi nang cap, chi khi phien khoi dong) khi ban agy cu hon ban plugin Claude; khoa + gian thoi gian thu lai; tat bang `HARNESS_AGY_AUTOSYNC=0`.
