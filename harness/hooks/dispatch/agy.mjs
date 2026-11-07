@@ -73,7 +73,8 @@ const GUARD_AGY = {
 const SESSION_AGY = {
   id: 'session-agy', events: ['SessionStart'], timeoutMs: 9000, onError: 'open',
   async handle() {
-    try { // tu sinh lai shim + local.json neu thieu (chi khi du an da dung hook agy cua harness-kit)
+    try { await (await import('../../build/user-shim/hook.mjs')).default.handle('SessionStart', {}, {}); } catch { /* fail-open */ } // duy tri shim `harness` tren PATH user (cung ham voi duong Claude)
+    try { // (legacy) tu sinh lai shim + local.json neu thieu (chi khi du an da dung hook agy cua harness-kit)
       const ws = (process.env.CLAUDE_PROJECT_DIR || '').trim();
       const hj = ws && path.join(ws, '.agents', 'hooks.json');
       if (hj && fs.existsSync(hj) && /"harness-kit"/.test(fs.readFileSync(hj, 'utf8'))) { const { init } = await import('../../cli/commands/agy.mjs'); init({ dir: ws }); }
