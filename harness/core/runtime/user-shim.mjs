@@ -32,12 +32,13 @@ export const rootsFile = (dir, platform = process.platform) => pp(platform).join
 
 const readRoots = (file) => { try { const o = JSON.parse(read(file) || '{}'); return o && typeof o === 'object' && !Array.isArray(o) ? o : {}; } catch { return {}; } };
 
-// JS chay bang `node -e`: khong dung " % $ ` (an toan trong ca cmd lan sh). R = duong roots.json ({tool:{root,version}}):
+// JS chay bang `node -e`: khong dung " % $ ` (an toan trong ca cmd lan sh). R = duong roots.json ({tool:{root,version}|{scan}}):
 // bo qua khoa co root da vang, chon version cao nhat (so sanh so: 0.1.10 > 0.1.9); het root -> thong bao + exit 3.
 const js = (R) => [
   "const f=require('fs'),p=require('path'),c=require('child_process');",
   `const R='${R}';let r={};try{r=JSON.parse(f.readFileSync(R,'utf8'))}catch(e){}`,
-  "const L=Object.keys(r).map(k=>r[k]).filter(e=>e&&e.root&&f.existsSync(p.join(e.root,'bin','harness')));",
+  "let L=[];for(const k of Object.keys(r)){const e=r[k]||{};if(e.scan){let d=[];try{d=f.readdirSync(e.scan)}catch(x){}for(const v of d)L.push({root:p.join(e.scan,v),version:v})}else if(e.root)L.push(e)}",
+  "L=L.filter(e=>f.existsSync(p.join(e.root,'bin','harness')));",
   "if(!L.length){console.error('harness: khong tim thay plugin harness-kit (roots.json: '+R+'); chay lai phien CLI de shim tu cap nhat');process.exit(3)}",
   "L.sort((x,y)=>String(x.version||'').localeCompare(String(y.version||''),'en',{numeric:true}));",
   "const b=p.join(L.pop().root,'bin','harness');",
@@ -200,12 +201,12 @@ export function strayShims(dir, { platform = process.platform, env = process.env
 }
 
 /** Ghi khoa `tool` vao roots.json canh shim, giu khoa khac; -> true neu file doi. pluginRoot rong -> khong ghi. */
-function writeRoot(dir, tool, pluginRoot, platform) {
+function writeRoot(dir, tool, pluginRoot, platform, scan) {
   if (!pluginRoot) return false;
   const file = rootsFile(dir, platform);
   const roots = readRoots(file);
   const root = path.resolve(pluginRoot);
-  const next = { ...roots, [tool]: { root, version: rootVersion(root) } };
+  const next = { ...roots, [tool]: scan ? { scan: path.resolve(scan) } : { root, version: rootVersion(root) } };
   const text = `${JSON.stringify(next, null, 2)}\n`;
   if (read(file) === text) return false;
   fs.mkdirSync(dir, { recursive: true });
@@ -216,14 +217,15 @@ function writeRoot(dir, tool, pluginRoot, platform) {
 /**
  * Logic DUY NHAT cai/duy tri shim: ghi shim vao dir (mac dinh co dinh), dam bao PATH user, xoa shim cua ta o cho khac.
  * -> {ok, dir, tool, files, blocked, path:{state, where, error?}, removed[], rootsChanged}. apply=false: chi bao, khong ghi gi.
+ * scan (tuy chon) = thu muc cha cac ban (plugin hay bi doi/xoa thu muc ban cu): khoa ghi {scan}, shim quet chon ban cao nhat co bin/harness; khong co -> {root, version}.
  * tool = khoa trong roots.json ('agy' | 'claude' | 'local' cho `harness install --shim` tay): chi ghi/cap nhat khoa cua minh, giu khoa tool khac.
  */
-export function syncUserShim({ dir, apply = true, force = false, platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath, pluginRoot, tool = 'local' }) {
+export function syncUserShim({ dir, apply = true, force = false, platform = process.platform, env = process.env, home = os.homedir(), regPath, setUserPath, pluginRoot, tool = 'local', scan }) {
   const target = dir || defaultShimDir({ platform, env, home });
   const plan = planShim({ dir: target, platform, force });
   const res = { ok: !plan.blocked, dir: target, tool, files: plan.files, blocked: plan.blocked, path: null, removed: [], rootsChanged: false };
   if (plan.blocked) return res;
-  if (apply) { applyShim(plan); res.rootsChanged = writeRoot(target, tool, pluginRoot, platform); }
+  if (apply) { applyShim(plan); res.rootsChanged = writeRoot(target, tool, pluginRoot, platform, scan); }
   res.path = ensureUserPath(target, { platform, env, home, regPath, setUserPath, apply });
   res.removed = strayShims(target, { platform, env, home });
   if (apply) for (const f of res.removed) try { fs.unlinkSync(f); } catch { /* bo qua */ }

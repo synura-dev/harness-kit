@@ -83,6 +83,19 @@ test('(c) khoa tool kia vang -> shim bo qua no, dung khoa con lai; khoa cua chin
   expect(r.claude.root).toBe(alive);
 });
 
+test('scan: root cu bien mat nhung thu muc scan con ban moi hon -> shim chon ban moi; syncUserShim({scan}) ghi {scan} khong ghi root', () => {
+  const inj = mkInj();
+  const cache = mk('cache', 'harness-kit');
+  const mkVer = (v) => { fs.mkdirSync(path.join(cache, v, 'bin'), { recursive: true }); fs.writeFileSync(path.join(cache, v, 'bin', 'harness'), `console.log(JSON.stringify(['${v}', ...process.argv.slice(2)])); process.exit(7);\n`); };
+  mkVer('0.1.9'); mkVer('0.1.10');
+  const s = syncUserShim({ tool: 'claude', pluginRoot: path.join(cache, '0.1.9'), scan: cache, ...inj });
+  expect(rootsOf(s.dir).claude).toEqual({ scan: path.resolve(cache) });
+  for (const r of runShim(s.dir, ['x'])) { expect(r.status).toBe(7); expect(JSON.parse(r.stdout.trim().split(/\r?\n/).pop())).toEqual(['0.1.10', 'x']); }
+  fs.rmSync(path.join(cache, '0.1.10'), { recursive: true }); // ban moi bi xoa, chi con 0.1.9 -> van chay, khong crash
+  for (const r of runShim(s.dir, ['y'])) { expect(r.status).toBe(7); expect(JSON.parse(r.stdout.trim().split(/\r?\n/).pop())).toEqual(['0.1.9', 'y']); }
+  expect(syncUserShim({ tool: 'claude', pluginRoot: path.join(cache, '0.1.9'), scan: cache, ...inj }).rootsChanged).toBe(false);
+});
+
 test('(d) ca hai root vang -> shim in thong bao + exit 3, khong crash', () => {
   const dir = mk('bin');
   applyShim(planShim({ dir }));

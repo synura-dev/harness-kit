@@ -1,4 +1,4 @@
-// Chi-Claude: tim thu muc cache plugin Claude (noi duy nhat user-shim biet duong cai cua Claude). Duong agy KHONG import file nay.
+// Core (khong tren duong agy): tim thu muc cache plugin Claude (noi duy nhat user-shim biet duong cai cua Claude). Duong agy KHONG import file nay.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

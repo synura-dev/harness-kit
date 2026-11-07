@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';
 import { REPO_DIR } from '../../core/io/paths.mjs';
 import { syncUserShim } from '../../core/runtime/user-shim.mjs';
-import { pluginCacheDir } from './claude-cache.mjs';
+import { pluginCacheDir } from '../../core/runtime/claude-cache.mjs';
 import fs from 'node:fs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,8 +30,9 @@ export async function handle(event, input, ctx = {}) {
     if (!ctx.inj && process.env.NODE_ENV === 'test') return {};
     const tool = ctx.tool || 'claude';
     // claude: chay tu nguon (khong cache plugin) -> bo qua; tool khac (agy): chi can goc plugin co bin/harness, khong doc thu muc cai cua Claude.
-    if (tool === 'claude' ? !pluginCacheDir(pluginRoot, inj) : !fs.existsSync(path.join(pluginRoot, 'bin', 'harness'))) return {};
-    const s = syncUserShim({ pluginRoot, tool, ...inj });
+    const scan = tool === 'claude' ? pluginCacheDir(pluginRoot, inj) : null; // claude: ban cu co the bi xoa -> shim quet thu muc cache; agy: thu muc cai on dinh
+    if (tool === 'claude' ? !scan : !fs.existsSync(path.join(pluginRoot, 'bin', 'harness'))) return {};
+    const s = syncUserShim({ pluginRoot, tool, ...(scan ? { scan } : {}), ...inj });
     const tag = 'harness-kit user-shim:';
     if (s.blocked) return { additionalContext: `${tag} ${s.files.find((f) => f.action === 'foreign').file} khong do harness-kit sinh, khong ghi de. Muon thay: harness install --shim --force` };
     if (s.path.state === 'error') return { additionalContext: `${tag} khong them duoc ${s.dir} vao PATH user (${s.path.error}); tu them vao PATH` };

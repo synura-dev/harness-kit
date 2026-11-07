@@ -56,7 +56,7 @@ test('cli --shim: dry-run khong ghi, ghi that idempotent, tu choi file la tru --
   expect(text).toContain('se tao');
   expect(main(['--shim', '--dir', dir], io, { shim })).toBe(0);
   const names = fs.readdirSync(dir).sort();
-  expect(names).toEqual(process.platform === 'win32' ? ['harness', 'harness.cmd'] : ['harness']);
+  expect(names).toEqual(process.platform === 'win32' ? ['harness', 'harness.cmd', 'roots.json'] : ['harness', 'roots.json']);
   text = '';
   expect(main(['--shim', '--dir', dir], io, { shim })).toBe(0);
   expect(text).toContain('khop (bo qua)');

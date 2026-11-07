@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import hook, { handle, load } from './hook.mjs';
-import { pluginCacheDir } from './claude-cache.mjs';
+import { pluginCacheDir } from '../../core/runtime/claude-cache.mjs';
 import { rootsFile } from '../../core/runtime/user-shim.mjs';
 
 // KHONG ghi PATH that: luon tiem regPath + setUserPath gia, LOCALAPPDATA/home tam.
@@ -59,6 +59,7 @@ const roots = () => JSON.parse(fs.readFileSync(rootsFile(shimDir()), 'utf8'));
 test('(i) claude: ghi khoa claude; claude-cache.pluginCacheDir suy tu pluginRoot trong cache, quet CLAUDE_CONFIG_DIR, null khi khong co', async () => {
   await handle('SessionStart', {}, { cfg, pluginRoot: plug, inj });
   expect(Object.keys(roots())).toEqual(['claude']);
+  expect(roots().claude).toEqual({ scan: path.dirname(plug) });
   const cache = path.dirname(plug);
   expect(pluginCacheDir(plug)).toBe(cache);
   const src = path.join(tmp, 'src', 'harness-kit'); fs.mkdirSync(src, { recursive: true });
