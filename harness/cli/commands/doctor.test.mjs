@@ -173,3 +173,19 @@ test('doctor: di san agy -> dung 1 dong [warn], exit code khong doi; sach -> kho
   expect(a.stdout).not.toContain('di san agy cu');
   expect(b.status).toBe(a.status);
 }, 120000);
+
+test('doctor: stamp tool kia moi hon (version/schema) -> dung 1 dong [warn] lech ban, exit khong doi; khong stamp -> khong dong', async () => {
+  const hub = await fixHub(true);
+  const dd = fs.mkdtempSync(path.join(os.tmpdir(), 'doc-stamp-'));
+  const run = () => spawnSync('node', [DOCTOR], { encoding: 'utf8', timeout: 60000, env: { ...baseEnv, HUB_DIR: hub, HUB_DATA_DIR: dd } });
+  const a = run();
+  expect(a.stdout).not.toContain('lech ban du lieu');
+  fs.writeFileSync(path.join(dd, '.harness-writers.json'), JSON.stringify({ agy: { version: '999.0.0', schema: 99, at: 'x' } }));
+  const b = run();
+  const w = b.stdout.split('\n').filter((l) => l.includes('lech ban du lieu'));
+  expect(w.length).toBe(1);
+  expect(w[0].startsWith('[warn]')).toBe(true);
+  expect(w[0]).toContain('schema');
+  expect(w[0]).toContain('version');
+  expect(b.status).toBe(a.status);
+}, 120000);

@@ -228,6 +228,14 @@ try {
   if (jh) warn('ledger-job', `ledger job loi: ${jh.error} (${new Date(jh.at).toISOString()}); xem harness observe ledger`);
   else if (st.lastRun && Date.now() - Number(st.lastRun) > 72 * 3600e3) warn('ledger-job', `ledger job khong chay tu ${new Date(Number(st.lastRun)).toISOString()} (>72h)`);
 } catch (e) { console.log('[warn] ledger-job check loi:', e.message); }
+// lech ban du lieu giua hai CLI (cung data root): stamp tool kia co schema/version moi hon -> MOT dong warn, khong chan, khong ghi.
+try {
+  const { readStamps, compareStamps, pluginVersion, DATA_SCHEMA } = await import('../../core/io/data-stamp.mjs');
+  const { dataRoot } = await import('../../core/io/paths.mjs');
+  const v = pluginVersion('claude') || pluginVersion('agy');
+  const w = v ? compareStamps({ version: v, schema: DATA_SCHEMA }, readStamps(dataRoot(null))) : [];
+  if (w.length) warn('data-stamp', `lech ban du lieu giua hai CLI: ${w.join('; ')}`);
+} catch { /* fail-open */ }
 // runtime: config guard hop le + du lieu (data scan: retention/dang ky/stray). Check phat trien nam o dev/.
 try {
   const rows = [];
