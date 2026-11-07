@@ -23,7 +23,7 @@ A Claude Code plugin that adds a deterministic constraint layer around AI agents
 No further setup is needed. The plugin provides the Claude hooks, and the `harness` CLI is on the Bash tool's PATH.
 
 - Outside Claude (PowerShell, cmd, your own bash): the first Claude session installs a `harness` shim through the SessionStart hook; open a new terminal afterwards. Manual install: `harness install --shim [--dir D] [--dry-run] [--force]`. Disable with `HOOK_USER_SHIM_ENABLED=0`.
-- agy: run `harness agy init` once per project.
+- agy: `agy plugin install "<plugin root>"` once (native plugin: hooks.json + skills; no per-project shim). `harness agy init` checks it and warns about old `.agents/hooks.json` entries (`--legacy` = old per-project shim).
 - Health check: `/harness-kit:doctor` or `harness doctor`.
 
 Notes:
