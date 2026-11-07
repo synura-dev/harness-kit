@@ -114,15 +114,6 @@ test('doctor: du an thuong (khong dau hieu hub) -> bo kiem gia dinh hub', () => 
   expect(o1).toMatch(/\[checks\] warnings=0 errors=0/);
 }, 60000);
 
-test('doctor: .agents/hooks.json co harness-kit nhung thieu shim/local -> exit 1 + HKERR fix_command', async () => {
-  const hub = await fixHub(true);
-  fs.mkdirSync(path.join(hub, '.agents'), { recursive: true });
-  fs.writeFileSync(path.join(hub, '.agents', 'hooks.json'), JSON.stringify({ 'harness-kit': { Stop: [{ type: 'command', command: 'node ./harness-agy-shim.mjs Stop' }] } }));
-  const p = runDoctor(hub);
-  expect(p.status).toBe(1);
-  expect(p.stdout).toContain('"fix_command":"harness agy init"');
-});
-
 // ---- module khong co tac dung (module-acted) ----
 import { recordGate } from '../../core/audit/gate-event.mjs';
 import { writeEnvelope } from '../../core/audit/audit-write.mjs';

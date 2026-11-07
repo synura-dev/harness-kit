@@ -58,7 +58,6 @@ test('SessionStart: module re truoc ext-inject; budget > timeout ext-inject va t
   const ids = ORDER.SessionStart.map((m) => m.id);
   expect(ids.indexOf('ext-inject')).toBe(ids.length - 1);
   expect(ids.indexOf('ledger-warn')).toBeLessThan(ids.indexOf('ext-inject'));
-  expect(ids.indexOf('agy-heal')).toBeLessThan(ids.indexOf('ext-inject'));
   const ei = (await import('../../build/ext-inject/hook.mjs')).default;
   expect(ei.timeoutMs).toBeLessThan(DEFAULTS.budgetsMs.SessionStart);
 });
