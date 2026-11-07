@@ -27,7 +27,7 @@ const day = (date, sid, n, e, extra = []) => {
 const base = (o = {}) => ({ window_days: 7, from: 'x', to: 'y', target_count: 10, tool_calls: 1000, rate_per_1000: 10, sessions: 5, tokens_per_session: 1000, corrections_per_session: 1, ...o });
 const aft = (rate, o = {}) => ({ tool_calls: 1000, target_count: rate, rate_per_1000: rate, tokens_per_session: 1000, corrections_per_session: 1, ...o });
 const prop = (id, o = {}) => ({ id, kind: 'rule', status: 'applied', ver: 'v1', applied_at: '2026-10-20T00:00:00Z', evidence: { fp: FP }, effect: { baseline: base() }, ...o });
-const opts = (x = {}) => ({ auditDir: audit, ...x });
+const opts = (x = {}) => ({ auditDir: audit, retentionDays: 30, auditConfig: {}, ...x }); // hermetic: khong doc audit-config that
 
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'evolve-eff-')); audit = path.join(tmp, 'audit'); });
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
@@ -45,7 +45,7 @@ test('verdictOf: bien chinh xac 0.7 / 1.3 va giua', () => {
 test('verdictOf: insufficient (mau nho / baseline it), het 21 ngay -> inconclusive', () => {
   const small = aft(0, { tool_calls: EFFECT.minToolCalls - 1 });
   expect(verdictOf(base(), small, { ageDays: 8 })).toMatchObject({ verdict: 'insufficient', reason: 'low_tool_calls' });
-  expect(verdictOf(base({ target_count: 2, rate_per_1000: 2 }), aft(0), { ageDays: 8 })).toMatchObject({ verdict: 'insufficient', reason: 'low_baseline' });
+  expect(verdictOf(base({ target_count: 9, rate_per_1000: 9 }), aft(0), { ageDays: 8 })).toMatchObject({ verdict: 'insufficient', reason: 'low_baseline' });
   expect(verdictOf(base(), small, { ageDays: 21 }).verdict).toBe('insufficient');
   expect(verdictOf(base(), small, { ageDays: 21.5 })).toMatchObject({ verdict: 'inconclusive', reason: 'low_tool_calls' });
 });
@@ -98,11 +98,27 @@ test('tokens_per_session: cumulative lay max theo sid, delta cong don', () => {
   expect(r.tokens_per_session).toBe((300 + 400) / 2);
 });
 
-test('measureDue: unchanged/worse -> action rollback', () => {
+test('measureDue: chi worse -> action rollback; unchanged -> keep', () => {
   day('2026-10-26', 's1', 300, 3); day('2026-10-27', 's1', 300, 3);
   const [x] = measureDue([prop('a')], NOW, opts());
   expect(x.effect.verdict).toBe('unchanged');
-  expect(x.effect.action).toBe('rollback');
+  expect(x.effect.action).toBe('keep');
+  const [w] = measureDue([prop('a', { effect: { baseline: base({ target_count: 10, rate_per_1000: 2 }) } })], NOW, opts());
+  expect(w.effect).toMatchObject({ verdict: 'worse', action: 'rollback' });
+});
+
+test('verdictOf: mau baseline toi thieu 10 loi', () => {
+  expect(EFFECT.minBaselineErrors).toBe(10);
+  expect(verdictOf(base({ target_count: 3, rate_per_1000: 3 }), aft(3.33)).verdict).toBe('insufficient');
+});
+
+test('appliedMs: dong hong/ts sai khong lam NaN; doc tail co gioi han', () => {
+  day('2026-10-26', 's1', 300, 1); day('2026-10-27', 's1', 300, 1);
+  const evo = path.join(tmp, 'evo'); fs.mkdirSync(evo, { recursive: true });
+  const junk = 'x'.repeat(2 * 1048576) + '\n'; // 2MB rac dau file, ngoai tran doc
+  fs.writeFileSync(path.join(evo, 'applied.jsonl'), junk + JSON.stringify({ ts: '2026-10-20T00:00:00Z', op: 'apply', ok: true, id: 'a' }) + '\n{hong\n' + JSON.stringify({ ts: 'khong-phai-ngay', op: 'apply', ok: true, id: 'a' }) + '\n');
+  const [x] = measureDue([prop('a', { applied_at: undefined })], NOW, opts({ dataRoot: evo }));
+  expect(x.effect.verdict).toBe('better');
 });
 
 test('measureDue: truncated -> insufficient reason truncated, khong hanh dong', () => {
@@ -113,9 +129,9 @@ test('measureDue: truncated -> insufficient reason truncated, khong hanh dong', 
 
 test('measureDue: khong baseline -> tinh bu tu audit neu con trong cua so, khong thi no_baseline', () => {
   // apply 2026-10-20: baseline 10-13..10-20, con trong retention 30 ngay tinh tu NOW
-  day('2026-10-15', 's0', 200, 4); day('2026-10-26', 's1', 300, 1); day('2026-10-27', 's1', 300, 1);
+  day('2026-10-15', 's0', 200, 10); day('2026-10-26', 's1', 300, 1); day('2026-10-27', 's1', 300, 1);
   const [x] = measureDue([prop('a', { effect: undefined })], NOW, opts());
-  expect(x.effect.baseline).toMatchObject({ target_count: 4, tool_calls: 204 });
+  expect(x.effect.baseline).toMatchObject({ target_count: 10, tool_calls: 210 });
   expect(x.effect.verdict).toBe('better');
   const [y] = measureDue([prop('old', { effect: undefined, applied_at: '2026-09-01T00:00:00Z' })], NOW, opts());
   expect(y.effect).toMatchObject({ verdict: 'inconclusive', reason: 'no_baseline', action: 'keep' }); // qua 21 ngay -> chot, khong doc lai mai
@@ -123,7 +139,7 @@ test('measureDue: khong baseline -> tinh bu tu audit neu con trong cua so, khong
 
 test('measureDue: nhom chi 1 loi trong cua so after van dem la 1 (khong bias better)', () => {
   day('2026-10-27', 's1', 300, 1);
-  const [x] = measureDue([prop('a', { effect: { baseline: base({ target_count: 3, rate_per_1000: 3 }) } })], NOW, opts());
+  const [x] = measureDue([prop('a', { effect: { baseline: base({ target_count: 10, rate_per_1000: 1000 / 300 }) } })], NOW, opts());
   expect(x.effect.after.target_count).toBe(1);
   expect(x.effect.verdict).toBe('unchanged');
 });

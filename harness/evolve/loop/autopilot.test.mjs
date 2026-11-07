@@ -177,9 +177,10 @@ const AFTER = '2026-11-03';
 const T8 = () => ({ ...o, nowMs: NOW + 8 * DAY, ledgerEntries: [], force: true });
 const readProp = (id) => JSON.parse(fs.readFileSync(path.join(o.dataRoot, 'proposals', `${id}.json`), 'utf8'));
 const logOps = () => fs.readFileSync(path.join(o.dataRoot, 'applied.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
-// ap luat luc NOW voi baseline 3 loi / 30 call (rate 100/1000)
+// ap luat luc NOW voi baseline 10 loi / 100 call (rate 100/1000; ngay 10-29 da co 3 loi tu beforeEach)
+const base10 = () => { okCalls('2026-10-29', 'sb', 90); failN('2026-10-29', 'sb7', 7); };
 async function applied() {
-  okCalls('2026-10-29', 'sb', 27);
+  base10();
   const r = await runAutopilot({ ...o, ledgerEntries: [entry(FP)] });
   return { r, target: path.join(o.dataBase, ...r.applied[0].target.split('/')), pid: readState(o).applied[0].pid };
 }
@@ -195,21 +196,101 @@ test('effect: better -> giu, ghi proposal.effect + dong op:effect', async () => 
   expect(readState(o).applied[0].status).toBe('kept');
 });
 
-test('effect: unchanged -> rollback kem ly do, ledger rolled_back', async () => {
+test('effect: unchanged -> giu (verdict cuoi, khong rollback)', async () => {
   fs.writeFileSync(o.ledgerFile, JSON.stringify(entry(FP)) + '\n');
-  okCalls('2026-10-29', 'sb', 27);
+  base10();
   const r = await runAutopilot(o);
   const target = path.join(o.dataBase, ...r.applied[0].target.split('/'));
   okCalls(AFTER, 'sa', 180); failN(AFTER, 'sf', 20); // 20/200 = 100/1000 = baseline
   const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(0); expect(t.kept.length).toBe(1);
+  expect(fs.existsSync(target)).toBe(true);
+  const pid = readState(o).applied[0].pid;
+  expect(readProp(pid)).toMatchObject({ status: 'applied', effect: { verdict: 'unchanged' } });
+  expect(readProp(pid).effect.action).not.toBe('rollback');
+  expect(logOps().some((x) => x.op === 'rollback')).toBe(false);
+});
+
+test('effect: worse -> rollback kem ly do, ledger rolled_back', async () => {
+  fs.writeFileSync(o.ledgerFile, JSON.stringify(entry(FP)) + '\n');
+  base10();
+  const r = await runAutopilot(o);
+  const target = path.join(o.dataBase, ...r.applied[0].target.split('/'));
+  okCalls(AFTER, 'sa', 160); failN(AFTER, 'sf', 40);
+  const t = await runAutopilot(T8());
   expect(t.rolledBack.length).toBe(1); expect(t.rolledBack[0].reason).toMatch(/rate/);
   expect(fs.existsSync(target)).toBe(false);
   const pid = readState(o).applied[0].pid;
-  expect(readProp(pid)).toMatchObject({ status: 'rolled_back', effect: { verdict: 'unchanged', action: 'rollback' } });
+  expect(readProp(pid)).toMatchObject({ status: 'rolled_back', effect: { verdict: 'worse', action: 'rollback' } });
   expect(readState(o).applied[0].status).toBe('rolled_back');
-  expect(logOps().some((x) => x.op === 'effect' && x.verdict === 'unchanged')).toBe(true);
   expect(logOps().some((x) => x.op === 'rollback' && x.ok)).toBe(true);
   expect(JSON.parse(fs.readFileSync(o.ledgerFile, 'utf8').split('\n')[0]).evolve.status).toBe('rolled_back');
+});
+
+test('effect: baseline < 10 loi (3/1000 -> 3.33/1000 nhieu) -> insufficient, khong rollback', async () => {
+  okCalls('2026-10-29', 'sb', 997); // 3 loi / 1000 call
+  const r = await runAutopilot({ ...o, ledgerEntries: [entry(FP)] });
+  const target = path.join(o.dataBase, ...r.applied[0].target.split('/'));
+  okCalls(AFTER, 'sa', 299); failN(AFTER, 'sf', 1); // 3.33/1000
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(0);
+  expect(fs.existsSync(target)).toBe(true);
+  expect(readProp(readState(o).applied[0].pid).effect).toMatchObject({ verdict: 'insufficient', reason: 'low_baseline' });
+});
+
+test('effect: autonomy 0 -> chi ghi effect, khong tu rollback luat da duyet', async () => {
+  const { target, pid } = await applied();
+  worse();
+  const t = await runAutopilot({ ...T8(), cfg: { autonomy: 0 } });
+  expect(t.rolledBack.length).toBe(0);
+  expect(fs.existsSync(target)).toBe(true);
+  expect(readProp(pid)).toMatchObject({ status: 'applied', effect: { verdict: 'worse' } });
+  expect(logOps().some((x) => x.op === 'rollback' && x.ok)).toBe(false);
+});
+
+test('effect: luat ap tay (khong co trong state.applied) worse -> ghi effect + refused, khong rollback', async () => {
+  const { target, pid } = await applied();
+  const sf = path.join(apDir(o), 'state.json'); const st = JSON.parse(fs.readFileSync(sf, 'utf8')); st.applied = []; fs.writeFileSync(sf, JSON.stringify(st));
+  worse();
+  const t = await runAutopilot(T8());
+  expect(t.rolledBack.length).toBe(0);
+  expect(t.refused).toMatchObject([{ entry: pid }]); expect(t.refused[0].reason).toMatch(/tay/);
+  expect(fs.existsSync(target)).toBe(true);
+  expect(readProp(pid)).toMatchObject({ status: 'applied', effect: { verdict: 'worse' } });
+});
+
+test('autopilot ap nhieu luat chi doc audit MOT lan', async () => {
+  for (const f of ['b', 'c']) three('2026-10-29', 's' + f, f.repeat(10), 'err ' + f);
+  let reads = 0;
+  const r = await runAutopilot({ ...o, ledgerEntries: [FP, 'b'.repeat(10), 'c'.repeat(10)].map((fp) => entry(fp)), onRead: () => { reads++; } });
+  expect(r.applied.length).toBe(3);
+  expect(reads).toBe(1);
+  expect(readProp(readState(o).applied[0].pid).effect.baseline).toMatchObject({ target_count: 3 }); // baseline tinh dung tu cache
+});
+
+test('effect: rollback that bai -> ghi rollback_error/attempts, thu lai, thanh cong thi rolled_back', async () => {
+  const { target, pid } = await applied();
+  const orig = fs.readFileSync(target, 'utf8');
+  fs.writeFileSync(target, 'bi sua tay');
+  worse();
+  await runAutopilot(T8());
+  expect(readProp(pid).effect).toMatchObject({ verdict: 'worse', rollback_attempts: 1 });
+  expect(readProp(pid).effect.rollback_error).toBeTruthy();
+  await runAutopilot({ ...T8(), nowMs: NOW + 9 * DAY });
+  expect(readProp(pid).effect.rollback_attempts).toBe(2);
+  fs.writeFileSync(target, orig);
+  const t = await runAutopilot({ ...T8(), nowMs: NOW + 10 * DAY });
+  expect(t.rolledBack.length).toBe(1);
+  expect(readProp(pid).status).toBe('rolled_back');
+});
+
+test('effect: rollback that bai 3 lan -> dung thu, de nguoi', async () => {
+  const { target, pid } = await applied();
+  fs.writeFileSync(target, 'bi sua tay');
+  worse();
+  for (const d of [8, 9, 10, 11, 12]) await runAutopilot({ ...T8(), nowMs: NOW + d * DAY });
+  expect(readProp(pid).effect.rollback_attempts).toBe(3);
+  expect(readProp(pid).status).toBe('applied');
 });
 
 test('effect: worse -> rollback', async () => {
