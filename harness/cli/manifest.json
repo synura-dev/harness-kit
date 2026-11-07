@@ -23,6 +23,7 @@
   "files": {
     "helpers": [
       "commands/doctor.mjs",
+      "commands/skill-drift.mjs",
       "commands/worktree.mjs",
       "commands/config.mjs",
       "commands/ext-registry.mjs",
@@ -32,6 +33,7 @@
   },
   "tests": [
     "commands/doctor.test.mjs",
+    "commands/skill-drift.test.mjs",
     "commands/adapters.test.mjs",
     "commands/worktree.test.mjs",
     "commands/config.test.mjs",
