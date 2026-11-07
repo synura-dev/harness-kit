@@ -155,9 +155,9 @@ test('integ: skill chi trong transcript (Skill tool) -> khong deprecate', async 
 
 test('integ: doc SKILL.md <5/turn tinh la dung; 20 doc / 1 turn = khong dung', async () => {
   const t = ISO(NOW - DAY);
-  const one = user(t, 's1', 'hi') + asst(t, 's1', [readUse('r1', '/x/old/SKILL.md')]);
+  const one = user(t, 's1', 'hi') + asst(t, 's1', [readUse('r1', '/x/skills/old/SKILL.md')]);
   assert.equal((await integ({ tr: one })).dep('old'), undefined);
-  const many = user(t, 's1', 'hi') + asst(t, 's1', Array.from({ length: 20 }, (_, i) => readUse(`r${i}`, `/x/s${i}/SKILL.md`)).concat([readUse('rr', '/x/old/SKILL.md')]));
+  const many = user(t, 's1', 'hi') + asst(t, 's1', Array.from({ length: 20 }, (_, i) => readUse(`r${i}`, `/x/skills/s${i}/SKILL.md`)).concat([readUse('rr', '/x/skills/old/SKILL.md')]));
   const m = await integ({ tr: many });
   assert.ok(m.dep('old')); assert.equal(m.r.maintenance_dropped, 21);
 });
@@ -196,4 +196,70 @@ test('integ: gateWindow: du lieu 8 ngay -> insufficient_window, khong pending; s
   assert.equal(r.sources.audit.window_days, 8);
   assert.equal(r.items.filter((i) => i.status === 'pending' || i.status === 'propose_remove').length, 0);
   assert.equal(r.items.find((i) => i.id === 'skill:old').status, 'insufficient_window');
+});
+
+// ---- wire2: slash khong dem doi, total_sessions chinh xac, source/action, cost, dupes, detail ----
+const slashU = (ts, sid, uuid, name) => line({ type: 'user', uuid, sessionId: sid, timestamp: ts, message: { role: 'user', content: `<command-name>/${name}</command-name>` } });
+
+test('integ: slash o audit (UserPromptSubmit) + transcript dem 1 lan (audit khong sinh su kien slash)', async () => {
+  const t = ISO(NOW - DAY);
+  const audit = line({ ts: t, sid: 's1', event: 'UserPromptSubmit', data: { prompt: '<command-name>/old</command-name>' }, target: '/old' });
+  const { r } = await integ({ tr: slashU(t, 's1', 'u1', 'old'), audit });
+  assert.equal(r.usage_counts.skill.old, 1);
+});
+
+test('integ: total_sessions = phien phan biet tren MOI dong transcript trong cua so (ke ca dong khong khop prefilter)', async () => {
+  const t = ISO(NOW - DAY);
+  const tr = user(t, 's1', 'hi') + asst(t, 's1', [skillUse('t1', 'old')]) + asst(t, 's2', [{ type: 'text', text: 'khong khop' }]) + user(t, 's3', 'chao') + asst(ISO(NOW - 60 * DAY), 's0', [{ type: 'text', text: 'cu' }]);
+  const { r } = await integ({ tr });
+  assert.equal(r.total_sessions, 3);
+});
+
+test('integ: source/action cho moi muc kiem ke; skill project -> delete_in_repo, plugin -> edit_plugin_repo', async () => {
+  const pr = tmp(); wr(path.join(pr, 'skills/ps/SKILL.md'), '---\nname: ps\ndescription: abc\n---\nbody');
+  const { r } = await integ({ tr: '', opts: { pluginRoot: pr } });
+  const inv = (k, n) => r.inventory.find((i) => i.kind === k && i.name === n);
+  assert.equal(inv('skill', 'old').source, 'project'); assert.equal(inv('skill', 'old').action, 'delete_in_repo');
+  assert.equal(inv('skill', 'ps').source, 'plugin'); assert.equal(inv('skill', 'ps').action, 'edit_plugin_repo');
+  assert.ok(r.inventory.every((i) => i.source && i.action));
+});
+
+test('buildCandidates: canPropose=false (builtin/third_party/unknown/account) -> report_only, khong pending/propose_remove', () => {
+  const inv = { ...emptyInv, skills: ['builtin', 'third_party', 'unknown', 'account'].map((s) => ({ name: `n-${s}`, source: s, action: 'report_only' })) };
+  const r = buildCandidates({ inv, usage: countUsage([], emptyInv).usage, nowMs: NOW, window: W(new Date(NOW - 30 * DAY).toISOString()), waitDays: 0 });
+  const dep = r.items.filter((i) => i.kind === 'deprecate');
+  assert.equal(dep.length, 4);
+  for (const i of dep) { assert.equal(i.status, 'report_only'); assert.equal(i.action, 'report_only'); assert.ok(i.source); }
+  assert.deepEqual(r.state, {});
+});
+
+test('integ: skill tai khoan (anthropic-skills:*) chi liet ke khi thay trong usage, source account, khong deprecate', async () => {
+  const t = ISO(NOW - DAY);
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('a1', 'anthropic-skills:pdf')]) });
+  const x = r.inventory.find((i) => i.kind === 'skill' && i.name === 'pdf');
+  assert.equal(x.source, 'account'); assert.equal(x.action, 'disable_on_claude_ai'); assert.equal(x.count, 1);
+  assert.equal(r.items.find((i) => i.id === 'skill:pdf'), undefined);
+});
+
+test('integ: cost {desc,body,windowCost,costPerUse} theo total_sessions; dupes tu mo ta skill', async () => {
+  const proj = tmp(), trDir = tmp(), auditDir = tmp();
+  const sk = (d) => `---\nname: x\ndescription: ${d}\n---\n${'b'.repeat(40)}`;
+  wr(path.join(proj, '.claude/skills/a/SKILL.md'), sk('quan ly tri thuc luu tru bao cao nghien cuu'));
+  wr(path.join(proj, '.claude/skills/b/SKILL.md'), sk('quan ly tri thuc luu tru bao cao nghien cuu'));
+  const t = ISO(NOW - DAY);
+  wr(path.join(trDir, 'p1', 's.jsonl'), user(t, 's1', 'hi') + asst(t, 's1', [skillUse('t1', 'a')]) + user(t, 's2', 'hi'));
+  const r = await pruneCandidates({ pluginRoot: tmp(), projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], nowMs: NOW, order: {} });
+  const a = r.inventory.find((i) => i.name === 'a');
+  assert.equal(r.total_sessions, 2);
+  assert.ok(a.cost.desc_tokens > 0); assert.equal(a.cost.body_tokens, 10);
+  assert.equal(a.cost.windowCost, a.cost.desc_tokens * 2 + 10 * 1);
+  assert.equal(a.cost.costPerUse, a.cost.windowCost);
+  assert.equal(r.dupes.pairs.length, 1);
+});
+
+test('integ: usage_detail co channels, sessions, ids day du, projects cho --detail', async () => {
+  const t = ISO(NOW - DAY);
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('t1', 'superpowers:old')]) });
+  const d = r.usage_detail['skill:old'];
+  assert.equal(d.count, 1); assert.deepEqual(d.channels, { tool: 1 }); assert.deepEqual(d.ids, ['superpowers:old']); assert.deepEqual(d.session_ids, ['s1']);
 });

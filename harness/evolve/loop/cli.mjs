@@ -30,6 +30,9 @@ export function parseArgs(argv) {
     else if (k === '--target') o.target = val();
     else if (k === '--approve') o.approve = true;
     else if (k === '--force') o.force = true;
+    else if (k === '--cost') o.cost = true;
+    else if (k === '--by-project') o.byProject = true;
+    else if (k === '--detail') o.detail = val();
     else if (!o.cmd && !a.startsWith('-')) o.cmd = a;
     else if (!o.arg && !a.startsWith('-')) o.arg = a;
     else throw new Error(`tham so la: ${a}`);
