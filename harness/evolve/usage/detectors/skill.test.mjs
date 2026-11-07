@@ -20,9 +20,24 @@ test('slash channel: skill vs command', () => {
   const r = rec([{ type: 'text', text: '<command-name>/harness-kit:doctor</command-name>' }], 'user');
   assert.equal(detect(r, { skillNames: new Set(['doctor']) })[0].kind, 'skill');
   assert.equal(detect(r, { skillNames: new Set(['doctor']) })[0].channel, 'slash');
-  assert.equal(detect(r, {})[0].kind, 'command');
+  assert.equal(detect(r, { commandIds: new Set(['harness-kit:doctor']) })[0].kind, 'command');
   const s = rec('<command-name>/foo</command-name>', 'user');
-  assert.equal(detect(s, {})[0].id, 'foo');
+  assert.equal(detect(s, { commandIds: new Set(['foo']) })[0].id, 'foo');
+});
+
+test('slash: built-ins and unknown names are dropped (not skill, not harness command)', () => {
+  for (const n of ['clear', 'model', 'compact']) {
+    const r = rec([{ type: 'text', text: `<command-name>/${n}</command-name>` }], 'user');
+    assert.deepEqual(detect(r, { skillNames: new Set(['doctor']), commandIds: new Set(['tasks.new']) }), []);
+    assert.deepEqual(detect(r, {}), []);
+  }
+});
+
+test('read on third-party plugin paths is not joined to a local skill', () => {
+  for (const f of ['C:\\Users\\u\\.claude\\plugins\\cache\\m\\p\\1.0\\skills\\old\\SKILL.md', '/h/.claude/plugins/marketplaces/m/skills/old/SKILL.md']) {
+    assert.deepEqual(detect(rec([tu('Read', { file_path: f })]), { skillNames: new Set(['old']) }), []);
+  }
+  assert.equal(detect(rec([tu('Read', { file_path: '/proj/.claude/skills/old/SKILL.md' })]), {})[0].id, 'old');
 });
 
 test('read channel', () => {

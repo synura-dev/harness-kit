@@ -1,5 +1,5 @@
 // Giu harness gon: kiem ke thanh phan tat dinh + muc dung 30 ngay tu audit -> ung vien 'deprecate' (pending -> propose_remove) va 'cap' (vuot tran).
-// Chi doc (tru ghi prune-state.json khi --record). Khong xoa gi. Co timeout + tran byte, bao truncated.
+// Chi doc (tru ghi prune-state.json khi --record va transcripts-cache.jsonl, deu trong data evolve). Khong xoa gi. Co timeout + tran byte, bao truncated.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -12,7 +12,7 @@ import { readTranscripts } from '../usage/transcripts.mjs';
 import { detectAudit, detectTranscript } from '../usage/detectors/index.mjs';
 import { parseFrontmatter } from '../../core/agy/agents.mjs';
 import { classifySource, actionFor, canPropose } from '../usage/source.mjs';
-import { componentCost, windowCost } from '../usage/cost.mjs';
+import { componentCost, windowCost, scopeSessions, projectFolder } from '../usage/cost.mjs';
 import { findDupes } from '../usage/dupes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -30,7 +30,14 @@ const lsFiles = (p) => { try { return fs.readdirSync(p, { withFileTypes: true })
 const sha8 = (s) => crypto.createHash('sha1').update(s).digest('hex').slice(0, 8);
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
-const pluginName = (root) => { try { return JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).name || null; } catch { return null; } };
+const PN = new Map();
+const pluginName = (root) => {
+  if (!PN.has(root)) { let n = null; try { n = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).name || null; } catch { /* khong co plugin.json */ } PN.set(root, n); }
+  return PN.get(root);
+};
+const readInstalledPlugins = () => { try { return JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8')); } catch { return null; } };
+const normP = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
+const isUnder = (p, root) => { const a = normP(p), b = normP(root); return !!b && (a === b || a.startsWith(b + '/')); };
 /** Nguon + hanh dong cua mot duong dan: chi project|plugin(so huu) moi go truc tiep duoc; con lai report_only. */
 export function sourceOf(p, { pluginRoot = PLUGIN_ROOT, projectDir = '', ownedPlugins = [] } = {}) {
   const owned = [pluginName(pluginRoot), ...(ownedPlugins || [])].filter(Boolean);
@@ -61,11 +68,15 @@ function walkManifests(dir, out, depth = 0) {
 export function inventoryCommands({ pluginRoot = PLUGIN_ROOT, extRoots = [], projectDir = '', ownedPlugins = [] } = {}) {
   const files = [];
   walkManifests(path.join(pluginRoot, 'harness'), files);
-  for (const r of extRoots) walkManifests(r, files);
+  const inProject = new Set(); // ext hub dang ky nam trong du an -> xoa duoc trong repo
+  for (const r of extRoots) {
+    const n = files.length; walkManifests(r, files);
+    if (projectDir && isUnder(r, projectDir)) for (let i = n; i < files.length; i++) inProject.add(files[i]);
+  }
   const set = new Map();
   let sc = null;
   for (const f of files) {
-    sc = sourceOf(f, { pluginRoot, projectDir, ownedPlugins }); // ext ngoai plugin -> unknown -> report_only (an toan)
+    sc = inProject.has(f) ? { source: 'project', action: actionFor('project') } : sourceOf(f, { pluginRoot, projectDir, ownedPlugins }); // ext ngoai du an/plugin -> unknown -> report_only (an toan)
     let m; try { m = JSON.parse(fs.readFileSync(f, 'utf8')); } catch { continue; }
     const add = (domain, cmd) => { if (domain && cmd) set.set(`${domain}.${cmd}`, { type: 'command', name: `${domain}.${cmd}`, domain, cmd, ...sc }); };
     if (m.kind === 'cli' && m.domain) for (const c of cmdNames(m.cmds)) add(m.domain, c);
@@ -125,9 +136,13 @@ const MARK = ['"Skill"', '"Agent"', '"Task"', 'HookRun', 'harness ', '"agent_id"
 export async function readUsageEvents({ auditDirs, fromMs, nowMs = Date.now(), timeoutMs = PRUNE.timeoutMs, maxBytes = PRUNE.maxBytes }) {
   const fromDate = isoDay(fromMs);
   const deadline = Date.now() + timeoutMs;
-  const events = []; let scanned = 0, bytes = 0, truncated = null, earliest_ts = null; // earliest_ts: truoc loc ts (do do phu cua so)
+  // earliest_ts = ten partition date= CU NHAT trong moi partition (chi ten thu muc, khong doc file; phu ca phan truoc cua so);
+  // khong co partition -> ts su kien som nhat. hookrun_earliest: HookRun som nhat TRUOC loc ts (cong hook).
+  const events = []; let scanned = 0, bytes = 0, truncated = null, earliest_ts = null, part = null, hookrun_earliest = null;
   outer: for (const root of auditDirs) {
-    const files = collectJsonlFiles(root).filter((f) => { const d = dateOfPath(f); return !d || d >= fromDate; });
+    const all = collectJsonlFiles(root);
+    for (const f of all) { const d = dateOfPath(f); if (d && (!part || d < part)) part = d; }
+    const files = all.filter((f) => { const d = dateOfPath(f); return !d || d >= fromDate; });
     for (const f of files) {
       let sz = 0; try { sz = fs.statSync(f).size; } catch { continue; }
       if (bytes + sz > maxBytes) { truncated = 'max_bytes'; break outer; }
@@ -143,12 +158,14 @@ export async function readUsageEvents({ auditDirs, fromMs, nowMs = Date.now(), t
         scanned++;
         const ts = Date.parse(e.ts);
         if (ts <= nowMs + DAY && (!earliest_ts || ts < Date.parse(earliest_ts))) earliest_ts = e.ts;
+        if (e.event === 'HookRun' && ts <= nowMs + DAY && (!hookrun_earliest || ts < Date.parse(hookrun_earliest))) hookrun_earliest = e.ts;
         if (!(ts >= fromMs && ts <= nowMs + DAY)) continue;
         events.push(gw ? { gw: true, ts: e.ts, sid: e.session, domain: e.domain, cmd: e.cmd } : e);
       }
     }
   }
-  return { events, scanned, bytes, truncated, earliest_ts };
+  if (part) earliest_ts = `${part}T00:00:00.000Z`;
+  return { events, scanned, bytes, truncated, earliest_ts, hookrun_earliest };
 }
 
 /** Su kien audit (qua detector adapters) + so lieu nguon. opts.auditSkill=false: bo Skill audit thieu tool_use_id (da lay tu transcript). */
@@ -189,13 +206,6 @@ export function usageFrom(events, { gwFirst = null, stats = {}, maintenanceReads
   return { usage, sources: src, duplicates_dropped: c.duplicates_dropped, maintenance_dropped: fm.maintenance_dropped };
 }
 
-/** Dem muc dung tu audit (chu ky cu). Lenh: gateway log; truoc ngay gateway dau tien -> fallback Bash `harness <domain> <cmd>`. */
-export function countUsage(events, inv, opts = {}) {
-  const a = auditEvents(events, inv, opts);
-  const r = usageFrom(a.events, { gwFirst: a.gwFirst, stats: a.stats, maintenanceReads: opts.maintenanceReads });
-  return { usage: r.usage, sources: r.sources };
-}
-
 /**
  * Hop nhat -> items {id,kind,fp,count,sessions,first_ts,last_ts,sample,cost_ms,+status,pending_since,propose_after}.
  * state: {[id]:{pending_since}}. 0 dung -> pending (kem ngay); con 0 sau waitDays -> propose_remove.
@@ -228,6 +238,7 @@ export function buildCandidates({ inv, usage, state = {}, caps = {}, nowMs = Dat
       const w = window && window[type];
       if (w && !(w.earliest && Date.parse(w.earliest) <= nowMs - days * DAY + DAY)) {
         const wd = w.earliest ? Math.floor((nowMs - Date.parse(w.earliest)) / DAY) : 0;
+        if (state[id]) nextState[id] = state[id]; // giu dong ho cu: cua so tam thieu khong duoc lam mat pending_since
         items.push({ id, kind: 'deprecate', fp: id, count: 0, sessions: 0, first_ts: null, last_ts: null, sample: `${type} ${c.name}: du lieu chi ${wd} ngay < ${days}`, cost_ms: 0, status: 'insufficient_window', window_days: wd, ...tag });
         continue;
       }
@@ -285,8 +296,8 @@ export async function pruneCandidates(o = {}) {
   let trEvents = [], sessions = new Set();
   if (tr) {
     // reader chi loc theo mtime file -> loc lai theo ts record (earliest_ts do truoc loc)
-    const recs = tr.records.filter((x) => Date.parse(x.ts) >= fromMs);
-    const ctx = { skillNames: new Set(inv.skills.map((s) => s.name)), agentSkills: agentSkills(o) };
+    const recs = tr.records.filter((x) => { const t = Date.parse(x.ts); return t >= fromMs && t <= nowMs + DAY; });
+    const ctx = { skillNames: new Set(inv.skills.map((s) => s.name)), commandIds: new Set(inv.commands.map((c) => c.name)), agentSkills: agentSkills(o) };
     trEvents = recs.flatMap((x) => detectTranscript(x, ctx));
   } else for (const e of r.events) if (e.sid) sessions.add(e.sid);
   const u = usageFrom([...a.events, ...trEvents], { gwFirst: a.gwFirst, stats: a.stats, maintenanceReads: o.maintenanceReads });
@@ -295,7 +306,7 @@ export async function pruneCandidates(o = {}) {
   const src = { ...u.sources, audit: { earliest: r.earliest_ts, window_days: daysSince(r.earliest_ts, nowMs) } };
   if (tr) src.transcript = { earliest: tr.earliest_ts, window_days: daysSince(tr.earliest_ts, nowMs), files: tr.files_read, cache_hits: tr.cache_hits, truncated: tr.truncated };
   const skillE = tr ? tr.earliest_ts : r.earliest_ts;
-  const window = o.gateWindow ? { skill: { earliest: skillE }, agent: { earliest: r.earliest_ts }, command: { earliest: r.earliest_ts }, hook: { earliest: src.hookrun_since } } : undefined;
+  const window = o.gateWindow !== false ? { skill: { earliest: skillE }, agent: { earliest: r.earliest_ts }, command: { earliest: r.earliest_ts }, hook: { earliest: r.hookrun_earliest || src.hookrun_since } } : undefined;
   const b = buildCandidates({ inv, usage, state: o.state || {}, caps: o.caps, nowMs, days, waitDays: o.waitDays, skipDeprecate: !!trunc, window });
   const used = {}, usage_counts = {};
   for (const t of Object.keys(usage)) { used[t] = usage[t].m.size; usage_counts[t] = Object.fromEntries([...usage[t].m].map(([k, x]) => [k, x.count])); }
@@ -304,6 +315,11 @@ export async function pruneCandidates(o = {}) {
   // skill tai khoan (anthropic-skills:*) khong co file local: chi liet ke khi thay trong usage (khong vao counts/cap/deprecate)
   const account = [...new Set([...a.events, ...trEvents].filter((e) => e.kind === 'skill' && String(e.id).startsWith('anthropic-skills:')).map((e) => e.short))]
     .map((name) => ({ type: 'skill', name, source: 'account', action: actionFor('account') }));
+  // so phien noi thanh phan thuc su nap: project = thu muc du an; plugin = du an cai plugin; con lai = tat ca (khong co transcript -> tat ca)
+  const installed = o.installedPlugins !== undefined ? o.installedPlugins : readInstalledPlugins();
+  const plug = pluginName(o.pluginRoot || PLUGIN_ROOT);
+  const sessFor = (c) => (tr ? scopeSessions({ source: c.source, plugin: plug }, { total: total_sessions, byProject: tr.project_sessions, projectDir: o.projectDir, installed }) : total_sessions);
+  const hub_sessions = tr && o.projectDir ? tr.project_sessions[projectFolder(o.projectDir)] || 0 : null;
   const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
   const inventory = [], descs = [];
   for (const [type, list] of Object.entries({ command: inv.commands, hook: inv.hooks, skill: [...inv.skills, ...account], agent: inv.agents, rule: inv.rules })) {
@@ -313,7 +329,7 @@ export async function pruneCandidates(o = {}) {
       const base = type === 'rule' ? componentCost({ kind: 'rule', body: c.text }) : type === 'skill' || type === 'agent' ? componentCost({ kind: type, body: text }) : { desc_tokens: 0, body_tokens: 0 };
       const x = usage[type]?.get(c.name);
       const count = x ? x.count : 0;
-      const wc = windowCost(base, { count, totalSessions: total_sessions });
+      const wc = windowCost(base, { count, totalSessions: sessFor(c) });
       inventory.push({ kind: type, name: c.name, source: c.source, action: c.action, count, sessions: x ? x.sessions : 0, first_ts: x ? x.first : null, last_ts: x ? x.last : null, cost: { ...base, windowCost: wc, costPerUse: wc / Math.max(count, 1) } });
       if ((type === 'skill' || type === 'agent') && text) descs.push({ id: `${type}:${c.name}`, kind: type, description: descOf(text) });
     }
@@ -323,7 +339,7 @@ export async function pruneCandidates(o = {}) {
   const sourceByKey = Object.fromEntries(inventory.map((i) => [`${i.kind}:${i.name}`, { source: i.source, action: i.action, cost: i.cost }]));
   for (const [k, d] of Object.entries(usage_detail)) Object.assign(d, sourceByKey[k] || {});
   const dupes = findDupes(descs);
-  return { days, scanned: r.scanned, truncated: trunc, sources: src, used, usage_counts, duplicates_dropped: u.duplicates_dropped, maintenance_dropped: u.maintenance_dropped, total_sessions, inventory, usage_detail, dupes, ...b };
+  return { days, scanned: r.scanned, truncated: trunc, sources: src, used, usage_counts, duplicates_dropped: u.duplicates_dropped, maintenance_dropped: u.maintenance_dropped, total_sessions, hub_sessions, inventory, usage_detail, dupes, ...b };
 }
 
 // description trong frontmatter (ke ca block scalar > |) de so trung mo ta
