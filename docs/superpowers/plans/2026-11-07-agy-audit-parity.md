@@ -85,12 +85,12 @@ Files: `harness/observe/README.md`.
 - Done: khong con cau "KHONG co toolResult/exit code / error rong"; khong doi muc Claude.
 
 ### Task 6: Xac minh that sau merge (KHONG code; general-purpose) [phu thuoc Task 1-5 da merge vao main]
-- [ ] Lap lai Task 0 voi workspace tam moi (clone main sau merge), cung lenh/settings, them mot buoc doc file thanh cong.
-- [ ] Kiem (qua `harness observe query`/`report --dry-run` cua plugin trong workspace tam): Stop co `data.usage.input/output` > 0 va lech <= 5% so `agy-out.json`; Post loi co `ok:false` + `data.exit_code` (neu agy cho ma); Post co `dur_ms` va `data.dur_src`; Stop co `data.stop_reason`; muc report `cost-cli` co hang `agy`.
-- [ ] Sai lech: bao main (khong tu sua); main mo builder sua theo quy trinh debug (toi da 2 vong).
+- [x] Lap lai Task 0 voi workspace tam moi (clone main sau merge), cung lenh/settings, them mot buoc doc file thanh cong.
+- [x] Kiem (qua `harness observe query`/`report --dry-run` cua plugin trong workspace tam): Stop co `data.usage.input/output` > 0 va lech <= 5% so `agy-out.json`; Post loi co `ok:false` + `data.exit_code` (neu agy cho ma); Post co `dur_ms` va `data.dur_src`; Stop co `data.stop_reason`; muc report `cost-cli` co hang `agy`.
+- [x] Sai lech: bao main (khong tu sua); main mo builder sua theo quy trinh debug (toi da 2 vong).
 
 ### Task 7: Full suite mot lan
-- [ ] Trong worktree main sau merge, nen, co timeout, log ra file: `timeout 900 bun test harness dev > "<scratch>/full.log" 2>&1`; bao duoi log (pass/fail, ten test do). Khong chay lai; fail co tu truoc (vd `dev/checks/proc-check.test.mjs`) ghi ro khong thuoc plan.
+- [x] Trong worktree main sau merge, nen, co timeout, log ra file: `timeout 900 bun test harness dev > "<scratch>/full.log" 2>&1`; bao duoi log (pass/fail, ten test do). Khong chay lai; fail co tu truoc (vd `dev/checks/proc-check.test.mjs`) ghi ro khong thuoc plan.
 
 ## Phu thuoc / song song
 Task 0 -> {1, 2, 4 song song} -> 3 (can 1+2) -> 5 -> merge -> 6 -> 7. Tap file khong chong: T1 core audit + usage-tail(+test); T2 agy-usage(+test) moi; T3 agy.mjs + agy.test.mjs; T4 report defaults + test moi; T5 README.
@@ -115,3 +115,4 @@ Chay that 2026-11-07, agy 1.5.x, model gemini-4-argon-medium, `agy -p --mode pla
 - (c) Post that: `{stepIdx:2, error:"", toolCall:{name:"read_file",args:{Path}}}`; Post loi: `error:"file does not exist"` (khong co "exit status", khong exit code cho tool doc). Stop that: `{terminationReason:"NO_TOOL_CALL", executionNum:0, error:"", fullyIdle:true}`. stepIdx = step_index cua buoc GENERIC; content bat dau "Created At: ...+07:00\nCompleted At: ...". `exit status N` chi theo tai lieu (chua thay that) -> exit_code lay tu "Command exited with code N." trong transcript hoac regex `exit status N`, danh dau chua kiem.
 - (T6) Post bắn trước khi agy ghi bước GENERIC -> dur/exit từ transcript chuyển sang Stop (tool_ms)
 - (d) Audit hien tai: Stop status stopped, tokens null, `data.usage_reason:'no_path'`, model null, khong stop_reason. Post loi da ok:false + data.error. dur_ms null cho Read (Pre matcher hep), Write co dur tu marker. Ban ghi hook-run gan cli:"claude" sid:"claude-nosession" (loi nhan, ngoai pham vi).
+- (T6/T7 ket qua) T6 lan 1 tren 1ec8924: 4/5 PASS, dur Post null -> sua t6fix. T6 lan 2 tren a609920: 4/4 PASS (token Stop = agy-out = tong transcript 15051/595/17017; tool_ms 2000, tool_steps 2; report cot "ms tool (transcript)"). T7 full suite tai 1ec8924: 1302 pass, 1 fail co san dev/checks/proc-check (harness/constrain/worktree/hook.mjs:7, khong thuoc agy-audit; sua o 0.3.10).
