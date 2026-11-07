@@ -23,7 +23,10 @@ A Claude Code plugin that adds a deterministic constraint layer around AI agents
 No further setup is needed. The plugin provides the Claude hooks, and the `harness` CLI is on the Bash tool's PATH.
 
 - Outside Claude (PowerShell, cmd, your own bash): the first Claude session installs a `harness` shim through the SessionStart hook; open a new terminal afterwards. Manual install: `harness install --shim [--dir D] [--dry-run] [--force]`. Disable with `HOOK_USER_SHIM_ENABLED=0`.
-- agy: install globally from the same bits Claude uses: `agy plugin install <plugin root>` (e.g. `~/.claude/plugins/cache/synura/harness-kit/<version>`; the Claude SessionStart hook `agy-sync` re-runs it in the background when the Claude plugin version differs from the agy copy; opt out with `HARNESS_AGY_AUTOSYNC=0`). agy has no per-project enable, so the hook is gated per project: it dispatches only if `.claude/settings.local.json` or `.claude/settings.json` has `"enabledPlugins": {"harness-kit@synura": true}`; otherwise it does nothing and writes nothing. `harness agy init` checks the global install (+ version), whether this project is enabled, and warns about a project clone `.agents/plugins/harness-kit` (double hooks) and old `.agents/hooks.json` entries.
+- agy: `agy plugin install <plugin root>` and you are done. Each CLI installs on its own; agy puts the plugin's `bin/` on PATH (so `harness` works in its first session) and loads `rules/AGENTS.md` itself. The agy hook is on by default and does not read `.claude`. Opt out with `HARNESS_AGY=0` or a `.harness/agy.off` file in the project. To update, re-run `agy plugin install`.
+- The hook auto-allows read-only `harness` commands from a strict allowlist. Its effect under a strict permission config is not measured yet.
+- The `harness` shim is shared by all CLIs through `roots.json` (claude uses `{scan}`, agy uses `{root}`). Both CLIs share the same harness data; each writes a data-version stamp and `harness doctor` prints one warning line when they differ.
+- Removed in 0.4.0: the `agy` CLI domain, the background sync hook and the `.agents` sync adapter. `harness doctor` warns in one line about leftovers (see CHANGELOG, Migration).
 - Health check: `/harness-kit:doctor` or `harness doctor`.
 
 Notes:

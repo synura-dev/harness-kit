@@ -13,7 +13,7 @@ PreToolUse hook (matcher `Bash`). Fail-open: loi/parse hong -> `{}` va exit 0.
 - Chan (deny, kem huong dan) chi cac mau hep: `python -`/`python3 -` doc stdin, `python -c` nhieu dong, heredoc > `heredoc_max_lines` (3) dong.
 - Cau hinh: `hook.config.json` (ghi de DEFAULTS), `hook.config.local.json`, env `BASH_GUARD_ENABLED`.
 - Test: `bun test harness/constrain/bash-guard`.
-- agy (adapters/agy.mjs, .agents/hooks.json, VERIFIED agy 1.4.3): chi deny (cung mau hep), fail-open in {"decision":"allow"}; KHONG gan timeout mac dinh vi agy khong ho tro updatedInput.
+- agy (adapters/agy.mjs, hook plugin native hooks.json, VERIFIED agy 1.4.3): chi deny (cung mau hep), fail-open in {"decision":"allow"}; KHONG gan timeout mac dinh vi agy khong ho tro updatedInput.
 - core/agy/hints.mjs (agy-hints, dung chung voi audit/digest.mjs) (agy, deny kem ly do, cung fail-open; tat bang hook.config.json): `agy_replace` chan lenh DON (khong pipe/redirect/noi lenh) thay duoc bang tool: Get-Content/cat/type 1 file -> Read; Get-ChildItem -Recurse/dir /s/find -> Glob; Select-String/grep/findstr/rg -> Grep. `agy_repeat` (+ `agy_repeat_ttl_ms`, mac dinh 60000) chan lenh read-only giong het lenh vua chay trong cung conversation neu khong co ghi xen giua (write_file/edit_file/lenh khong read-only); chan 1 lan roi cho qua. Marker o `<audit root>/.agy_guard/`, log deny `denied.log` (digest dem `denied`). Digest in `agy bash ratio / replaceable / repeat / denied`.
 - Su that da kiem (2.1.311): khi Bash het timeout, tool KHONG kill ma chuyen lenh xuong nen (xem TASKS.md Vong 9a).
 
