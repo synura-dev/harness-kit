@@ -2,7 +2,7 @@ import { test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { EFFECT, verdictOf, computeWindow, measureDue } from './effect.mjs';
+import { EFFECT, verdictOf, computeWindow, measureDue, limitsOf } from './effect.mjs';
 import { extractErrorDetails } from '../../core/audit/signature.mjs';
 import { messageFingerprint } from '../../core/audit/normalize-message.mjs';
 
@@ -103,8 +103,22 @@ test('measureDue: chi worse -> action rollback; unchanged -> keep', () => {
   const [x] = measureDue([prop('a')], NOW, opts());
   expect(x.effect.verdict).toBe('unchanged');
   expect(x.effect.action).toBe('keep');
+  day('2026-10-28', 's1', 300, 6); // after: 12 loi, du 10 loi cho worse
   const [w] = measureDue([prop('a', { effect: { baseline: base({ target_count: 10, rate_per_1000: 2 }) } })], NOW, opts());
   expect(w.effect).toMatchObject({ verdict: 'worse', action: 'rollback' });
+});
+
+test('limitsOf: mac dinh nen (bgTimeoutMs) nam DUOI audit-config, tren 30s', () => {
+  expect(limitsOf({ auditConfig: { limits: { query_timeout_ms: 5000 } }, bgTimeoutMs: 10000 }).timeout).toBe(5000);
+  expect(limitsOf({ auditConfig: {}, bgTimeoutMs: 10000 }).timeout).toBe(10000);
+  expect(limitsOf({ auditConfig: {} }).timeout).toBe(30000);
+  expect(limitsOf({ auditConfig: { limits: { query_timeout_ms: 5000 } }, limits: { query_timeout_ms: 7000 } }).timeout).toBe(7000);
+});
+
+test('verdictOf: worse can sau-cua-so >= 10 loi, khong thi unchanged; EFFECT.excludeDays', () => {
+  expect(verdictOf(base(), aft(13, { target_count: 9 })).verdict).toBe('unchanged');
+  expect(verdictOf(base(), aft(13, { target_count: 10 })).verdict).toBe('worse');
+  expect(EFFECT.excludeDays).toBe(30);
 });
 
 test('verdictOf: mau baseline toi thieu 10 loi', () => {

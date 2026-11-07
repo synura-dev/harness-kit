@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
 import { findCandidates, propose, check, apply, rollback, ctx, classifyTarget, listProposals, appendLog } from './loop.mjs';
-import { measureDue, readBaselineCache } from './effect.mjs';
+import { measureDue, readBaselineCache, EFFECT } from './effect.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { withLock } from '../../core/runtime/lockfile.mjs';
 
@@ -153,8 +153,9 @@ export async function runAutopilot(o = {}) {
 
     // 1) Do hieu qua luat da ap (effect.mjs, MOT luot doc audit): proposal.effect la nguon su that; keep/rollback theo verdict.
     // Do ca luat ap tay (chu y). shortcut: luat muc 2 chi ghi effect, khong tu rollback.
-    // Duong nen (SessionStart): timeout doc audit ngan (10s) thay vi 30s; CLI/test van truyen limits rieng neu can.
-    const eo = { ...o, limits: { query_timeout_ms: 10000, ...(o.limits || {}) } };
+    // Duong nen (job.mjs, SessionStart): mac dinh timeout doc audit 10s, nam DUOI audit-config (effect.mjs limitsOf); CLI/test giu 30s.
+    // shortcut: nhan biet job qua argv[1] vi call site (observe/ledger/job.mjs) khong truyen co; doi sang o.bgTimeoutMs khi job duoc phep sua.
+    const eo = { ...o, bgTimeoutMs: o.bgTimeoutMs ?? (/[\\/]job\.mjs$/i.test(process.argv[1] || '') ? 10000 : undefined) };
     let auditCache = null; // doc audit MOT lan/lo cho baseline cua moi luat vua ap
     // shortcut: doc MOT lan toi da 1000 de xuat gan nhat (dung cho do + loai fp); vuot tran thi de xuat cu nhat roi khoi pham vi.
     const all = listProposals(o, 1000);
@@ -189,7 +190,15 @@ export async function runAutopilot(o = {}) {
       if (!roll) continue; // insufficient: do lai lan sau
       // chi tu rollback luat muc 1 va manifest khop de xuat (khong tin ver trong file de xuat)
       const why = whyNot(p, effect, a);
-      if (why) { refuseRoll(p, why); continue; }
+      if (why) {
+        refuseRoll(p, why);
+        if (effect.rollback_error) patchEffect(p, { rollback_attempts: (effect.rollback_attempts || 0) + 1 }); // retry bi tu choi cung tinh la lan thu: khong log vo han
+        if (!a && cfg.autonomy >= 1) { // luat ap tay worse: nhac nguoi dung qua chu thich ledger (cung kenh voi rollback cua autopilot)
+          const le = (o.ledgerEntries || readLedgerRaw(ledgerPath(o))).find((x) => x.fp && x.fp === who.fp);
+          if (le) notes.set(le.id, { status: 'worse', reason: `rule ${p.id} worse: consider evolve rollback ${p.ver}`, ver: p.ver });
+        }
+        continue;
+      }
       const r = rollback(p.ver, { ...o, approve: true, force: false }); // --force cua autopilot chi bo cong 24h, khong bo kiem "dich bi sua tay"
       if (a) { a.status = r.ok ? 'rolled_back' : 'rollback_failed'; a.reason = r.ok ? effect.reason : r.reason; }
       if (!r.ok) {
@@ -203,8 +212,8 @@ export async function runAutopilot(o = {}) {
 
     // 2) Muc ledger can de xuat.
     const entries = o.ledgerEntries || readLedgerRaw(ledgerPath(o));
-    // fp bi rollback do hieu qua 'worse' khong de xuat lai. shortcut: loai vinh vien, chua co cooldown/het han.
-    const byEffect = all.filter((p) => p.kind === 'rule' && p.status === 'rolled_back' && p.effect && p.effect.verdict === 'worse');
+    // fp bi rollback do hieu qua 'worse' khong de xuat lai trong EFFECT.excludeDays ngay ke tu luc do.
+    const byEffect = all.filter((p) => p.kind === 'rule' && p.status === 'rolled_back' && p.effect && p.effect.verdict === 'worse' && !(nowMs - Date.parse(p.effect.measured_at) >= EFFECT.excludeDays * DAY));
     const badPids = new Set(byEffect.map((p) => p.id));
     const ruleBad = new Set([...byEffect.map((p) => p.evidence && p.evidence.fp), ...st.applied.filter((a) => badPids.has(a.pid)).map((a) => a.fp)]); // chi loai kind rule
     const taken = new Set([

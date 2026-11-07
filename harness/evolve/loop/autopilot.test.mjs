@@ -25,7 +25,7 @@ const FP = 'aaaaaaaaaa';
 beforeEach(() => {
   tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'evolve-ap-'));
   const hub = path.join(tmp, 'hub'); fs.mkdirSync(hub, { recursive: true });
-  o = { hubRoot: hub, dataBase: path.join(tmp, 'data'), dataRoot: path.join(tmp, 'data', 'evolve'), auditDir: path.join(tmp, 'audit'), ledgerFile: path.join(tmp, 'ledger.jsonl'), nowMs: NOW };
+  o = { hubRoot: hub, dataBase: path.join(tmp, 'data'), dataRoot: path.join(tmp, 'data', 'evolve'), auditDir: path.join(tmp, 'audit'), ledgerFile: path.join(tmp, 'ledger.jsonl'), nowMs: NOW, auditConfig: {}, retentionDays: 30 };
   three('2026-10-29', 's1', FP, 'cannot find module foo');
 });
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
@@ -291,6 +291,36 @@ test('effect: rollback that bai 3 lan -> dung thu, de nguoi', async () => {
   for (const d of [8, 9, 10, 11, 12]) await runAutopilot({ ...T8(), nowMs: NOW + d * DAY });
   expect(readProp(pid).effect.rollback_attempts).toBe(3);
   expect(readProp(pid).status).toBe('applied');
+});
+
+test('effect: retry bi tu choi (autonomy ha) tinh la lan thu, khong log vo han', async () => {
+  const { target, pid } = await applied();
+  fs.writeFileSync(target, 'bi sua tay');
+  worse();
+  await runAutopilot(T8()); // that bai lan 1
+  for (const d of [9, 10, 11, 12]) await runAutopilot({ ...T8(), nowMs: NOW + d * DAY, cfg: { autonomy: 0 } });
+  expect(readProp(pid).effect.rollback_attempts).toBe(3);
+  expect(logOps().filter((x) => x.op === 'rollback' && x.ok === false && /autonomy/.test(x.reason)).length).toBe(2);
+});
+
+test('effect: fp bi rollback (worse) het han loai sau excludeDays', async () => {
+  await applied();
+  worse();
+  await runAutopilot(T8());
+  const at = (d) => runAutopilot({ ...o, nowMs: NOW + d * DAY, ledgerEntries: [entry(FP)], force: true });
+  expect((await at(9)).errors.join(' ')).not.toMatch(/candidate/); // con bi loai: khong toi buoc de xuat
+  expect((await at(45)).errors.join(' ')).toMatch(/candidate/); // het han: lot bo loc (audit ngoai cua so oracle nen khong co candidate)
+});
+
+test('effect: luat ap tay worse -> chu thich ledger "rule <id> worse: consider evolve rollback <ver>"', async () => {
+  const { pid } = await applied();
+  const ver = readProp(pid).ver;
+  const sf = path.join(apDir(o), 'state.json'); const st = JSON.parse(fs.readFileSync(sf, 'utf8')); st.applied = []; fs.writeFileSync(sf, JSON.stringify(st));
+  fs.writeFileSync(o.ledgerFile, JSON.stringify(entry(FP)) + '\n');
+  worse();
+  await runAutopilot({ ...T8(), ledgerEntries: undefined });
+  const le = JSON.parse(fs.readFileSync(o.ledgerFile, 'utf8').split('\n')[0]);
+  expect(le.evolve.reason).toContain(`rule ${pid} worse: consider evolve rollback ${ver}`);
 });
 
 test('effect: worse -> rollback', async () => {

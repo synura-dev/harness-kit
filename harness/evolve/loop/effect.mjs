@@ -14,17 +14,17 @@ import { ctx, nestedDateDirs } from './loop.mjs';
 
 const DAY = 86400000;
 const EPS = 1e-9;
-export const EFFECT = Object.freeze({ windowDays: 7, better: 0.7, worse: 1.3, minToolCalls: 200, minBaselineErrors: 10, maxRecheckDays: 21, sidePct: 0.3 });
+export const EFFECT = Object.freeze({ windowDays: 7, better: 0.7, worse: 1.3, minToolCalls: 200, minBaselineErrors: 10, maxRecheckDays: 21, sidePct: 0.3, excludeDays: 30 }); // excludeDays: fp bi rollback vi worse khong bi de xuat lai trong N ngay (shortcut: co dinh, chua cau hinh)
 const FINAL = new Set(['better', 'worse', 'unchanged', 'inconclusive']);
 const SIDE = ['tokens_per_session', 'corrections_per_session'];
 const iso = (ms) => new Date(ms).toISOString();
 
-function limitsOf(o) {
+export function limitsOf(o) {
   let cfg = o.auditConfig; // inject (test hermetic); mac dinh doc audit-config that
   if (!cfg) { cfg = {}; try { cfg = loadAuditConfig().config; } catch {} }
   const pick = (...v) => v.find((x) => x > 0); // tung truong mac dinh rieng: thieu/0 khong tat gioi han
   const c = cfg.limits || {}, u = o.limits || {};
-  return { retention_days: pick(o.retentionDays, cfg.retention_days, 30), timeout: pick(u.query_timeout_ms, c.query_timeout_ms, 30000), rows: pick(u.query_max_rows, c.query_max_rows, 100000), bytes: pick(u.query_max_bytes, c.query_max_bytes, 209715200) };
+  return { retention_days: pick(o.retentionDays, cfg.retention_days, 30), timeout: pick(u.query_timeout_ms, c.query_timeout_ms, o.bgTimeoutMs, 30000), rows: pick(u.query_max_rows, c.query_max_rows, 100000), bytes: pick(u.query_max_bytes, c.query_max_bytes, 209715200) };
 }
 
 /** Doc MOT luot cac su kien audit co ts trong [fromMs, toMs]. Tra {events, truncated: null|'timeout'|'max_rows'|'max_bytes'}. */
@@ -118,7 +118,8 @@ export function verdictOf(baseline, after, { ageDays = 0 } = {}) {
   else if (!(after.tool_calls >= EFFECT.minToolCalls) || after.rate_per_1000 == null) reason = 'low_tool_calls';
   if (reason) return { verdict: ageDays > EFFECT.maxRecheckDays ? 'inconclusive' : 'insufficient', reason, side };
   const b = baseline.rate_per_1000, a = after.rate_per_1000;
-  const verdict = a <= b * EFFECT.better + EPS ? 'better' : a >= b * EFFECT.worse - EPS ? 'worse' : 'unchanged';
+  // worse can them >= minBaselineErrors loi o cua so after (tranh 1 do lech Poisson keo theo rollback + loai fp)
+  const verdict = a <= b * EFFECT.better + EPS ? 'better' : a >= b * EFFECT.worse - EPS && after.target_count >= EFFECT.minBaselineErrors ? 'worse' : 'unchanged';
   return { verdict, reason: `rate ${b.toFixed(2)} -> ${a.toFixed(2)} /1000`, side };
 }
 
@@ -155,7 +156,7 @@ export function captureBaseline(p, nowMs, o = {}) {
     const fp = p.evidence && p.evidence.fp;
     if (!fp) return { baseline: null, reason: 'no_fp' };
     const from = nowMs - EFFECT.windowDays * DAY, c = o.auditCache; // auditCache = ket qua readEvents doc san (autopilot doc MOT lan/lo)
-    const w = c && c.fromMs <= from && c.toMs >= nowMs ? { ...statsOf(c.events, groupEvents(groupIndex(c.events, nowMs), fp), from, nowMs), truncated: c.truncated }
+    const w = c && c.fromMs <= from && c.toMs >= nowMs ? { ...statsOf(c.events, groupEvents(c.idx ||= groupIndex(c.events, nowMs), fp), from, nowMs), truncated: c.truncated }
       : computeWindow(ctx(o).audits, fp, from, nowMs, o);
     if (w.truncated) return { baseline: null, reason: 'truncated' };
     const { truncated, ...baseline } = w;
