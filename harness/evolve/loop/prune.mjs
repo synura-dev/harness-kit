@@ -12,7 +12,7 @@ import { readTranscripts } from '../usage/transcripts.mjs';
 import { detectAudit, detectTranscript } from '../usage/detectors/index.mjs';
 import { parseFrontmatter } from '../../core/agy/agents.mjs';
 import { classifySource, actionFor, canPropose } from '../usage/source.mjs';
-import { componentCost, windowCost, scopeSessions, projectFolder } from '../usage/cost.mjs';
+import { componentCost, windowCost, scopeSessions, projectFolder, sessionsOf } from '../usage/cost.mjs';
 import { findDupes } from '../usage/dupes.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -297,14 +297,14 @@ export async function pruneCandidates(o = {}) {
   if (tr) {
     // reader chi loc theo mtime file -> loc lai theo ts record (earliest_ts do truoc loc)
     const recs = tr.records.filter((x) => { const t = Date.parse(x.ts); return t >= fromMs && t <= nowMs + DAY; });
-    const ctx = { skillNames: new Set(inv.skills.map((s) => s.name)), commandIds: new Set(inv.commands.map((c) => c.name)), agentSkills: agentSkills(o) };
+    const ctx = { skillNames: new Set(inv.skills.map((s) => s.name)), commandIds: new Set(inv.commands.map((c) => c.name)), agentSkills: agentSkills(o), ownedPlugins: new Set([pluginName(o.pluginRoot || PLUGIN_ROOT), ...(o.ownedPlugins || [])].filter(Boolean)) };
     trEvents = recs.flatMap((x) => detectTranscript(x, ctx));
   } else for (const e of r.events) if (e.sid) sessions.add(e.sid);
   const u = usageFrom([...a.events, ...trEvents], { gwFirst: a.gwFirst, stats: a.stats, maintenanceReads: o.maintenanceReads });
   const { usage } = u;
   const trunc = r.truncated || (tr && tr.truncated) || null;
   const src = { ...u.sources, audit: { earliest: r.earliest_ts, window_days: daysSince(r.earliest_ts, nowMs) } };
-  if (tr) src.transcript = { earliest: tr.earliest_ts, window_days: daysSince(tr.earliest_ts, nowMs), files: tr.files_read, cache_hits: tr.cache_hits, truncated: tr.truncated };
+  if (tr) src.transcript = { earliest: tr.earliest_ts, window_days: daysSince(tr.earliest_ts, nowMs), files: tr.files_read, cache_hits: tr.cache_hits, cache_trimmed: tr.cache_trimmed, truncated: tr.truncated };
   const skillE = tr ? tr.earliest_ts : r.earliest_ts;
   const window = o.gateWindow !== false ? { skill: { earliest: skillE }, agent: { earliest: r.earliest_ts }, command: { earliest: r.earliest_ts }, hook: { earliest: r.hookrun_earliest || src.hookrun_since } } : undefined;
   const b = buildCandidates({ inv, usage, state: o.state || {}, caps: o.caps, nowMs, days, waitDays: o.waitDays, skipDeprecate: !!trunc, window });
@@ -318,8 +318,10 @@ export async function pruneCandidates(o = {}) {
   // so phien noi thanh phan thuc su nap: project = thu muc du an; plugin = du an cai plugin; con lai = tat ca (khong co transcript -> tat ca)
   const installed = o.installedPlugins !== undefined ? o.installedPlugins : readInstalledPlugins();
   const plug = pluginName(o.pluginRoot || PLUGIN_ROOT);
-  const sessFor = (c) => (tr ? scopeSessions({ source: c.source, plugin: plug }, { total: total_sessions, byProject: tr.project_sessions, projectDir: o.projectDir, installed }) : total_sessions);
-  const hub_sessions = tr && o.projectDir ? tr.project_sessions[projectFolder(o.projectDir)] || 0 : null;
+  const ownedSet = new Set([plug, ...(o.ownedPlugins || [])].filter(Boolean));
+  const plugOf = (c) => { const p = /^([^:\s]+):/.exec(c.name || '')?.[1]; return p && ownedSet.has(p) ? p : plug; }; // plugin cua chinh thanh phan (prefix), khong luon la harness-kit
+  const sessFor = (c) => (tr ? scopeSessions({ source: c.source, plugin: plugOf(c) },{ total: total_sessions, byProject: tr.project_sessions, projectDir: o.projectDir, installed }) : total_sessions);
+  const hub_sessions = tr && o.projectDir ? sessionsOf(tr.project_sessions, projectFolder(o.projectDir)) : null;
   const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return ''; } };
   const inventory = [], descs = [];
   for (const [type, list] of Object.entries({ command: inv.commands, hook: inv.hooks, skill: [...inv.skills, ...account], agent: inv.agents, rule: inv.rules })) {

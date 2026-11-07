@@ -88,3 +88,23 @@ test('one bad block does not drop others', () => {
   const ev = detect(rec([bad, tu('Skill', { skill: 'ok' }, 't2')]), {});
   assert.deepEqual(ev.map((e) => e.id), ['ok']);
 });
+
+test('fix3 Read: own plugin cache path kept, third-party plugin dropped', () => {
+  const rd = (p) => rec([tu('Read', { file_path: p })]);
+  const own = 'C:/Users/u/.claude/plugins/cache/mkt/harness-kit/1.0/skills/x/SKILL.md';
+  const other = 'C:/Users/u/.claude/plugins/cache/mkt/superpowers/1.0/skills/x/SKILL.md';
+  const mp = 'C:/Users/u/.claude/plugins/marketplaces/mkt/harness-kit/skills/y/SKILL.md';
+  const ctx = { ownedPlugins: new Set(['harness-kit']) };
+  assert.equal(detect(rd(own), ctx).length, 1);
+  assert.equal(detect(rd(mp), ctx).length, 1);
+  assert.equal(detect(rd(other), ctx).length, 0);
+  assert.equal(detect(rd(own), {}).length, 0);
+});
+test('fix3 prefixed Skill/slash ids from non-owned plugin do not join a local skill', () => {
+  const ctx = { ownedPlugins: new Set(['harness-kit']), skillNames: new Set(['foo']) };
+  assert.equal(detect(rec([tu('Skill', { skill: 'other:foo' })]), ctx).length, 0);
+  assert.equal(detect(rec([tu('Skill', { skill: 'harness-kit:foo' })]), ctx).length, 1);
+  assert.equal(detect(rec([tu('Skill', { skill: 'anthropic-skills:foo' })]), ctx).length, 1);
+  assert.equal(detect(rec([{ type: 'text', text: '<command-name>/other:foo</command-name>' }], 'user'), ctx).length, 0);
+  assert.equal(detect(rec([{ type: 'text', text: '<command-name>/harness-kit:foo</command-name>' }], 'user'), ctx).length, 1);
+});
