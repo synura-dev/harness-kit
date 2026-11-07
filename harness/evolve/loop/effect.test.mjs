@@ -115,8 +115,10 @@ test('limitsOf: mac dinh nen (bgTimeoutMs) nam DUOI audit-config, tren 30s', () 
   expect(limitsOf({ auditConfig: { limits: { query_timeout_ms: 5000 } }, limits: { query_timeout_ms: 7000 } }).timeout).toBe(7000);
 });
 
-test('verdictOf: worse can sau-cua-so >= 10 loi, khong thi unchanged; EFFECT.excludeDays', () => {
-  expect(verdictOf(base(), aft(13, { target_count: 9 })).verdict).toBe('unchanged');
+test('verdictOf: worse can sau-cua-so >= 10 loi, khong thi insufficient low_after_errors (-> inconclusive sau 21 ngay); EFFECT.excludeDays', () => {
+  expect(verdictOf(base(), aft(13, { target_count: 9 }))).toMatchObject({ verdict: 'insufficient', reason: 'low_after_errors' });
+  expect(verdictOf(base(), aft(13, { target_count: 9 }), { ageDays: 22 }).verdict).toBe('inconclusive');
+  expect(verdictOf(base(), aft(10, { target_count: 9 })).verdict).toBe('unchanged'); // khong worse: khong bi anh huong
   expect(verdictOf(base(), aft(13, { target_count: 10 })).verdict).toBe('worse');
   expect(EFFECT.excludeDays).toBe(30);
 });

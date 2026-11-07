@@ -153,9 +153,9 @@ export async function runAutopilot(o = {}) {
 
     // 1) Do hieu qua luat da ap (effect.mjs, MOT luot doc audit): proposal.effect la nguon su that; keep/rollback theo verdict.
     // Do ca luat ap tay (chu y). shortcut: luat muc 2 chi ghi effect, khong tu rollback.
-    // Duong nen (job.mjs, SessionStart): mac dinh timeout doc audit 10s, nam DUOI audit-config (effect.mjs limitsOf); CLI/test giu 30s.
-    // shortcut: nhan biet job qua argv[1] vi call site (observe/ledger/job.mjs) khong truyen co; doi sang o.bgTimeoutMs khi job duoc phep sua.
-    const eo = { ...o, bgTimeoutMs: o.bgTimeoutMs ?? (/[\\/]job\.mjs$/i.test(process.argv[1] || '') ? 10000 : undefined) };
+    // Timeout doc audit theo audit-config (loadAuditConfig dien san query_timeout_ms 30000), nen mac dinh nen o.bgTimeoutMs khong bao gio thang config.
+    // shortcut: chua co timeout rieng cho duong nen (job.mjs); muon thi truyen o.limits.query_timeout_ms tu call site.
+    const eo = o;
     let auditCache = null; // doc audit MOT lan/lo cho baseline cua moi luat vua ap
     // shortcut: doc MOT lan toi da 1000 de xuat gan nhat (dung cho do + loai fp); vuot tran thi de xuat cu nhat roi khoi pham vi.
     const all = listProposals(o, 1000);
@@ -193,7 +193,7 @@ export async function runAutopilot(o = {}) {
       if (why) {
         refuseRoll(p, why);
         if (effect.rollback_error) patchEffect(p, { rollback_attempts: (effect.rollback_attempts || 0) + 1 }); // retry bi tu choi cung tinh la lan thu: khong log vo han
-        if (!a && cfg.autonomy >= 1) { // luat ap tay worse: nhac nguoi dung qua chu thich ledger (cung kenh voi rollback cua autopilot)
+        if (!a || cfg.autonomy < 1) { // luat ap tay worse: nhac nguoi dung qua chu thich ledger (cung kenh voi rollback cua autopilot)
           const le = (o.ledgerEntries || readLedgerRaw(ledgerPath(o))).find((x) => x.fp && x.fp === who.fp);
           if (le) notes.set(le.id, { status: 'worse', reason: `rule ${p.id} worse: consider evolve rollback ${p.ver}`, ver: p.ver });
         }
@@ -219,7 +219,7 @@ export async function runAutopilot(o = {}) {
     const taken = new Set([
       ...st.applied.filter((a) => ['applied', 'kept'].includes(a.status)).map((a) => a.fp), ...queue.filter((q) => q.status === 'pending').map((q) => q.fp)]);
     const todo = entries.filter((e) => ['open', 'warned'].includes(e.status) && e.action === 'propose' && e.fp && !taken.has(e.fp) && !((e.evolve_kind || 'rule') === 'rule' && ruleBad.has(e.fp))
-      && !(e.evolve && ['applied', 'queued', 'refused'].includes(e.evolve.status))).sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, cfg.maxProposals);
+      && !notes.has(e.id) && !(e.evolve && ['applied', 'queued', 'refused', 'worse'].includes(e.evolve.status))).sort((a, b) => (b.count || 0) - (a.count || 0)).slice(0, cfg.maxProposals);
     const scan = todo.length ? await findCandidates({ ...o, days: cfg.oracleDays, threshold: 1, nowMs, timeoutMs: 20000 }) : { items: [] };
 
     for (const e of todo) {

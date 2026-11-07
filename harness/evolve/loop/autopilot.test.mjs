@@ -481,6 +481,16 @@ test('effect: loai fp chi ap cho kind rule (skill cung fp van xep hang duoc)', a
   expect(r.queued.length).toBe(1);
 });
 
+test('effect: autonomy 0 worse -> cung co chu thich ledger, khong bi buoc de xuat ghi de', async () => {
+  const { pid } = await applied();
+  fs.writeFileSync(o.ledgerFile, JSON.stringify(entry(FP)) + '\n');
+  worse();
+  await runAutopilot({ ...T8(), ledgerEntries: undefined, cfg: { autonomy: 0 } });
+  const le = JSON.parse(fs.readFileSync(o.ledgerFile, 'utf8').split('\n')[0]);
+  expect(le.evolve.status).toBe('worse');
+  expect(le.evolve.reason).toContain(`rule ${pid} worse: consider evolve rollback`);
+});
+
 test('effect: dry-run bao refused (khong phai rolledBack) khi muc 2 / manifest lech', async () => {
   const { pid } = await applied();
   editProp(pid, (j) => { j.change.target = 'evolve/rules/x.json'; });

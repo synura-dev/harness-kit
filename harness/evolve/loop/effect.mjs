@@ -116,10 +116,11 @@ export function verdictOf(baseline, after, { ageDays = 0 } = {}) {
   let reason = null;
   if (!(baseline.target_count >= EFFECT.minBaselineErrors) || !(baseline.rate_per_1000 > 0)) reason = 'low_baseline';
   else if (!(after.tool_calls >= EFFECT.minToolCalls) || after.rate_per_1000 == null) reason = 'low_tool_calls';
-  if (reason) return { verdict: ageDays > EFFECT.maxRecheckDays ? 'inconclusive' : 'insufficient', reason, side };
   const b = baseline.rate_per_1000, a = after.rate_per_1000;
-  // worse can them >= minBaselineErrors loi o cua so after (tranh 1 do lech Poisson keo theo rollback + loai fp)
-  const verdict = a <= b * EFFECT.better + EPS ? 'better' : a >= b * EFFECT.worse - EPS && after.target_count >= EFFECT.minBaselineErrors ? 'worse' : 'unchanged';
+  // worse can them >= minBaselineErrors loi o cua so after (tranh 1 do lech Poisson keo theo rollback + loai fp); thieu -> insufficient, do lai
+  if (!reason && a >= b * EFFECT.worse - EPS && a > b * EFFECT.better + EPS && !(after.target_count >= EFFECT.minBaselineErrors)) reason = 'low_after_errors';
+  if (reason) return { verdict: ageDays > EFFECT.maxRecheckDays ? 'inconclusive' : 'insufficient', reason, side };
+  const verdict = a <= b * EFFECT.better + EPS ? 'better' : a >= b * EFFECT.worse - EPS ? 'worse' : 'unchanged';
   return { verdict, reason: `rate ${b.toFixed(2)} -> ${a.toFixed(2)} /1000`, side };
 }
 
