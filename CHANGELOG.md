@@ -2,6 +2,14 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.3.10
+- ext-guard fail-open khi timeout: dispatcher va ext-guard khong con deny khi guard/module het gio hoac loi spawn (cho qua + canh bao + audit `rule=fail-open`); chi chan khi co tin hieu vi pham ro (hash ext lech/chua duyet: kiem het truoc khi spawn; guard exit 2: tra ngay, guard chay song song nen ext treo khong lam mat deny that). Thong bao va hanh vi nhat quan.
+- agy-sync: hook SessionStart cua Claude tu chay `agy plugin install "<cache plugin>"` (nen, chi nang cap, chi khi phien khoi dong) khi ban agy cu hon ban plugin Claude; khoa + gian thoi gian thu lai; tat bang `HARNESS_AGY_AUTOSYNC=0`.
+- worktree hook dung wrapper spawn `core/runtime/proc.mjs` (proc-check xanh lai).
+
+## 0.3.9
+- agy: harness-kit la plugin agy native (`.antigravity-plugin/plugin.json` + `hooks.json` o goc -> `harness/hooks/dispatch/agy-native.mjs`, workspace lay tu stdin `workspacePaths`). Cai global mot lan: `agy plugin install "<thu muc plugin Claude>"`; bat theo du an bang `enabledPlugins["harness-kit@synura"]: true` trong `.claude/settings.json` (khong bat -> hook cho qua, khong ghi gi). Bo shim `.agents/harness-agy-shim.mjs`, `.agents/hooks.json`, `harness agy init --legacy`, module agy-heal; khong sinh ban chep `.agents/skills`. `harness agy init` kiem cai global, lech version, du an da bat. Playbook co bien dung san `${harnessBin}` (`node ${harnessBin} <lenh>`).
+
 ## 0.3.8
 - Sua loi ext-guard fail-open trong phien that: hook nhan `CLAUDE_PLUGIN_DATA=<data>/<ten>-<marketplace>` con CLI (khong co bien nay) dung `<data>/<ten>`, nen hook doc registry ext rong va cho qua moi tool. `pluginLayerDirs` nay suy id `<ten>@<marketplace>` (ky tu ngoai `[A-Za-z0-9_-]` -> `-`) tu duong dan cache nhu Claude Code; dung thu muc cu `<data>/<ten>` khi primary chua co `config/ext/local.json` (CLI va hook cung mot thu muc, khong migrate). guard-health canh bao `ext-registry-split` khi thu muc cu con registry ma dang dung thu muc khac. Root ngoai cache (HARNESS_PLUGIN_DIR, --plugin-dir) giu hanh vi cu.
 
@@ -15,7 +23,7 @@ GitHub releases and commit history are the source of truth going forward. This f
 - Sua loi ext-guard: matcher bi ep neo `^(?:...)$` nen `^mcp__obsidian__` khong khop tool that (mcp__obsidian__vault_delete) va bi cho qua. Nay dung tim kiem (new RegExp(matcher)) nhu matcher hook Claude Code; them test voi ten tool that + test tich hop qua hooks/run.mjs.
 
 ## 0.3.4
-- observe usage dem err dung (PostToolUseFailure); ext khai bao guard (PreToolUse, exit 2 chan) qua hook ext-guard: fail-closed cho tool khop matcher (hash lech, exit khac 0/2, timeout, het budget => chan); fail-open co audit chi khi registry khong doc duoc. Khai bao ghim trong registry luc ext register/approve (prompt TTY in THEM/DOI/GO GUARD); ext remove cua ext co guard bat buoc TTY. AUDIT PreToolUse co budget rieng toi thieu 300ms. Timeout PreToolUse hooks.json 3s -> 8s: du cho node boot + guard loi + spawn ext (~1.2s cold Windows) + audit; budget dispatcher 2500ms (+3000ms rieng cho ext-guard chi khi khop matcher), khong khop thi nhanh nhu cu.
+- observe usage dem err dung (PostToolUseFailure); ext khai bao guard (PreToolUse, exit 2 chan) qua hook ext-guard: chan khi co tin hieu vi pham ro (hash lech, exit 2); timeout/exit khac/loi/het budget => fail-open kem canh bao (sua o ban sau), registry khong doc duoc => fail-open co audit. Khai bao ghim trong registry luc ext register/approve (prompt TTY in THEM/DOI/GO GUARD); ext remove cua ext co guard bat buoc TTY. AUDIT PreToolUse co budget rieng toi thieu 300ms. Timeout PreToolUse hooks.json 3s -> 8s: du cho node boot + guard loi + spawn ext (~1.2s cold Windows) + audit; budget dispatcher 2500ms (+3000ms rieng cho ext-guard chi khi khop matcher), khong khop thi nhanh nhu cu.
 
 ### Han che da biet (0.3.4)
 - Agent ghi thang file registry (<plugin data>/config/ext/local.json) la duong lach: guard loi chan lenh Bash/PowerShell va Write/Edit co duong dan chua `config/ext/local.json` (da kiem: EXT_CONFIG_RE trong constrain/guard/hook.mjs, ap cho ca duong dan plugin), nhung duong dan ghep dong (vd node -e noi chuoi) hoac `cd` roi ghi duong dan tuong doi (`config/ext/local.json`) khong bi bat: guard theo van ban lenh khong bat duoc duong dan ghep luc chay. Lenh node/bun/deno nap `ext-registry`/`ext-trust` (ke ca import(/require() bi chan. Bien phap goc la quyen he dieu hanh tren file registry, ngoai pham vi harness.

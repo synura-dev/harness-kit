@@ -25,7 +25,7 @@ const TIMEOUT = Symbol('timeout');
 /** Module loi (luon bat, khong go): bo qua khi ghi `module-acted` va khi doctor tim module khong dung. Module khac (OPTIONAL...) co the go khoi ORDER. */
 export const CORE_MODULES = Object.freeze(['audit', 'guard', 'data-gate', 'bash-guard', 'worktree-hook']);
 /** Module bao tri lam viec im lang (data-check: don nen khong de vet; user-shim: tra `{}` khi shim on): doctor khong bao gio xet "khong dung". Van ghi module-acted khi co tac dung (lam moc "tinh nang da bat"). */
-export const MAINTENANCE_MODULES = Object.freeze(['data-check', 'user-shim', 'ext-guard']);
+export const MAINTENANCE_MODULES = Object.freeze(['data-check', 'user-shim', 'agy-sync', 'ext-guard']);
 /** Ket qua co tac dung ma chua de lai dau trong audit: chan (decision deny hoac block:true; decision 'block' khong hop le voi hop dong), hoi, sua input, context; khong tinh `{}`/undefined/allow tran (verify-gate tra allow moi lan). Module tra `records` da tu hien trong audit (gate hook:<id>, type=proc...) -> khong ghi trung. */
 export const hasEffect = (r) => isObj(r) && !(Array.isArray(r.records) && r.records.length > 0) && (r.decision === 'deny' || r.decision === 'ask' || r.block === true || isObj(r.updatedInput) || !!r.additionalContext);
 
@@ -103,7 +103,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
   if (cfg.enabled === false && ev !== 'WorktreeCreate') return { ...profile.noop(ev), records: [], input: original };
   if (profile.setEvent && !original.hook_event_name) original.hook_event_name = ev;
   const budget = (cfg.budgetsMs && cfg.budgetsMs[ev]) || DEFAULTS.budgetsMs[ev] || 2500;
-  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [], fc: new Map() };
+  const state = { input: original, items: [], traces: [], denied: false, warns: [], timings: [] };
   const trace = (id, kind) => state.traces.push(traceRec('module-error', `${id}: ${kind}`));
   const gw = (id, kind) => { state.warns.push(gateWarn(id, kind)); state.items.push({ id: 'dispatch', result: { additionalContext: `lop bao ve ${clean(id, /[^\w.-]/g)} khong chay (fail-open)` } }); };
 
@@ -118,12 +118,10 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
       const tmo = Math.min(Number(m.mod.timeoutMs) || left, left);
       let res; let kind = ''; const t0 = Date.now();
       try {
-        const ctx = state.fc.set(m.id, { mod: m.mod, matched: false, done: false }).get(m.id).ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
+        const ctx = { write: false, background: !(process.env.NODE_ENV === 'test' || process.env.HARNESS_NO_BG === '1'), deadline: Date.now() + tmo };
         res = await withTimeout(Promise.resolve().then(() => m.mod.handle(ev, state.input, ctx)), tmo);
       } catch (e) { kind = e && e.message === 'timeout' ? 'timeout' : `error:${String((e && e.name) || 'Error').slice(0, 30)}`; }
-      state.fc.has(m.id) && (state.fc.get(m.id).done = true);
       if (!kind && validateHookResult(res).length) kind = 'bad-result';
-      if (kind && m.mod.failClosedOnMatch && state.fc.get(m.id)?.ctx?.guardMatched) { state.items.push({ id: m.id, result: { decision: 'deny', reason: `dispatch[${m.id}]: ${kind} (fail-closed)` } }); state.denied = true; }
       state.timings.push({ id: m.id, ms: Date.now() - t0, ...(kind ? { err: kind } : {}) });
       if (kind) {
         trace(m.id, kind);
@@ -145,8 +143,7 @@ export async function dispatch({ event, only = '', stdin, cfg = DEFAULTS, starte
     const left = Math.max(50, budget + extra - (Date.now() - startedAt));
     const w = await Promise.race([work().then(() => null), new Promise((res) => { const t = setTimeout(() => res(TIMEOUT), left); t.unref(); })]);
     if (w === TIMEOUT) timedOut = true;
-  } catch { for (const [id, f] of state.fc) if (f.ctx?.guardMatched) state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: dispatch-error (fail-closed)` } }); state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
-  if (timedOut) for (const [id, f] of state.fc) if (!f.done && f.ctx?.guardMatched) { state.items.push({ id, result: { decision: 'deny', reason: `dispatch[${id}]: budget-timeout (fail-closed)` } }); state.traces.push(traceRec('module-error', `${id}: budget-timeout fail-closed`)); }
+  } catch { state.traces.push(traceRec('fail-open', 'dispatch-error')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'dispatch-error')); }
   if (timedOut) { state.traces.push(traceRec('module-error', 'dispatch: budget-timeout')); if (ev === 'PreToolUse') state.warns.push(gateWarn('dispatch', 'budget-timeout')); }
   const merged = mergeResults(state.items);
   const out = profile.render(ev, merged);

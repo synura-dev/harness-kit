@@ -4,7 +4,7 @@
 //   hook.mjs sweep   : SessionStart. `prune --apply` an toan (clean + da merge + qua minAgeHours + khong locked). Fail-open, LUON exit 0.
 // Log 1 dong JSONL vao <data>/worktree/hook.jsonl. Dung core/runtime/worktree.mjs (cung ham voi dispatch-worker).
 import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig } from '../../core/config/config.mjs';

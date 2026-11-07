@@ -1,4 +1,4 @@
-// harness agy init [--dir <du an>] : kiem plugin harness-kit (native) da cai cho du an chua (khong ghi file) + canh bao .agents/hooks.json cu co khoa "harness-kit" (hook doi).
+// harness agy init [--dir <du an>] : kiem plugin harness-kit (native) da cai GLOBAL trong agy + du an da bat chua (khong ghi file) + canh bao .agents/hooks.json cu co khoa "harness-kit" (hook doi).
 // harness agy rules [--print] : in rule allow de xuat cho ~/.gemini/antigravity-cli/settings.json (khong ghi). --apply: chi khi TTY + go "yes", sao luu .bak-<ngay>.
 import fs from 'node:fs';
 import os from 'node:os';
@@ -6,42 +6,41 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { spawnSync } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
+import { enabledIn } from '../../hooks/dispatch/agy-native.mjs';
 
 export const HOOK_KEY = 'harness-kit';
 export const RULES = Object.freeze(['command(harness)']);
-export const CLONE_URL = 'https://github.com/synura-dev/harness-kit.git';
+const PLUGIN_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
 const read = (f) => { try { return fs.readFileSync(f, 'utf8'); } catch { return null; } };
 const parse = (s) => JSON.parse(String(s).replace(/^\uFEFF/, ''));
 
-/** native: plugin harness-kit da cai chua? Dat khi (a) <du an>/.agents/plugins/harness-kit/.antigravity-plugin/plugin.json ton tai (project scope, uu tien)
- *  HOAC (b) `agy plugin list --json` (global; mang {name, enabled,...}) co harness-kit enabled. + canh bao hooks.json cu cua du an (hook doi).
- *  inj.list = () => stdout JSON (test). Khong ghi file. -> { code, lines } */
+/** native: cai GLOBAL (`agy plugin install <goc plugin>`, nguon = cache Claude). OK khi `agy plugin list --json` (mang {name, enabled, version, path}) co harness-kit enabled;
+ *  canh bao khi version != .claude-plugin/plugin.json cua plugin dang chay. Bao them du an nay da bat plugin chua (cong agy-native: enabledPlugins["harness-kit@..."] = true trong .claude/settings*.json)
+ *  + canh bao ban clone cu .agents/plugins/harness-kit (hook chay doi voi global) va .agents/hooks.json cu. inj.list/inj.root/inj.version de test. Khong ghi file. -> { code, lines } */
 export function native({ dir, inj = {} } = {}) {
   const lines = [];
   let code = 0;
-  const pdir = path.join(dir, '.agents', 'plugins', 'harness-kit');
-  const project = fs.existsSync(path.join(pdir, '.antigravity-plugin', 'plugin.json'));
-  let installed = null;
-  let disabled = false;
-  { // luon doc ban global: project + global cung bat = hook chay doi (canh bao)
-    try {
-      const out = inj.list ? inj.list() : spawnSync('agy', ['plugin', 'list', '--json'], { encoding: 'utf8', timeout: 15000, windowsHide: true, shell: process.platform === 'win32' }).stdout;
-      const j = JSON.parse(String(out || ''));
-      // agy 1.5.2: JSON array [{name, enabled, version, path, skills...}]; chi liet ke plugin GLOBAL
-      const arr = Array.isArray(j) ? j : (j && (j.plugins || j.items)) || [];
-      const me = arr.find((p) => (p && typeof p === 'object' ? p.name === 'harness-kit' : p === 'harness-kit'));
-      installed = !!me;
-      if (me && typeof me === 'object' && me.enabled === false) disabled = true;
-    } catch { /* khong co agy / khong parse duoc */ }
+  const root = inj.root || PLUGIN_ROOT;
+  let mine = inj.version;
+  if (mine === undefined) { try { mine = parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).version; } catch { mine = null; } }
+  let me = null;
+  try {
+    const out = inj.list ? inj.list() : spawnSync('agy', ['plugin', 'list', '--json'], { encoding: 'utf8', timeout: 15000, windowsHide: true, shell: process.platform === 'win32' }).stdout;
+    const j = JSON.parse(String(out || ''));
+    const arr = Array.isArray(j) ? j : (j && (j.plugins || j.items)) || [];
+    me = arr.find((p) => (p && typeof p === 'object' ? p.name === 'harness-kit' : p === 'harness-kit')) || null;
+  } catch { /* khong co agy / khong parse duoc */ }
+  if (!me) { code = 1; lines.push('[THIEU] agy chua cai plugin harness-kit (global)', `-> chay: agy plugin install "${root}"`); }
+  else if (typeof me === 'object' && me.enabled === false) { code = 1; lines.push('[warn] plugin harness-kit (global) da cai nhung dang tat (enabled=false) -> hook khong chay', '-> chay: agy plugin enable harness-kit'); }
+  else {
+    lines.push('[OK] agy da cai plugin harness-kit (global)');
+    if (typeof me === 'object' && mine && me.version && me.version !== mine) lines.push(`[warn] ban cai trong agy ${me.version} != plugin nay ${mine} -> cai lai: agy plugin install "${root}" (hook SessionStart cua Claude tu cap nhat khi mo phien; tat: HARNESS_AGY_AUTOSYNC=0)`);
   }
-  if (project) {
-    lines.push('[OK] plugin harness-kit da cai cho du an (.agents/plugins/harness-kit)', `-> cap nhat: git -C "${pdir}" pull`);
-    if (installed === true && !disabled) lines.push('[warn] harness-kit con bat o ban GLOBAL (agy plugin list) -> hook chay doi; tat 1 trong 2 (agy plugin disable harness-kit)');
-  }
-  else if (installed === true && disabled) { code = 1; lines.push('[warn] plugin harness-kit (global) da cai nhung dang tat (enabled=false) -> hook khong chay', '-> chay: agy plugin enable harness-kit'); }
-  else if (installed === true) lines.push('[OK] agy da cai plugin harness-kit (global)');
-  else { code = 1; lines.push('[THIEU] chua cai plugin harness-kit cho du an', `-> chay: git clone ${CLONE_URL} "${pdir}"`, '-> them dong `plugins/` vao .agents/.gitignore', `-> cap nhat sau nay: git -C "${pdir}" pull`); }
+  if (enabledIn(dir)) lines.push('[OK] du an nay da bat harness-kit (enabledPlugins trong .claude/settings*.json)');
+  else { code = 1; lines.push('[THIEU] du an nay chua bat harness-kit -> hook agy khong chay o day', '-> them vao .claude/settings.json: "enabledPlugins": { "harness-kit@synura": true }'); }
+  const clone = path.join(dir, '.agents', 'plugins', 'harness-kit');
+  if (fs.existsSync(clone)) lines.push(`[warn] con ban clone theo du an ${clone} -> hook chay doi voi ban global; xoa thu muc do`);
   const lw = legacyHooksWarn(dir);
   if (lw) lines.push(lw);
   return { code, lines };

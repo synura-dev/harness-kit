@@ -23,7 +23,7 @@ A Claude Code plugin that adds a deterministic constraint layer around AI agents
 No further setup is needed. The plugin provides the Claude hooks, and the `harness` CLI is on the Bash tool's PATH.
 
 - Outside Claude (PowerShell, cmd, your own bash): the first Claude session installs a `harness` shim through the SessionStart hook; open a new terminal afterwards. Manual install: `harness install --shim [--dir D] [--dry-run] [--force]`. Disable with `HOOK_USER_SHIM_ENABLED=0`.
-- agy: `git clone https://github.com/synura-dev/harness-kit.git <project>/.agents/plugins/harness-kit` (add `plugins/` to `<project>/.agents/.gitignore`); agy auto-loads its hooks + skills. Update: `git -C <project>/.agents/plugins/harness-kit pull`. `harness agy init` checks the install (project clone, or a global `agy plugin list --json` entry) and warns about old `.agents/hooks.json` entries.
+- agy: install globally from the same bits Claude uses: `agy plugin install <plugin root>` (e.g. `~/.claude/plugins/cache/synura/harness-kit/<version>`; the Claude SessionStart hook `agy-sync` re-runs it in the background when the Claude plugin version differs from the agy copy; opt out with `HARNESS_AGY_AUTOSYNC=0`). agy has no per-project enable, so the hook is gated per project: it dispatches only if `.claude/settings.local.json` or `.claude/settings.json` has `"enabledPlugins": {"harness-kit@synura": true}`; otherwise it does nothing and writes nothing. `harness agy init` checks the global install (+ version), whether this project is enabled, and warns about a project clone `.agents/plugins/harness-kit` (double hooks) and old `.agents/hooks.json` entries.
 - Health check: `/harness-kit:doctor` or `harness doctor`.
 
 Notes:

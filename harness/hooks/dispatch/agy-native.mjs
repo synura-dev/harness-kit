@@ -1,4 +1,4 @@
-// harness-kit: entry hook cho plugin agy NATIVE, cai theo du an: git clone vao <du an>/.agents/plugins/harness-kit (agy tu nap hooks.json + skills). Khong con shim .agents/harness-agy-shim.mjs.
+// harness-kit: entry hook cho plugin agy NATIVE. Cai GLOBAL (`agy plugin install <goc plugin>`, nguon = cache Claude); agy khong bat theo du an nen hook chay moi workspace -> cong theo du an: chi dispatch khi <ws>/.claude/settings.local.json|settings.json co enabledPlugins["harness-kit@..."] = true (local thang project neu co khoa).
 // <plugin>/hooks.json goi `node ./harness/hooks/dispatch/agy-native.mjs <Event>` (cwd hook agy = goc plugin).
 // Goc plugin = suy tu vi tri file nay; workspace = workspacePaths[0] trong stdin (agy khong co env workspace).
 // Thieu/khong hop le -> KHONG dispatch (cwd = goc plugin, audit se ghi nham vao plugin): HKERR + fail-open.
@@ -26,11 +26,24 @@ export function workspaceOf(input) {
   } catch { return ''; }
 }
 
+/** Du an bat plugin kieu Claude? Moi khoa /^harness-kit@/ trong enabledPlugins: gia tri local (settings.local.json) de len project (settings.json) cho CUNG khoa; bat khi co khoa nao === true. Thieu/BOM/JSON hong/khong phai object = khong bat. */
+export function enabledIn(ws) {
+  const eff = {};
+  for (const f of ['settings.json', 'settings.local.json']) {
+    try {
+      const ep = JSON.parse(fs.readFileSync(path.join(ws, '.claude', f), 'utf8').replace(/^﻿/, '')).enabledPlugins;
+      if (ep && typeof ep === 'object' && !Array.isArray(ep)) for (const k of Object.keys(ep)) if (/^harness-kit@/.test(k)) eff[k] = ep[k];
+    } catch { /* thieu/hong -> bo qua file */ }
+  }
+  return Object.values(eff).some((v) => v === true);
+}
+
 export async function run(event, input, { root = ROOT, baseEnv = process.env } = {}) {
   const fail = (cause) => ({ stdout: fallback(event), stderr: hkerr(cause) });
   if (!/^[A-Za-z]+$/.test(event)) return fail('su kien khong hop le: ' + String(event).slice(0, 40));
   const ws = workspaceOf(input);
-  if (!ws) return fail('payload khong co workspacePaths[0]; bo qua dispatch');
+  // Cong truoc: plugin global khong biet du an -> thieu workspacePaths hoac du an chua bat = fail-open IM LANG (khong HKERR, khong ghi gi).
+  if (!ws || !enabledIn(ws)) return { stdout: fallback(event), stderr: '' };
   const env = { ...baseEnv, HARNESS_PLUGIN_DIR: root, CLAUDE_PROJECT_DIR: ws };
   try { (await import(pathToFileURL(path.join(root, 'harness', 'core', 'io', 'paths.mjs')).href)).applyWorkspaceEnv(env, ws); } catch { /* plugin mode mac dinh */ }
   const r = spawnSync(process.execPath, [path.join(root, 'harness', 'hooks', 'dispatch', 'agy.mjs'), event], { input, cwd: root, env, encoding: 'utf8', timeout: event === 'SessionStart' ? 25000 : 3500, windowsHide: true });

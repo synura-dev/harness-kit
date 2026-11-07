@@ -2,7 +2,7 @@
 //   "guard": { "event": "PreToolUse", "matcher": "<regex tool_name>", "args": ["guard"] }
 // PreToolUse: voi moi ext da dang ky VA hash ok (drift/chua duyet => chan) co matcher khop tool_name, chay
 //   `harness <domain> <args>` (khong shell) voi JSON su kien tren stdin, timeout 2500ms (config), dispatcher cap budget rieng 3000ms cho module nay.
-//   exit 0 = qua; exit 2 = chan (deny, ly do = stderr); exit khac/timeout/loi/hash lech = FAIL-CLOSED (chan + audit) cho tool da khop matcher. Khong hard-code ten ext.
+//   exit 0 = qua; exit 2 = chan (deny, ly do = stderr); hash lech = chan (tin hieu vi pham ro). exit khac/timeout/loi spawn/throw = FAIL-OPEN (cho qua + additionalContext canh bao + audit allow; timeout khong phai tin hieu vi pham). Khong hard-code ten ext.
 import path from 'node:path';
 import { spawn } from '../../core/runtime/proc.mjs';
 import { fileURLToPath } from 'node:url';
@@ -59,28 +59,43 @@ export async function handle(event, input, ctx = {}) {
     const run = ctx.run || defaultRun;
     const records = [], denies = [];
     const stdin = JSON.stringify(inp);
+    const skipped = [];
+    const skip = (id, kind) => { skipped.push(`guard ${id} ${kind}`); records.push(rec('fail-open', `guard ${id}: ${kind}, bo qua (fail-open)`)); };
     const deny = (id, rule, why) => { denies.push(`ext-guard[${id}]: ${why}`); records.push(rec(rule, why, 'deny')); };
+    // Buoc 1 (dong bo, truoc khi spawn gi): hash lech cua BAT KY ext khop => deny ngay, khong cho guard khac (co the treo) lam mat ket luan.
+    const matched = [];
     for (const e of list) {
       try {
         const g = parseGuard(e.guard);
         if (!g || !g.matcher.test(tool)) continue;
-        ctx.guardMatched = true; // dispatcher: het budget/loi truoc khi tra loi => CHAN (fail-closed)
-        if (hashOf(e.root) !== e.hash) { deny(e.id, 'hash-drift', `guard ${e.id} chua duyet: harness ext approve ${e.id}`); continue; }
-        const r = await Promise.resolve(run(g.domain, g.args, { cwd: ws, timeoutMs: cfg.timeoutMs, env, stdin })).catch(() => ({ error: 'run' }));
-        if (r && r.code === 0) continue;
-        if (r && r.code === 2) {
-          const why = String(r.stderr || '').replace(/\s+/g, ' ').trim().slice(0, cfg.maxReason || 500) || 'blocked';
-          denies.push(`ext-guard[${e.id}]: ${why}`);
-          records.push(rec('ext-deny', `ext ${e.id}: ${why}`, 'deny'));
-        } else deny(e.id, 'fail-closed', `guard ${e.id} loi (${(r && (r.error || `exit ${r.code}`)) || 'loi'}), chan`);
-      } catch { deny(e.id, 'fail-closed', `guard ${e.id} loi, chan`); }
+        if (hashOf(e.root) !== e.hash) deny(e.id, 'hash-drift', `guard ${e.id} chua duyet: harness ext approve ${e.id}`);
+        else matched.push({ e, g });
+      } catch { skip(e.id, 'throw'); }
+    }
+    // Buoc 2: chay guard song song; exit 2 dau tien => tra deny NGAY (khong doi guard con lai, dispatcher co the het budget).
+    if (!denies.length && matched.length) {
+      let early; const first = new Promise((res) => { early = res; });
+      const jobs = matched.map(async ({ e, g }) => {
+        try {
+          const r = await Promise.resolve(run(g.domain, g.args, { cwd: ws, timeoutMs: cfg.timeoutMs, env, stdin })).catch(() => ({ error: 'run' }));
+          if (r && r.code === 0) return;
+          if (r && r.code === 2) {
+            const why = String(r.stderr || '').replace(/\s+/g, ' ').trim().slice(0, cfg.maxReason || 500) || 'blocked';
+            denies.push(`ext-guard[${e.id}]: ${why}`);
+            records.push(rec('ext-deny', `ext ${e.id}: ${why}`, 'deny'));
+            early();
+          } else skip(e.id, (r && (r.error || `exit ${r.code}`)) || 'loi');
+        } catch { skip(e.id, 'throw'); }
+      });
+      await Promise.race([Promise.all(jobs), first]);
     }
     const out = {};
     if (denies.length) { out.decision = 'deny'; out.reason = denies.join(' | '); }
-    if (records.length) out.records = records;
+    if (skipped.length) out.additionalContext = `ext-guard: ${skipped.join('; ')} -> guard khong chay, bo qua (fail-open)`;
+    if (records.length) out.records = [...records];
     return out;
   } catch { return {}; }
 }
 
-const META = { id: 'ext-guard', events: ['PreToolUse'], timeoutMs: 2800, onError: 'open', failClosedOnMatch: true };
+const META = { id: 'ext-guard', events: ['PreToolUse'], timeoutMs: 2800, onError: 'open' };
 export default Object.freeze({ ...META, handle: async (event, input, ctx) => handle(event, input, ctx) });

@@ -4,8 +4,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { validatePlaybook, loadPlaybook, resolveParams } from './playbook/schema.mjs';
-import { denyRun } from './playbook/policy.mjs';
+import { validatePlaybook, loadPlaybook, resolveParams, buildArgv } from './playbook/schema.mjs';
+import { denyRun, HARNESS_BIN, scriptOutsideHub } from './playbook/policy.mjs';
 import { resolveSpawn, summarizeOutput } from './playbook/exec.mjs';
 import { runPlaybook, formatResult } from './playbook/run.mjs';
 import { dataPathFor } from '../../../harness/core/io/storage.mjs';
@@ -409,4 +409,20 @@ test('resolveSpawn: cmd shim metacharacters / spaces in path rejected (windows s
   } else {
     expect(resolveSpawn(['tool', 'a&b'], win('/usr/bin/tool')).cmd).toBe('/usr/bin/tool');
   }
+});
+
+test('${harnessBin}: validate -> buildArgv -> policy; node + bin/harness cua plugin chay duoc ngoai hub, duong dan khac van bi cam', () => {
+  const step = (run) => ({ name: 't', steps: [{ id: 'a', run }] });
+  expect(validatePlaybook(step(['node', '${harnessBin}', 'observe', 'digest']))).toEqual([]);
+  const b = buildArgv({ run: ['node', '${harnessBin}', 'observe', 'digest'] }, {}, {});
+  expect(b.argv).toEqual(['node', HARNESS_BIN, 'observe', 'digest']);
+  expect(HARNESS_BIN).toBe(path.join(SRC, 'bin', 'harness'));
+  expect(fs.existsSync(HARNESS_BIN)).toBe(true);
+  expect(denyRun(b.argv)).toBeNull();
+  expect(scriptOutsideHub(b.argv, REPO, REPO)).toBeNull();
+  // khong mo rong: exe harness, script ngoai hub khac, ${harnessBin} khong o vi tri script van bi cam
+  expect(validatePlaybook(step(['harness', 'observe'])).join()).toContain('allowlist');
+  expect(denyRun(['node', path.join(SRC, 'bin', 'other'), 'x'])).toContain('bi cam');
+  expect(scriptOutsideHub(['node', path.join(SRC, 'bin', 'other.mjs')], REPO, REPO)).toContain('ngoai hub');
+  expect(denyRun(['node', '-e', '${harnessBin}'])).toContain('bi cam');
 });

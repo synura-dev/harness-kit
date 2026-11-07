@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { workspaceRoot, isInside, isObj } from '../../../../harness/core/io/paths.mjs';
-import { denyRun, resolveBuiltin } from './policy.mjs';
+import { denyRun, resolveBuiltin, HARNESS_BIN } from './policy.mjs';
 
 export const DEFAULT_LIMITS = { timeout_s: 120, max_output_bytes: 200000 };
 export const EXIT = { PASS: 0, PASS_WITH_WARNINGS: 0, FAIL: 1, USAGE: 2, ESCALATE: 3, TIMEOUT: 4, DRYRUN: 6 };
@@ -36,6 +36,7 @@ function refsIn(str, where, params, captures, errs, { allowList } = {}) {
     const t = m[1];
     const cm = /^capture\.([A-Za-z_]\w*)$/.exec(t);
     if (cm) { if (!captures.has(cm[1])) errs.push(`${where}: \${${t}} tham chieu capture chua khai bao o buoc truoc`); continue; }
+    if (t === 'harnessBin') continue; // bien dung san (khong the trung param: param la [a-z][a-z0-9_]*)
     if (!/^[a-z][a-z0-9_]*$/.test(t) || !params[t]) { errs.push(`${where}: \${${t}} khong phai param da khai bao`); continue; }
     if (params[t].list) {
       if (!allowList || m[0] !== str) errs.push(`${where}: param list '${t}' chi duoc dung nguyen ca 1 doi so ("\${${t}}")`);
@@ -216,6 +217,7 @@ export function subst(tpl, params, caps, { first = false } = {}) {
   const value = tpl.replace(TOKEN_RE, (_, t) => {
     const cm = /^capture\.(.+)$/.exec(t);
     if (cm) { if (caps[cm[1]] === undefined) { missing = t; return ''; } return caps[cm[1]]; }
+    if (t === 'harnessBin') return HARNESS_BIN;
     if (params[t] === undefined) { missing = t; return ''; }
     return Array.isArray(params[t]) ? params[t].join(',') : params[t];
   });
