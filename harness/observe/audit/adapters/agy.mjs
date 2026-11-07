@@ -157,13 +157,6 @@ export function handle(event, input, ctx = {}) {
       inp.cli = 'agy';
       if (inp.stepIdx != null) inp.step_idx = inp.stepIdx;
       if (typeof inp.modelName === 'string' && inp.modelName) inp.model = inp.modelName;
-      // transcript: payload (SessionStart/PostInvocation/Stop) hoac suy tu conversationId (Post tool khong co); file khong ton tai -> bo
-      let tPath = typeof inp.transcriptPath === 'string' && inp.transcriptPath.endsWith('.jsonl') ? inp.transcriptPath : null;
-      if (!tPath && typeof inp.conversationId === 'string' && /^[\w.-]+$/.test(inp.conversationId)) {
-        const d = agyTranscriptPath(inp.conversationId, ctx.home || os.homedir());
-        if (fs.existsSync(d)) tPath = d;
-      }
-      if (tPath) inp.transcript_path = tPath;
 
       // Che do `pre` (PreToolUse): chi ghi marker thoi gian, khong ghi envelope.
       if (isPre) {
@@ -172,6 +165,16 @@ export function handle(event, input, ctx = {}) {
         } catch {}
         return {};
       }
+
+      // transcript: payload (SessionStart/PostInvocation/Stop) hoac suy tu conversationId (Post tool khong co); file khong ton tai/loi -> bo
+      try {
+        let tPath = typeof inp.transcriptPath === 'string' && inp.transcriptPath.endsWith('.jsonl') ? inp.transcriptPath : null;
+        if (!tPath && typeof inp.conversationId === 'string' && /^[\w-]+$/.test(inp.conversationId)) {
+          const d = agyTranscriptPath(inp.conversationId, ctx.home || os.homedir());
+          if (fs.existsSync(d)) tPath = d;
+        }
+        if (tPath) inp.transcript_path = tPath;
+      } catch {}
 
       // Workspace / cwd (agy cwd = .agents/)
       const wp = Array.isArray(inp.workspacePaths) && typeof inp.workspacePaths[0] === 'string' ? inp.workspacePaths[0] : null;
@@ -282,7 +285,7 @@ export function handle(event, input, ctx = {}) {
       try {
         const cfg = ctx.cfg || audit.readAuditConfig();
         const root = ctx.root || audit.auditRoot();
-        const env = audit.buildEnvelope(inp, cfg, new Date(), { root, usage: { sum: sumAgyUsage, model: inp.model } });
+        const env = audit.buildEnvelope(inp, cfg, new Date(), { root, usage: { sum: sumAgyUsage } });
 
         try {
           const res = compile(cfg.redact);
@@ -322,6 +325,7 @@ export function handle(event, input, ctx = {}) {
           if (errInfo.error && !env.data.error) env.data.error = errInfo.error;
         }
         if (exitCode != null && (errInfo.hasError || exitCode !== 0)) env.data.exit_code = exitCode;
+        if (exitCode != null && exitCode !== 0) { env.ok = false; env.status = 'error'; } // khop detectError "Command exited with code [1-9]"
 
         // Stop: ly do dung that cua agy
         if (inp.hook_event_name === 'Stop' && typeof inp.terminationReason === 'string') {
