@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { validatePlaybook, loadPlaybook, resolveParams } from './playbook/schema.mjs';
 import { denyRun } from './playbook/policy.mjs';
-import { resolveSpawn, summarizeOutput } from './playbook/exec.mjs';
+import { resolveSpawn, summarizeOutput, PLUGIN_HARNESS } from './playbook/exec.mjs';
 import { runPlaybook, formatResult } from './playbook/run.mjs';
 import { dataPathFor } from '../../../harness/core/io/storage.mjs';
 
@@ -409,4 +409,11 @@ test('resolveSpawn: cmd shim metacharacters / spaces in path rejected (windows s
   } else {
     expect(resolveSpawn(['tool', 'a&b'], win('/usr/bin/tool')).cmd).toBe('/usr/bin/tool');
   }
+});
+
+test('resolveSpawn: run[0]=harness -> node + bin/harness cua plugin (khong tra PATH)', () => {
+  const sp = resolveSpawn(['harness', 'play', 'x'], { lookup: () => { throw new Error('khong duoc tra PATH'); } });
+  expect(sp).toEqual({ cmd: process.execPath, args: [PLUGIN_HARNESS, 'play', 'x'] });
+  expect(PLUGIN_HARNESS).toBe(path.join(SRC, 'bin', 'harness'));
+  expect(fs.existsSync(PLUGIN_HARNESS)).toBe(true);
 });

@@ -1,4 +1,4 @@
-// harness-kit: entry hook cho plugin agy NATIVE, cai theo du an: git clone vao <du an>/.agents/plugins/harness-kit (agy tu nap hooks.json + skills). Khong con shim .agents/harness-agy-shim.mjs.
+// harness-kit: entry hook cho plugin agy NATIVE. Cai GLOBAL (`agy plugin install <goc plugin>`, nguon = cache Claude); agy khong bat theo du an nen hook chay moi workspace -> cong theo du an: chi dispatch khi <ws>/.claude/settings.local.json|settings.json co enabledPlugins["harness-kit@..."] = true (local thang project neu co khoa).
 // <plugin>/hooks.json goi `node ./harness/hooks/dispatch/agy-native.mjs <Event>` (cwd hook agy = goc plugin).
 // Goc plugin = suy tu vi tri file nay; workspace = workspacePaths[0] trong stdin (agy khong co env workspace).
 // Thieu/khong hop le -> KHONG dispatch (cwd = goc plugin, audit se ghi nham vao plugin): HKERR + fail-open.
@@ -26,11 +26,24 @@ export function workspaceOf(input) {
   } catch { return ''; }
 }
 
+/** Du an bat plugin kieu Claude? enabledPlugins co khoa /^harness-kit@/ = true; settings.local.json thang settings.json neu co khoa. Thieu/BOM/JSON hong = khong bat. */
+export function enabledIn(ws) {
+  for (const f of ['settings.local.json', 'settings.json']) {
+    try {
+      const ep = JSON.parse(fs.readFileSync(path.join(ws, '.claude', f), 'utf8').replace(/^﻿/, '')).enabledPlugins;
+      const keys = ep && typeof ep === 'object' ? Object.keys(ep).filter((k) => /^harness-kit@/.test(k)) : [];
+      if (keys.length) return keys.some((k) => ep[k] === true);
+    } catch { /* thieu/hong -> thu file tiep */ }
+  }
+  return false;
+}
+
 export async function run(event, input, { root = ROOT, baseEnv = process.env } = {}) {
   const fail = (cause) => ({ stdout: fallback(event), stderr: hkerr(cause) });
   if (!/^[A-Za-z]+$/.test(event)) return fail('su kien khong hop le: ' + String(event).slice(0, 40));
   const ws = workspaceOf(input);
   if (!ws) return fail('payload khong co workspacePaths[0]; bo qua dispatch');
+  if (!enabledIn(ws)) return { stdout: fallback(event), stderr: '' }; // du an chua bat plugin: im lang, khong ghi gi
   const env = { ...baseEnv, HARNESS_PLUGIN_DIR: root, CLAUDE_PROJECT_DIR: ws };
   try { (await import(pathToFileURL(path.join(root, 'harness', 'core', 'io', 'paths.mjs')).href)).applyWorkspaceEnv(env, ws); } catch { /* plugin mode mac dinh */ }
   const r = spawnSync(process.execPath, [path.join(root, 'harness', 'hooks', 'dispatch', 'agy.mjs'), event], { input, cwd: root, env, encoding: 'utf8', timeout: event === 'SessionStart' ? 25000 : 3500, windowsHide: true });
