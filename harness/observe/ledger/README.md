@@ -7,3 +7,11 @@
 - So: `data/system/ledger/ledger.jsonl` (status open|warned|acted|ignored|resolved). Doc: `harness observe ledger [--status X] [--limit N]`.
 - Job lo `job.mjs` (nen, <=1 lan/gio, timeout cung 25s) tinh va ghi so. Hook `hook.mjs` (SessionStart/UserPromptSubmit) CHI doc so, phat <=3 dong, ghi warn_ts; SessionStart kick job khi het han. Job gom candidates (error) + patterns + prune, roi chay autopilot evolve (<=1 lan/24h; chi tu ap luat canh bao evolve-*.json).
 - Candidate dung hop dong `core/audit/CANDIDATE.md`.
+
+## Do dung evolve (`harness evolve scan --kind deprecate`)
+- Cua so du lieu thuc moi nguon (transcript, audit) = tu ngay som nhat co du lieu; thieu so voi `--days` -> `insufficient_window` (khong de xuat xoa).
+- Kenh: tool | slash | read | preload. Loc maintenance: doc skill/lenh hang loat do bao tri bi bo (`maintenance_dropped`). Trung 1 lan dung nhieu nguon -> bo (`duplicates_dropped`).
+- Nguon -> hanh dong: project `delete_in_repo`, plugin `edit_plugin_repo`, account `disable_on_claude_ai`; builtin/third_party/unknown chi `report_only`.
+- `--cost`: chi phi = desc_tokens x so phien co nap + body_tokens x so lan dung. `--by-project`: dem theo du an. `--detail kind:id[,kind:id]`: kenh, ids, phien, mau su kien.
+- Transcript `~/.claude/projects/**/*.jsonl` doc tang dan, cache `data/evolve/transcripts-cache.jsonl`; cold (cache rong) tran 4GB/120s, warm 512MB/20s, qua tran -> `truncated`.
+- `harness doctor` them `skill-drift`: ban sao skill (.claude/skills, .agents/skills, plugin cache) lech hash -> warn, thieu -> info.

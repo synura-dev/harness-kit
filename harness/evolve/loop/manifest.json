@@ -5,7 +5,7 @@
   "entry": "cli.mjs",
   "domain": "evolve",
   "desc": "vong tien hoa: loi lap (>=3 lan/7 ngay) -> de xuat -> oracle eval -> apply --approve co version -> rollback",
-  "cmds": ["scan [--kind error|pattern|deprecate]", "propose", "check", "apply", "rollback", "log", "list", "autopilot [--dry-run]", "queue [--approve <id>|--reject <id>]"],
+  "cmds": ["scan [--kind error|pattern|deprecate]", "propose", "check", "apply", "rollback", "log", "list", "scan --kind deprecate [--days N] [--cost] [--by-project] [--detail kind:id] (nguon->hanh dong, insufficient_window, duplicates_dropped; xem observe/ledger/README.md)", "autopilot [--dry-run]", "queue [--approve <id>|--reject <id>]"],
   "default": "index",
   "files": { "helpers": ["loop.mjs", "policy.mjs", "patterns.mjs", "prune.mjs", "prune-cli.mjs", "autopilot.mjs", "rule-content.mjs"] },
   "tests": ["loop.test.mjs", "patterns.test.mjs", "prune.test.mjs", "autopilot.test.mjs", "rule-content.test.mjs"],
