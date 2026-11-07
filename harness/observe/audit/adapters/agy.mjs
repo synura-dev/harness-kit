@@ -10,35 +10,9 @@ import { compile, redact, cut } from '../redact.mjs';
 import { fileURLToPath } from 'node:url';
 import * as audit from '../audit.mjs';
 import os from 'node:os';
-import { sumAgyUsage, stepDuration, exitCodeOf, exitStatusOf, agyTranscriptPath } from './agy-usage.mjs';
+import { sumAgyUsage, exitStatusOf, safeTranscriptPath } from './agy-usage.mjs';
 
-const TAIL_BYTES = 65536;
-const TAIL_MS = 100;
 const STOP_BAD = /^(ERROR|MAX_)/;
-
-// Doc DUOI file (toi da TAIL_BYTES), bo dong dau do dang. Loi/khong co file -> null (fail-open).
-function readTail(file) {
-  let fd;
-  try {
-    fd = fs.openSync(file, 'r');
-    const size = fs.fstatSync(fd).size;
-    const len = Math.min(size, TAIL_BYTES);
-    const buf = Buffer.alloc(len);
-    fs.readSync(fd, buf, 0, len, size - len);
-    const text = buf.toString('utf8');
-    return size > len ? text.slice(text.indexOf('\n') + 1) : text;
-  } catch { return null; } finally { if (fd != null) try { fs.closeSync(fd); } catch {} }
-}
-
-// Exit code tu noi dung buoc GENERIC cung stepIdx trong duoi transcript.
-function stepExit(text, stepIdx) {
-  const pat = `"step_index":${Number(stepIdx)}`;
-  for (const line of text.split('\n')) {
-    if (!line.includes(pat)) continue;
-    try { const e = JSON.parse(line); if (e.type === 'GENERIC' && e.step_index === Number(stepIdx)) return exitCodeOf(e.content); } catch {}
-  }
-  return null;
-}
 
 const HERE = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -166,12 +140,13 @@ export function handle(event, input, ctx = {}) {
         return {};
       }
 
-      // transcript: payload (SessionStart/PostInvocation/Stop) hoac suy tu conversationId (Post tool khong co); file khong ton tai/loi -> bo
+      // transcript: lay tu payload neu co; chi o Stop moi suy tu conversationId khi payload thieu (Post khong doc transcript); file khong ton tai/loi -> bo
       try {
         let tPath = typeof inp.transcriptPath === 'string' && inp.transcriptPath.endsWith('.jsonl') ? inp.transcriptPath : null;
-        if (!tPath && typeof inp.conversationId === 'string' && /^[\w-]+$/.test(inp.conversationId)) {
-          const d = agyTranscriptPath(inp.conversationId, ctx.home || os.homedir());
-          if (fs.existsSync(d)) tPath = d;
+        const isStop = (inp.hookEventName || inp.hook_event_name || inp.event || inp.eventName) === 'Stop' || (!(inp.hookEventName || inp.hook_event_name || inp.event || inp.eventName) && (inp.terminationReason != null || inp.fullyIdle != null));
+        if (!tPath && isStop) {
+          const d = safeTranscriptPath(inp.conversationId, ctx.home || os.homedir());
+          if (d && fs.existsSync(d)) tPath = d;
         }
         if (tPath) inp.transcript_path = tPath;
       } catch {}
@@ -305,16 +280,7 @@ export function handle(event, input, ctx = {}) {
             const d = takePre(root, inp.session_id, inp.step_idx, Date.now());
             if (d != null) { env.dur_ms = d; env.data.dur_src = 'marker'; }
           }
-          // Mot lan doc duoi transcript cho ca dur (khi chua co marker) va exit code.
-          const wantDur = env.dur_ms == null;
-          const wantExit = exitCode == null && (errInfo.hasError || env.tool === 'Bash');
-          if ((wantDur || wantExit) && inp.transcript_path) {
-            const text = readTail(inp.transcript_path);
-            if (text) {
-              if (wantDur) { const d = stepDuration(text, inp.step_idx, Date.now() + TAIL_MS); if (d != null) { env.dur_ms = d; env.data.dur_src = 'transcript'; } }
-              if (wantExit) exitCode = stepExit(text, inp.step_idx);
-            }
-          }
+          // Post ban TRUOC khi agy ghi buoc GENERIC vao transcript (T6): khong doc transcript o day; thoi gian tool tong hop o Stop (data.usage.tool_ms).
         }
         if (exitCode == null && errInfo.hasError) exitCode = exitStatusOf(errInfo.error); // shortcut: "exit status N" theo tai lieu, chua thay that
 

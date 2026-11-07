@@ -40,11 +40,11 @@ Thêm loại mới (không sửa code): `events` (event->type), `tools` (`match`
 
 ### agy: payload that va loi (agy 1.5.x, kiem that 2026-11-07)
 - `HUB_AGY_CAPTURE=<file>` (mac dinh TAT): adapters/agy.mjs ghi them stdin tho da redact, moi dong 1 payload.
-- Payload chung: conversationId, workspacePaths, transcriptPath (SessionStart/PostInvocation/Stop; Post tool KHONG co -> adapter suy `~/.gemini/antigravity-cli/brain/<conversationId>/.system_generated/logs/transcript_full.jsonl`, convId chi `[\w-]+`), modelName -> `model`.
-- Post: `error` chuoi tu do (vd "file does not exist") -> ok:false + `data.error`. Exit code khac 0 (tu "exit status N" theo tai lieu, chua thay that; hoac "Command exited with code N." trong transcript) -> ok:false, status error, `data.exit_code`.
+- Payload chung: conversationId, workspacePaths, transcriptPath (SessionStart/PostInvocation/Stop; Post tool co o ban 1.5 thuc te, T0 tung ghi khong co -> neu thieu adapter suy `~/.gemini/antigravity-cli/brain/<conversationId>/.system_generated/logs/transcript_full.jsonl`, convId chi `[\w-]+`), modelName -> `model`.
+- Post: `error` chuoi tu do (vd "file does not exist") -> ok:false + `data.error`. Exit code khac 0 (tu "exit status N" theo tai lieu, chua thay that; khong doc transcript o Post) -> ok:false, status error, `data.exit_code`.
 - Stop: terminationReason/executionNum/fullyIdle -> `data.stop_reason`/`exec_num`/`fully_idle`; ERROR, MAX_* -> ok:false; USER_CANCELED -> `data.signal` interrupt.
 - Token: lay tu transcript qua parser `adapters/agy-usage.mjs` (`sumAgyUsage`), delta theo offset trong `data.usage`. `tokens_in/out` o Stop la cong don ca transcript -> bao cao dung `data.usage` (muc report `cost-cli` tach theo cli).
-- `dur_ms`: marker Pre (chi run_command/write_file/edit_file) -> `data.dur_src` = `marker`; con lai doc duoi transcript (64KB/100ms) theo stepIdx -> `transcript`.
+- `dur_ms`: Post chi co khi co marker Pre (chi run_command/write_file/edit_file) -> `data.dur_src` = `marker`; con lai null (Post ban TRUOC khi agy ghi buoc GENERIC vao transcript nen khong doc duoc dur/exit code o Post; ban 1.5 thuc te Post CO transcriptPath). Thoi gian tool agy tong hop o Stop: `data.usage.tool_ms` (+ `tool_steps`), do phan giai giay, theo delta moi Stop; report `cost-cli` cot "ms tool (transcript)".
 - Them tool moi: (1) adapter rieng cho tool do; (2) parser tinh token truyen vao `buildEnvelope` qua `opts.usage.sum`; (3) core `audit.mjs`/`usage-tail.mjs` khong biet ten tool, khong sua.
 
 ### Bật
