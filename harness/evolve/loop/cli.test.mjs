@@ -49,6 +49,25 @@ test('runPrune --cost/--by-project/--detail/dupes in tu fixture', async () => {
   expect(x.summary).toContain('action=delete_in_repo');
 });
 
+test('runPrune: khoa quet transcript — khoa song -> busy (khong quet/ghi); khoa cu/pid chet -> tiep tuc va nha khoa', async () => {
+  const mkd = () => fs.mkdtempSync(path.join(os.tmpdir(), 'plock-'));
+  const proj = mkd(), tr = mkd(), data = mkd(), audit = mkd();
+  const lock = path.join(data, 'transcripts.lock');
+  const base = { hubRoot: proj, dataRoot: data, auditDir: audit, transcriptRoots: [tr], transcriptCache: path.join(data, 'c.jsonl'), extRoots: [], record: true };
+  fs.writeFileSync(lock, JSON.stringify({ pid: process.pid, ts: Date.now() }));
+  const b = await runPrune(base);
+  expect(b.summary).toContain(`busy: pid ${process.pid}`);
+  expect(fs.existsSync(path.join(data, 'prune-state.json'))).toBe(false);
+  expect(fs.existsSync(path.join(data, 'c.jsonl'))).toBe(false);
+  expect(fs.existsSync(lock)).toBe(true);
+  for (const st of [{ pid: 2147483646, ts: Date.now() }, { pid: process.pid, ts: Date.now() - 11 * 60000 }]) {
+    fs.writeFileSync(lock, JSON.stringify(st));
+    const o = await runPrune(base);
+    expect(o.summary).not.toContain('busy');
+    expect(fs.existsSync(lock)).toBe(false);
+  }
+});
+
 test('evolve list co cot verdict (trong neu chua do); evolve log hien dong effect', async () => {
   const data = fs.mkdtempSync(path.join(os.tmpdir(), 'ecli-'));
   const wj = (f, j) => { fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, JSON.stringify(j)); };

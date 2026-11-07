@@ -335,3 +335,26 @@ test('integ: usage_detail co channels, sessions, ids day du, projects cho --deta
   const d = r.usage_detail['skill:old'];
   assert.equal(d.count, 1); assert.deepEqual(d.channels, { tool: 1 }); assert.deepEqual(d.ids, ['superpowers:old']); assert.deepEqual(d.session_ids, ['s1']);
 });
+
+test('cache-only (job nen): khong co cache -> khong doc transcript, skill insufficient_window, khong tao cache', async () => {
+  const t = ISO(NOW - DAY);
+  const cf = path.join(tmp(), 'tc.jsonl');
+  const nc = await integ({ tr: asst(t, 's1', [skillUse('t1', 'old')]), opts: { transcriptCache: cf, transcriptCacheOnly: true, gateWindow: true, auditDay: ISO(NOW - 40 * DAY).slice(0, 10) } });
+  assert.equal(nc.r.sources.transcript, undefined);
+  assert.equal(nc.dep('old').status, 'insufficient_window');
+  assert.equal(fs.existsSync(cf), false);
+});
+
+test('cache-only: file moi/doi chua co trong cache -> skill insufficient_window (khong pending); cache day du -> pending', async () => {
+  const proj = tmp(), auditDir = tmp(), trDir = tmp(), cf = path.join(tmp(), 'tc.jsonl');
+  wr(path.join(proj, '.claude/skills/old/SKILL.md'), 'x');
+  const dir = path.join(trDir, projectFolder(proj));
+  wr(path.join(dir, 'a.jsonl'), asst(ISO(NOW - 40 * DAY), 's0', [skillUse('t0', 'other')]));
+  const run = (o) => pruneCandidates({ pluginRoot: tmp(), projectDir: proj, auditDirs: [auditDir], transcriptRoots: [trDir], transcriptCache: cf, gateWindow: true, nowMs: NOW, order: {}, ...o });
+  await run({}); // lam am cache
+  const full = await run({ transcriptCacheOnly: true });
+  assert.equal(full.items.find((i) => i.id === 'skill:old').status, 'pending');
+  wr(path.join(dir, 'b.jsonl'), asst(ISO(NOW - DAY), 's1', [skillUse('t1', 'old')])); // moi, chua cache
+  const miss = await run({ transcriptCacheOnly: true });
+  assert.equal(miss.items.find((i) => i.id === 'skill:old').status, 'insufficient_window');
+});

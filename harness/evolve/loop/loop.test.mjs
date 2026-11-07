@@ -319,7 +319,7 @@ test('E2E du an sach (khong harness/): CLI scan -> propose -> check (SKIPPED) ->
     // ngay audit theo hom nay de lot cua so 7 ngay
     const today = new Date().toISOString().slice(0, 10);
     if (today !== '2026-10-29') fs.renameSync(path.dirname(ad), path.join(data, 'system', 'audit', `date=${today}`));
-    const env = { ...process.env, HUB_DIR: proj, HUB_DATA_DIR: data, CLAUDE_PROJECT_DIR: proj };
+    const env = { ...process.env, HUB_DIR: proj, HUB_DATA_DIR: data, CLAUDE_PROJECT_DIR: proj, CLAUDE_CONFIG_DIR: path.join(proj, 'claude-cfg') }; // CLAUDE_CONFIG_DIR tam: khong doc transcript that cua nguoi dung
     const run = (...a) => spawnSync(process.execPath, [path.join(HERE, 'cli.mjs'), ...a, '--json'], { env, cwd: proj, encoding: 'utf8', timeout: 30000 });
     const js = (r) => JSON.parse(r.stdout);
     const c = run('scan', '--kind', 'error');

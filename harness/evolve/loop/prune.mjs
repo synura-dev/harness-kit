@@ -8,7 +8,7 @@ import { createInterface } from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import { collectJsonlFiles } from '../../core/audit/scan.mjs';
 import { countEvents, filterMaintenance } from '../usage/collect.mjs';
-import { readTranscripts } from '../usage/transcripts.mjs';
+import { readTranscripts, defaultTranscriptRoot } from '../usage/transcripts.mjs';
 import { detectAudit, detectTranscript } from '../usage/detectors/index.mjs';
 import { parseFrontmatter } from '../../core/agy/agents.mjs';
 import { classifySource, actionFor, canPropose } from '../usage/source.mjs';
@@ -35,7 +35,7 @@ const pluginName = (root) => {
   if (!PN.has(root)) { let n = null; try { n = JSON.parse(fs.readFileSync(path.join(root, '.claude-plugin', 'plugin.json'), 'utf8')).name || null; } catch { /* khong co plugin.json */ } PN.set(root, n); }
   return PN.get(root);
 };
-const readInstalledPlugins = () => { try { return JSON.parse(fs.readFileSync(path.join(os.homedir(), '.claude', 'plugins', 'installed_plugins.json'), 'utf8')); } catch { return null; } };
+const readInstalledPlugins = () => { try { return JSON.parse(fs.readFileSync(path.join(path.dirname(defaultTranscriptRoot()), 'plugins', 'installed_plugins.json'), 'utf8')); } catch { return null; } };
 const normP = (p) => String(p).replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase();
 const isUnder = (p, root) => { const a = normP(p), b = normP(root); return !!b && (a === b || a.startsWith(b + '/')); };
 /** Nguon + hanh dong cua mot duong dan: chi project|plugin(so huu) moi go truc tiep duoc; con lai report_only. */
@@ -275,7 +275,7 @@ export function agentSkills({ projectDir = '' } = {}) {
 }
 
 /** Mac dinh cho CLI/job: doc transcript that, cache nam trong thu muc data evolve (canh prune-state.json, khong trong repo), cua so trung thuc bat. */
-export const wireDefaults = (evoDir) => ({ transcriptRoots: [path.join(os.homedir(), '.claude', 'projects')], transcriptCache: path.join(evoDir, 'transcripts-cache.jsonl'), gateWindow: true });
+export const wireDefaults = (evoDir, { cacheOnly = false } = {}) => ({ transcriptRoots: [defaultTranscriptRoot()], transcriptCache: path.join(evoDir, 'transcripts-cache.jsonl'), gateWindow: true, ...(cacheOnly ? { transcriptCacheOnly: true } : {}) });
 
 const daysSince = (iso, nowMs) => (iso ? Math.max(0, Math.floor((nowMs - Date.parse(iso)) / DAY)) : null);
 
@@ -290,8 +290,9 @@ export async function pruneCandidates(o = {}) {
   const fromMs = nowMs - days * DAY;
   const inv = { commands: inventoryCommands(o), hooks: await inventoryHooks(o), skills: inventorySkills(o), agents: inventoryAgents(o), rules: inventoryRules(o) };
   const r = await readUsageEvents({ auditDirs: o.auditDirs || [], fromMs, nowMs, timeoutMs: o.timeoutMs, maxBytes: o.maxBytes });
-  const useTr = Array.isArray(o.transcriptRoots) && o.transcriptRoots.length > 0;
-  const tr = useTr ? await readTranscripts({ roots: o.transcriptRoots, fromMs, nowMs, cacheFile: o.transcriptCache || null, limits: o.transcriptLimits || {} }) : null;
+  // transcriptCacheOnly (job nen): khong parse transcript; chua co cache -> bo transcript va coi do phu skill la khong du (khong ghi pending cho skill)
+  const useTr = Array.isArray(o.transcriptRoots) && o.transcriptRoots.length > 0 && !(o.transcriptCacheOnly && !(o.transcriptCache && fs.existsSync(o.transcriptCache)));
+  const tr = useTr ? await readTranscripts({ roots: o.transcriptRoots, fromMs, nowMs, cacheFile: o.transcriptCache || null, cacheOnly: !!o.transcriptCacheOnly, limits: o.transcriptLimits || {} }) : null;
   const a = auditEvents(r.events, inv, { auditSkill: !useTr });
   let trEvents = [], sessions = new Set();
   if (tr) {
@@ -305,7 +306,7 @@ export async function pruneCandidates(o = {}) {
   const trunc = r.truncated || (tr && tr.truncated) || null;
   const src = { ...u.sources, audit: { earliest: r.earliest_ts, window_days: daysSince(r.earliest_ts, nowMs) } };
   if (tr) src.transcript = { earliest: tr.earliest_ts, window_days: daysSince(tr.earliest_ts, nowMs), files: tr.files_read, cache_hits: tr.cache_hits, cache_trimmed: tr.cache_trimmed, truncated: tr.truncated };
-  const skillE = tr ? tr.earliest_ts : r.earliest_ts;
+  const skillE = tr ? (o.transcriptCacheOnly && tr.cache_misses > 0 ? null : tr.earliest_ts) : (o.transcriptCacheOnly ? null : r.earliest_ts);
   const window = o.gateWindow !== false ? { skill: { earliest: skillE }, agent: { earliest: r.earliest_ts }, command: { earliest: r.earliest_ts }, hook: { earliest: r.hookrun_earliest || src.hookrun_since } } : undefined;
   const b = buildCandidates({ inv, usage, state: o.state || {}, caps: o.caps, nowMs, days, waitDays: o.waitDays, skipDeprecate: !!trunc, window });
   const used = {}, usage_counts = {};

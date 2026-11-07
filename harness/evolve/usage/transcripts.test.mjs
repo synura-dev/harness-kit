@@ -183,3 +183,15 @@ test('timestamp: later "timestamp" inside toolUseResult is ignored', async () =>
   const o = await run(r);
   assert.equal(o.total_sessions, 1);
 });
+
+test('cacheOnly: khong parse file nao (files_parsed=0), dung entry cache, khong ghi cache', async () => {
+  const r = mk(); const cf = path.join(mk(), 'c.jsonl');
+  put(r, 'p/a.jsonl', [skillLine('2026-11-06T12:00:00Z')], NOW - 3600000);
+  const warm = await run(r, { cacheFile: cf });
+  assert.equal(warm.files_parsed, 1);
+  const before = fs.readFileSync(cf, 'utf8');
+  put(r, 'p/b.jsonl', [skillLine('2026-11-06T13:00:00Z')], NOW - 1000); // moi, chua co trong cache
+  const o = await run(r, { cacheFile: cf, cacheOnly: true });
+  assert.equal(o.files_parsed, 0); assert.equal(o.bytes_parsed, 0); assert.equal(o.records.length, 1);
+  assert.equal(fs.readFileSync(cf, 'utf8'), before);
+});
