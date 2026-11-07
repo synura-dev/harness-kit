@@ -1,4 +1,4 @@
-// harness-kit: entry hook cho plugin agy NATIVE (`agy plugin install <repo>`). Thay shim theo du an (.agents/harness-agy-shim.mjs).
+// harness-kit: entry hook cho plugin agy NATIVE, cai theo du an: git clone vao <du an>/.agents/plugins/harness-kit (agy tu nap hooks.json + skills). Khong con shim .agents/harness-agy-shim.mjs.
 // <plugin>/hooks.json goi `node ./harness/hooks/dispatch/agy-native.mjs <Event>` (cwd hook agy = goc plugin).
 // Goc plugin = suy tu vi tri file nay; workspace = workspacePaths[0] trong stdin (agy khong co env workspace).
 // Thieu/khong hop le -> KHONG dispatch (cwd = goc plugin, audit se ghi nham vao plugin): HKERR + fail-open.

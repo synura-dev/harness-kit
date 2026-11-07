@@ -5,7 +5,17 @@
 
 const last = (s) => String(s).split(':').pop();
 const SLASH = /<command-name>\s*\/?([^<\s]+?)\s*<\/command-name>/g;
-const THIRD_PARTY = /\/\.claude\/plugins\//; // cache/marketplaces cua plugin ben thu ba: khong ghep voi skill local cung ten
+const PLUGINS = /\/\.claude\/plugins\/(cache|marketplaces)\/([^/]+)\/(.*)$/;
+// Read duoi ~/.claude/plugins: chi giu khi plugin (cache/<mkt>/<plugin>/ hoac marketplaces/<mkt>/..<plugin>..) thuoc ownedPlugins; con lai la ben thu ba.
+const thirdParty = (file, owned) => {
+  if (!/\/\.claude\/plugins\//.test(file)) return false;
+  const m = PLUGINS.exec(file);
+  if (!m || !owned) return true;
+  const segs = m[3].split('/');
+  return !(m[1] === 'cache' ? owned.has(segs[0]) : segs.slice(0, 3).some((x) => owned.has(x)));
+};
+// id co prefix plugin khong thuoc ownedPlugins -> khong ghep voi skill local cung ten (anthropic-skills: giu cho danh sach account)
+const foreign = (id, owned) => { const i = String(id).indexOf(':'); if (i < 0 || !owned) return false; const p = id.slice(0, i); return p !== 'anthropic-skills' && !owned.has(p); };
 const SKILL_MD = /^(?:.*\/)?skills\/([^/]+)\/skill\.md$/i;
 
 export function detect(record, ctx = {}) {
@@ -25,6 +35,7 @@ export function detect(record, ctx = {}) {
             let j = 0;
             for (const m of it.text.matchAll(SLASH)) {
               const id = m[1];
+              if (foreign(id, ctx.ownedPlugins)) { j++; continue; }
               const isSkill = ctx.skillNames?.has(last(id)) || ctx.skillNames?.has(id);
               const kind = isSkill ? 'skill' : ctx.commandIds?.has(id) ? 'command' : null;
               if (kind) out.push(ev(kind, id, 'slash', uuid ? { callId: `${uuid}:${bi}${j ? '.' + j : ''}` } : {}));
@@ -33,11 +44,11 @@ export function detect(record, ctx = {}) {
           } else if (it.type === 'tool_use') {
             const inp = it.input || {};
             if (it.name === 'Skill' && typeof inp.skill === 'string') {
-              out.push(ev('skill', inp.skill, 'tool', { callId: it.id }));
+              if (!foreign(inp.skill, ctx.ownedPlugins)) out.push(ev('skill', inp.skill, 'tool', { callId: it.id }));
             } else if (it.name === 'Read' && typeof inp.file_path === 'string') {
               const file = inp.file_path.replace(/\\/g, '/');
               const m = SKILL_MD.exec(file);
-              if (m && !THIRD_PARTY.test(file)) out.push(ev('skill', m[1], 'read', { file, callId: it.id }));
+              if (m && !thirdParty(file, ctx.ownedPlugins)) out.push(ev('skill', m[1], 'read', { file, callId: it.id }));
             } else if ((it.name === 'Agent' || it.name === 'Task') && typeof inp.subagent_type === 'string') {
               const a = ctx.agentSkills, key = last(inp.subagent_type);
               const list = a && Object.hasOwn(a, key) ? a[key] : null;

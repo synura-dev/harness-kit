@@ -59,6 +59,16 @@ function loadCache(file, maxBytes) {
   for (const l of txt.split('\n')) { if (!l) continue; try { const e = JSON.parse(l); if (e?.file && e.v === CACHE_V) m.set(e.file, e); } catch { /* bo dong hong */ } }
   return m;
 }
+const ISO = /^\d{4}-\d{2}-\d{2}T/;
+const tsAt = (line, from) => { const i = line.indexOf('"timestamp":"', from); if (i < 0) return ''; const v = line.slice(i + 13, line.indexOf('"', i + 13)); return ISO.test(v) ? v : ''; };
+// Uu tien timestamp ngay sau "uuid" cap dong; khong co -> khoa timestamp cuoi hop le (ISO).
+function lineTs(line) {
+  const u = line.indexOf('"uuid":"');
+  const v = u >= 0 ? tsAt(line, u) : '';
+  if (v) return v;
+  for (let i = line.lastIndexOf('"timestamp":"'); i >= 0; i = i ? line.lastIndexOf('"timestamp":"', i - 1) : -1) { const x = tsAt(line, i); if (x) return x; if (!i) break; }
+  return '';
+}
 function saveCache(file, m) { // tmp theo pid: job SessionStart + CLI chay dong thoi; loi ghi khong lam hong lan quet
   const tmp = `${file}.${process.pid}.tmp`;
   try {
@@ -73,7 +83,7 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
   const cold = !!cache && cache.size === 0; // khong co entry hop le -> tran lon de lan dau (hoac doi dinh dang) khong bi cat
   const L = { ...(cold ? TRANSCRIPTS.coldLimits : TRANSCRIPTS.limits), ...limits };
   const deadline = Date.now() + L.timeoutMs;
-  const records = []; let cache_hits = 0, files_parsed = 0, bytes_parsed = 0, truncated = null;
+  const records = []; let cache_trimmed = 0, cache_hits = 0, files_parsed = 0, bytes_parsed = 0, truncated = null;
   let earliest = Infinity, latest = -Infinity, eTs = null, lTs = null;
   const seen = new Set(); const fresh = new Map();
   const allSess = new Map(); // sessionId -> ts lon nhat tren MOI dong (khong chi dong khop prefilter) -> total_sessions chinh xac
@@ -111,8 +121,8 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
         if (!line) continue;
         const si = line.indexOf('"sessionId":"'); // khong JSON.parse: chi cat chuoi sessionId + timestamp
         if (si >= 0) {
-          const sid = line.slice(si + 13, line.indexOf('"', si + 13)); const ti = line.lastIndexOf('"timestamp":"'); // timestamp cua dong nam sau message; khong lay khoa "timestamp" trong tool input
-          const tv = ti >= 0 ? line.slice(ti + 13, line.indexOf('"', ti + 13)) : '';
+          const sid = line.slice(si + 13, line.indexOf('"', si + 13));
+          const tv = lineTs(line); // timestamp cap dong; khong lay "timestamp" trong tool input/toolUseResult
           if (sid && tv && (!sess[sid] || tv > sess[sid])) sess[sid] = tv;
         }
         const marked = MARK.some((k) => line.includes(k));
@@ -137,11 +147,17 @@ export async function readTranscripts({ roots = [path.join(os.homedir(), '.claud
       try { if (fs.statSync(f).mtimeMs >= fromMs) out.set(f, e); } catch { /* da xoa */ }
     }
     for (const [f, e] of fresh) out.set(f, e);
-    saveCache(cacheFile, out);
+    // khong bao gio ghi qua tran: neu vuot -> giu entry moi nhat (mtime) toi tran, bao cache_trimmed
+    const cap = limits.cacheMaxBytes ?? TRANSCRIPTS.limits.cacheMaxBytes;
+    const lines = [...out.values()].sort((a, b) => b.mtimeMs - a.mtimeMs).map((e) => JSON.stringify(e) + '\n');
+    let sum = 0, keep = 0;
+    for (const l of lines) { if (sum + Buffer.byteLength(l) > cap) break; sum += Buffer.byteLength(l); keep++; }
+    cache_trimmed = lines.length - keep;
+    saveCache(cacheFile, new Map([...out.values()].sort((a, b) => b.mtimeMs - a.mtimeMs).slice(0, keep).map((e) => [e.file, e])));
   }
   const inWin = (v) => { const t = Date.parse(v); return t >= fromMs && t <= nowMs + DAY; };
   let total_sessions = 0; for (const v of allSess.values()) if (inWin(v)) total_sessions++;
   const project_sessions = {};
   for (const [pr, m] of projSess) { let n = 0; for (const v of m.values()) if (inWin(v)) n++; if (n) project_sessions[pr] = n; }
-  return { records, total_sessions, project_sessions, cold, truncated, files_read: cache_hits + files_parsed, cache_hits, files_parsed, bytes_parsed, earliest_ts: eTs, latest_ts: lTs };
+  return { records, total_sessions, project_sessions, cold, truncated, cache_trimmed, files_read: cache_hits + files_parsed, cache_hits, files_parsed, bytes_parsed, earliest_ts: eTs, latest_ts: lTs };
 }

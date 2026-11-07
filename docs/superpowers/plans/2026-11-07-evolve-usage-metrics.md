@@ -81,8 +81,11 @@ Files: create `harness/evolve/usage/dupes.mjs`, `dupes.test.mjs`.
 
 ### Task 12: Docs + full suite once
 - [x] Update `harness/observe/ledger/README.md` and the evolve manifest help (flags `--cost`, `--by-project`, window fields, `source` actions).
-- [ ] Full suite once, background, with timeout, log to a file: `timeout 900 node --test harness > <scratch>/full.log 2>&1`; builder reports the log tail; no rerun.
-- [ ] Reviewer (Opus) pass on the branch.
+- [x] Full suite once, background, with timeout, log to a file: `timeout 900 node --test harness > <scratch>/full.log 2>&1`; builder reports the log tail; no rerun. (Thuc te: `timeout 900 bun test harness dev` @ 2cc9ac6 -> 1258/1259 pass; 1 fail co tu truoc: dev/checks/proc-check.test.mjs vi harness/constrain/worktree/hook.mjs, khong thuoc task nay.)
+- [x] Reviewer (Opus) pass on the branch. (3 vong review: dot 1, dot 2, fix2; sua qua u59/fix1, fix2, fix3; khong con loi Cao/TB.)
+
+## Ket qua (2026-11-07, main @ e56175d)
+Quet that hub: transcript 118 ngay (cache 4291/4294, ~8s), audit 14 ngay; 691 phien (hub 398); duplicates_dropped=28, maintenance_dropped=36. 14 skill pending (harness, harness-core, dispatching-parallel-agents, finishing-a-development-branch, 5 ponytail*, receiving/requesting-code-review, TDD, using-git-worktrees, verification), 51 command insufficient_window, 0 propose_remove. Truoc: plugin-authoring/knowledge-store/find-skills bao 0; sau: 32/5/6.
 
 ## Out of scope
 Quality / trigger accuracy of skills (reviewer agent).

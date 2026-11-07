@@ -37,12 +37,15 @@ export function rankByCost(items, { totalSessions = 0 } = {}) {
 // Claude ma hoa duong dan du an thanh ten thu muc duoi ~/.claude/projects: moi ky tu khong phai chu/so -> '-'.
 export const projectFolder = (p) => path.resolve(String(p)).replace(/[^A-Za-z0-9]/g, '-');
 
+// Windows: ten thu muc du an co the khac hoa/thuong -> cong moi khoa trung nhau khong phan biet hoa thuong.
+export const sessionsOf = (byProject, folder) => { const f = folder.toLowerCase(); let n = 0; for (const [k, v] of Object.entries(byProject || {})) if (k.toLowerCase() === f) n += v; return n; };
+
 // So phien noi thanh phan thuc su duoc nap: project -> phien cua thu muc du an; plugin -> du an cai plugin
 // (installed_plugins.json; scope user hoac khong ro = tat ca); account/builtin/third_party/unknown -> tat ca.
 export function scopeSessions({ source, plugin } = {}, { total = 0, byProject = {}, projectDir = '', installed = null } = {}) {
-  if (source === 'project') return projectDir ? byProject[projectFolder(projectDir)] || 0 : total;
+  if (source === 'project') return projectDir ? sessionsOf(byProject, projectFolder(projectDir)) : total;
   if (source !== 'plugin') return total;
   const list = plugin && installed?.plugins ? Object.entries(installed.plugins).filter(([k]) => k.split('@')[0] === plugin).flatMap(([, v]) => (Array.isArray(v) ? v : [])) : [];
   if (!list.length || list.some((i) => !i.projectPath || (i.scope !== 'project' && i.scope !== 'local'))) return total; // shortcut: khong ro noi cai -> tinh het (khong de thieu)
-  return [...new Set(list.map((i) => projectFolder(i.projectPath)))].reduce((n, f) => n + (byProject[f] || 0), 0);
+  return [...new Set(list.map((i) => projectFolder(i.projectPath)))].reduce((n, f) => n + sessionsOf(byProject, f), 0);
 }

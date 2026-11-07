@@ -54,3 +54,10 @@ test('componentCost handles BOM and multi-line description', () => {
   const c = componentCost({ kind: 'skill', body: '\uFEFF---\nname: x\ndescription: >-\n  abcd\n  efgh\n---\nbody' });
   assert.equal(c.desc_tokens, estimateTokens('abcd efgh'));
 });
+
+test('scopeSessions: project folder lookup is case-insensitive (sums keys)', () => {
+  const D = path.resolve('/zz/hub');
+  const f = projectFolder(D);
+  assert.equal(scopeSessions({ source: 'project' }, { total: 9, byProject: { [f.toUpperCase()]: 2, [f.toLowerCase()]: 3 }, projectDir: D }), 5);
+  assert.equal(scopeSessions({ source: 'plugin', plugin: 'pl' }, { total: 9, byProject: { [f.toUpperCase()]: 4 }, installed: { plugins: { 'pl@m': [{ scope: 'project', projectPath: D }] } } }), 4);
+});

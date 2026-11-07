@@ -331,7 +331,7 @@ test('G transcript record with ts beyond now+1d is not counted', async () => {
 
 test('integ: usage_detail co channels, sessions, ids day du, projects cho --detail', async () => {
   const t = ISO(NOW - DAY);
-  const { r } = await integ({ tr: asst(t, 's1', [skillUse('t1', 'superpowers:old')]) });
+  const { r } = await integ({ tr: asst(t, 's1', [skillUse('t1', 'superpowers:old')]), opts: { ownedPlugins: ['superpowers'] } });
   const d = r.usage_detail['skill:old'];
   assert.equal(d.count, 1); assert.deepEqual(d.channels, { tool: 1 }); assert.deepEqual(d.ids, ['superpowers:old']); assert.deepEqual(d.session_ids, ['s1']);
 });

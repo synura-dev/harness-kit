@@ -220,7 +220,7 @@ test('khong --src va nguon mac dinh khong ton tai: build/check in 1 dong giai th
     const txt = lines.join('\n');
     expect(txt).toContain('không có nguồn skill tại');
     expect(txt).toContain('--src');
-    expect(txt).toContain('.agents/skills');
+    expect(txt).toContain('plugin native');
   }
   expect(ex('t/claude/alpha')).toBe(false); // khong ghi gi
 });

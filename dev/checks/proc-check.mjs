@@ -6,7 +6,6 @@ import path from 'node:path';
 export const PROC_EXCEPTIONS = {
   'harness/core/runtime/proc.mjs': 'chinh helper',
   'harness/core/ext/ext-supervisor.mjs': 'giam sat tien trinh con ext: tu tinh timeout + giet cay, da windowsHide',
-  'harness/hooks/dispatch/agy-shim.mjs': 'shim doc lap duoc copy ra .agents, khong import duoc tuong doi; da windowsHide',
   'harness/hooks/dispatch/agy-native.mjs': 'hook agy native: timeout con < timeout hooks.json, khong killTree dong bo (taskkill toi 10s); da windowsHide',
   'harness/core/runtime/user-shim.mjs': 'chuoi sinh file shim cho nguoi dung (khong phai goi cua repo)',
 };
