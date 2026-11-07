@@ -36,13 +36,56 @@ test('PreToolUse that: ls -> allow; python - -> deny; audit that roi vao workspa
   expect(listAll(ws).filter((p) => /^\.harness\/data\/.*audit\/.+\.(json|jsonl)$/.test(p)).length).toBeGreaterThan(0);
 }, 60000);
 
-test('thieu workspacePaths: khong dispatch, HKERR, fail-open dung dinh dang, khong ghi vao goc plugin', () => {
+test('thieu workspacePaths: khong dispatch, fail-open dung dinh dang IM LANG (khong HKERR), khong ghi vao goc plugin', () => {
   const before = listAll(path.join(PLUGIN, '.harness')).length;
   const p = run('PreToolUse', JSON.stringify({ toolCall: { name: 'run_command', args: { CommandLine: 'ls' } } }));
-  expect(p.status).toBe(0); expect(JSON.parse(p.stdout)).toEqual({ decision: 'allow' }); expect(p.stderr).toContain('HKERR');
-  const s = run('Stop', ''); expect(JSON.parse(s.stdout)).toEqual({}); expect(s.stderr).toContain('HKERR');
+  expect(p.status).toBe(0); expect(JSON.parse(p.stdout)).toEqual({ decision: 'allow' }); expect(p.stderr).toBe('');
+  const s = run('Stop', ''); expect(JSON.parse(s.stdout)).toEqual({}); expect(s.stderr).toBe('');
   expect(listAll(path.join(PLUGIN, '.harness')).length).toBe(before);
 });
+
+// Cong qua entry that (spawn agy-native.mjs): khong bat -> fallback, stderr rong, khong tao gi trong ws (ke ca .harness).
+test('cong du an (entry that): khong bat -> fallback im lang, khong ghi file; local false thang project true; BOM; JSON hong; gia tri khong boolean; enabledPlugins mang/null', () => {
+  const put = (ws, f, txt) => { fs.mkdirSync(path.join(ws, '.claude'), { recursive: true }); fs.writeFileSync(path.join(ws, '.claude', f), txt); };
+  const ep = (o) => JSON.stringify({ enabledPlugins: o });
+  const K = 'harness-kit@synura';
+  const off = {
+    thieu: () => {},
+    false: (w) => put(w, 'settings.json', ep({ [K]: false })),
+    'local false thang project true': (w) => { put(w, 'settings.json', ep({ [K]: true })); put(w, 'settings.local.json', ep({ [K]: false })); },
+    'JSON hong': (w) => put(w, 'settings.json', '{khong json'),
+    'chuoi "true"': (w) => put(w, 'settings.json', ep({ [K]: 'true' })),
+    'so 1': (w) => put(w, 'settings.json', ep({ [K]: 1 })),
+    null: (w) => put(w, 'settings.json', ep({ [K]: null })),
+    'enabledPlugins mang': (w) => put(w, 'settings.json', '{"enabledPlugins":["harness-kit@synura"]}'),
+    'enabledPlugins null': (w) => put(w, 'settings.json', '{"enabledPlugins":null}'),
+    'khoa khac': (w) => put(w, 'settings.json', ep({ 'x@y': true })),
+  };
+  for (const [name, setup] of Object.entries(off)) {
+    const ws = tmp(); fs.mkdirSync(path.join(ws, '.git')); setup(ws);
+    const before = listAll(ws);
+    const pay = JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')], toolCall: { name: 'run_command', args: { CommandLine: 'ls' } } });
+    const p = run('PreToolUse', pay);
+    expect(JSON.parse(p.stdout), name).toEqual({ decision: 'allow' }); expect(p.stderr, name).toBe(''); expect(p.status, name).toBe(0);
+    expect(JSON.parse(run('Stop', pay).stdout), name).toEqual({});
+    expect(listAll(ws), name).toEqual(before);
+    expect(fs.existsSync(path.join(ws, '.harness')), name).toBe(false);
+  }
+  // bat: BOM, local true thang project false, khoa thu hai = true
+  const on = {
+    project: (w) => put(w, 'settings.json', ep({ [K]: true })),
+    BOM: (w) => put(w, 'settings.json', '﻿' + ep({ [K]: true })),
+    'local true thang project false': (w) => { put(w, 'settings.json', ep({ [K]: false })); put(w, 'settings.local.json', ep({ [K]: true })); },
+    'local rieng khoa khac': (w) => { put(w, 'settings.json', ep({ 'harness-kit@a': false })); put(w, 'settings.local.json', ep({ 'harness-kit@b': true })); },
+  };
+  for (const [name, setup] of Object.entries(on)) {
+    const ws = tmp(); fs.mkdirSync(path.join(ws, '.git')); setup(ws);
+    expect(enabledIn(ws), name).toBe(true);
+  }
+  const ws = tmp(); fs.mkdirSync(path.join(ws, '.git')); on.BOM(ws);
+  const pay = JSON.stringify({ workspacePaths: [ws.replace(/\\/g, '/')], toolCall: { name: 'run_command', args: { CommandLine: 'python -' } } });
+  expect(JSON.parse(run('PreToolUse', pay).stdout).decision).toBe('deny'); // bat that qua entry -> dispatch that
+}, 90000);
 
 const fakeRoot = (agyBody) => {
   const root = tmp();

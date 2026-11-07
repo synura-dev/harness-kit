@@ -1,5 +1,6 @@
 // Playbook policy: allowlist exe/git/bun/node (mac dinh tu choi) + builtin defaults.
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { isInside } from '../../../../harness/core/io/paths.mjs';
 
 // ---------- allowlist (mac dinh tu choi) ----------
@@ -11,6 +12,9 @@ const GIT_BRANCH_FLAGS = new Set(['-l', '--list', '--merged', '--no-merged', '-a
 const GIT_COMMIT_FLAGS = new Set(['--only', '-o', '--dry-run', '-q', '--quiet', '-s', '--signoff', '--allow-empty']);
 const BROAD_PATHSPEC = new Set(['.', './', ':/', '*', '-A', '--all', '-u', '--update']);
 const isTpl = (a) => a.includes('${');
+// bin/harness cua chinh plugin nay (policy.mjs nam o <plugin>/ext-out/hub-verify/play/playbook). Bien dung san `${harnessBin}`; chi duong dan DUNG nay duoc node chay ngoai hub.
+export const HARNESS_BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'bin', 'harness');
+const isHarnessBin = (a) => a === '${harnessBin}' || a === HARNESS_BIN;
 const badRelPath = (p) => path.isAbsolute(p) || /^[A-Za-z]:/.test(p) || p.split(/[\\/]/).includes('..') || p.startsWith('-');
 
 function gitReason(args) {
@@ -80,6 +84,7 @@ export function denyRun(run) {
   const first = args[0];
   if (exe === 'node') {
     if (first === undefined) return 'node bat buoc co duong dan script (bi cam)';
+    if (isHarnessBin(first)) return null;
     if (isTpl(first) || first.startsWith('-') || !SCRIPT_EXT.test(first) || badRelPath(first)) return `node chi chay script tuong doi trong hub, khong option -e/--eval/--import/-p (bi cam): ${first.slice(0, 30)}`;
     return null;
   }
@@ -104,7 +109,7 @@ export function denyRun(run) {
 export function scriptOutsideHub(argv, cwd, hub) {
   const exe = argv[0];
   const s = exe === 'node' ? argv[1] : (exe === 'bun' && argv[1] === 'run') ? argv[2] : null;
-  if (s && !isInside(path.resolve(cwd, s), hub)) return `script nam ngoai hub: ${s.slice(0, 40)}`;
+  if (s && s !== HARNESS_BIN && !isInside(path.resolve(cwd, s), hub)) return `script nam ngoai hub: ${s.slice(0, 40)}`;
   if (exe === 'bun' && argv[1] === 'test') for (let k = 2; k < argv.length; k++) { const a = argv[k]; if (a === '--timeout') { k++; continue; } if (!isInside(path.resolve(cwd, a), hub)) return `duong dan test ngoai hub: ${a.slice(0, 40)}`; }
   const ci = exe === 'git' ? argv.indexOf('-C') : -1;
   if (ci > 0 && !isInside(path.resolve(cwd, argv[ci + 1]), hub)) return 'git -C ngoai hub';

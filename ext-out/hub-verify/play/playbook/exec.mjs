@@ -1,11 +1,6 @@
 // Playbook exec: spawn khong qua shell, kill tree, summarize, capture.
 import { spawn, spawnSync } from '../../../../harness/core/runtime/proc.mjs';
 import { resolveBin } from '../bin.mjs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-// bin/harness cua chinh plugin nay (exec.mjs nam o <plugin>/ext-out/hub-verify/play/playbook).
-export const PLUGIN_HARNESS = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '..', 'bin', 'harness');
 
 // ---------- exec ----------
 const CMD_META = /[&|<>^%"!\r\n]/;
@@ -14,7 +9,6 @@ const CMD_META = /[&|<>^%"!\r\n]/;
 export function resolveSpawn(argv, { lookup } = {}) {
   const [exe, ...args] = argv;
   if (exe === 'node') return { cmd: process.execPath, args };
-  if (exe === 'harness') return { cmd: process.execPath, args: [PLUGIN_HARNESS, ...args] }; // khong phu thuoc PATH/.cmd
   const bin = resolveBin(exe, lookup ? { lookup } : undefined);
   if (bin.error) return { error: bin.error };
   if (bin.kind === 'exe') return { cmd: bin.path, args };

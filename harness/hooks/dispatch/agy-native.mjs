@@ -26,24 +26,24 @@ export function workspaceOf(input) {
   } catch { return ''; }
 }
 
-/** Du an bat plugin kieu Claude? enabledPlugins co khoa /^harness-kit@/ = true; settings.local.json thang settings.json neu co khoa. Thieu/BOM/JSON hong = khong bat. */
+/** Du an bat plugin kieu Claude? Moi khoa /^harness-kit@/ trong enabledPlugins: gia tri local (settings.local.json) de len project (settings.json) cho CUNG khoa; bat khi co khoa nao === true. Thieu/BOM/JSON hong/khong phai object = khong bat. */
 export function enabledIn(ws) {
-  for (const f of ['settings.local.json', 'settings.json']) {
+  const eff = {};
+  for (const f of ['settings.json', 'settings.local.json']) {
     try {
       const ep = JSON.parse(fs.readFileSync(path.join(ws, '.claude', f), 'utf8').replace(/^﻿/, '')).enabledPlugins;
-      const keys = ep && typeof ep === 'object' ? Object.keys(ep).filter((k) => /^harness-kit@/.test(k)) : [];
-      if (keys.length) return keys.some((k) => ep[k] === true);
-    } catch { /* thieu/hong -> thu file tiep */ }
+      if (ep && typeof ep === 'object' && !Array.isArray(ep)) for (const k of Object.keys(ep)) if (/^harness-kit@/.test(k)) eff[k] = ep[k];
+    } catch { /* thieu/hong -> bo qua file */ }
   }
-  return false;
+  return Object.values(eff).some((v) => v === true);
 }
 
 export async function run(event, input, { root = ROOT, baseEnv = process.env } = {}) {
   const fail = (cause) => ({ stdout: fallback(event), stderr: hkerr(cause) });
   if (!/^[A-Za-z]+$/.test(event)) return fail('su kien khong hop le: ' + String(event).slice(0, 40));
   const ws = workspaceOf(input);
-  if (!ws) return fail('payload khong co workspacePaths[0]; bo qua dispatch');
-  if (!enabledIn(ws)) return { stdout: fallback(event), stderr: '' }; // du an chua bat plugin: im lang, khong ghi gi
+  // Cong truoc: plugin global khong biet du an -> thieu workspacePaths hoac du an chua bat = fail-open IM LANG (khong HKERR, khong ghi gi).
+  if (!ws || !enabledIn(ws)) return { stdout: fallback(event), stderr: '' };
   const env = { ...baseEnv, HARNESS_PLUGIN_DIR: root, CLAUDE_PROJECT_DIR: ws };
   try { (await import(pathToFileURL(path.join(root, 'harness', 'core', 'io', 'paths.mjs')).href)).applyWorkspaceEnv(env, ws); } catch { /* plugin mode mac dinh */ }
   const r = spawnSync(process.execPath, [path.join(root, 'harness', 'hooks', 'dispatch', 'agy.mjs'), event], { input, cwd: root, env, encoding: 'utf8', timeout: event === 'SessionStart' ? 25000 : 3500, windowsHide: true });
