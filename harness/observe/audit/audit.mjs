@@ -301,17 +301,16 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
       data.phantom = true; data.usage = 'unavailable'; data.usage_reason = 'no_transcript';
     } else if (u) { turns = u.turns; tokens_in = u.tokens_in; tokens_out = u.tokens_out; data.tokens_cache = u.tokens_cache; data.usage_mode = 'cumulative'; model = model || u.model; }
     else if (tokens_in == null && tokens_out == null) { data.usage = 'unavailable'; data.usage_reason = reason; }
-    if (!model && opts.usage?.model) model = cut(String(opts.usage.model), 60);
     try { // usage moi ke tu Stop truoc (doc duoi transcript, tran 512KB/200ms, offset theo transcript trong state audit)
       const d = readUsageDelta(file, { root: typeof opts.root === 'string' ? opts.root : null, ...(sum ? { sum } : {}) });
       if (d && !(sum && !u && reason === 'no_usage' && !d.msgs)) { // parser rieng khong thay usage nao: khong ghi token 0 gia
-
         const { model: dm, ...usage } = d;
         data.usage = usage; delete data.usage_reason; delete data.phantom;
-        if (tokens_in == null && tokens_out == null) { tokens_in = d.input + d.cache_creation; tokens_out = d.output; if (turns == null) turns = d.msgs; data.usage_mode = 'delta'; }
+        if (tokens_in == null && tokens_out == null) { tokens_in = (d.input || 0) + (d.cache_creation || 0); tokens_out = d.output || 0; if (turns == null) turns = d.msgs; data.usage_mode = 'delta'; }
         model = model || dm;
       }
     } catch { /* fail-open */ }
+    if (!model && opts.usage?.model) model = cut(String(opts.usage.model), 60); // model mac dinh cua tool: chi khi parser/payload khong co
   }
   if (event === 'SubagentStop') { // payload has no status/turns (verified); record only if a future payload adds them
     if (typeof inp.status === 'string') data.payload_status = cut(inp.status, 30);

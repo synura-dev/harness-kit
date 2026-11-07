@@ -169,3 +169,15 @@ test('buildEnvelope Stop: parser rieng nem -> fail-open, van co envelope', () =>
   expect(e.event).toBe('Stop'); expect(e.tokens_in).toBeNull();
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+test('buildEnvelope Stop: model parser thang usage.model; parser thieu truong khong ra NaN (delta)', () => {
+  const d = mk(); const f = path.join(d, 'a.jsonl'); fs.writeFileSync(f, 'x\n');
+  const mkInp = (s) => ({ hook_event_name: 'Stop', session_id: s, transcript_path: f, cwd: d });
+  const cfg = { ...readAuditConfig(), transcript_max_bytes: 1 }; // ep nhanh delta
+  const e1 = buildEnvelope(mkInp('sMa'), cfg, new Date(), { root: path.join(d, 'a1'), usage: { sum: () => ({ msgs: 1, model: 'from-parser' }), model: 'dflt' } });
+  expect(e1.model).toBe('from-parser');
+  expect(e1.tokens_in).toBe(0); expect(e1.tokens_out).toBe(0);
+  const e2 = buildEnvelope(mkInp('sMb'), cfg, new Date(), { root: path.join(d, 'a2'), usage: { sum: () => ({ msgs: 1, output: 2 }), model: 'dflt' } });
+  expect(e2.model).toBe('dflt'); expect(e2.tokens_in).toBe(0); expect(e2.tokens_out).toBe(2);
+  fs.rmSync(d, { recursive: true, force: true });
+});
