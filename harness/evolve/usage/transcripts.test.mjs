@@ -55,6 +55,57 @@ test('turn key increments on real prompts only, not tool_result', async () => {
   const o = await run(r);
   assert.deepEqual(o.records.map((x) => x.turn), [`${f}#1`, `${f}#1`, `${f}#1`, `${f}#2`, `${f}#2`]);
 });
+const cacheOf = () => path.join(mk(), 'c.jsonl');
+const cached = (r, c, o = {}) => run(r, { cacheFile: c, ...o });
+const cacheFiles = (c) => fs.readFileSync(c, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l).file);
+
+test('cache: hit not reparsed; miss on size or mtime change', async () => {
+  const r = mk(); const c = cacheOf();
+  const f = put(r, 'p/s.jsonl', [skillLine('2026-11-06T10:00:00Z')], NOW - 1000);
+  const o1 = await cached(r, c);
+  assert.equal(o1.files_parsed, 1); assert.equal(o1.cache_hits, 0); assert.ok(o1.bytes_parsed > 0);
+  const o2 = await cached(r, c);
+  assert.equal(o2.files_parsed, 0); assert.equal(o2.cache_hits, 1); assert.equal(o2.bytes_parsed, 0);
+  assert.equal(o2.records.length, 1); assert.equal(o2.files_read, 1);
+  fs.utimesSync(f, (NOW - 500) / 1000, (NOW - 500) / 1000);
+  assert.equal((await cached(r, c)).files_parsed, 1);
+  put(r, 'p/s.jsonl', [skillLine('2026-11-06T10:00:00Z'), skillLine('2026-11-06T10:05:00Z')], NOW - 500);
+  const o4 = await cached(r, c);
+  assert.equal(o4.files_parsed, 1); assert.equal(o4.records.length, 2);
+});
+test('cache: evicts deleted and out-of-window files', async () => {
+  const r = mk(); const c = cacheOf();
+  const a = put(r, 'p/a.jsonl', [skillLine('2026-11-06T10:00:00Z')], NOW - 1000);
+  put(r, 'p/b.jsonl', [skillLine('2026-11-06T10:00:00Z')], NOW - 2000);
+  await cached(r, c);
+  assert.equal(cacheFiles(c).length, 2);
+  fs.rmSync(a);
+  fs.utimesSync(path.join(r, 'p/b.jsonl'), (NOW - 9 * 86400000) / 1000, (NOW - 9 * 86400000) / 1000);
+  await cached(r, c);
+  assert.deepEqual(cacheFiles(c), []);
+});
+test('cache: compact record shape', async () => {
+  const r = mk(); const c = cacheOf();
+  const asst = { sessionId: 's1', timestamp: '2026-11-06T10:00:00Z', type: 'assistant', uuid: 'u', message: { role: 'assistant', model: 'm', usage: { x: 1 }, content: [
+    { type: 'tool_use', id: 't1', name: 'Skill', input: { skill: 'a', args: 'big' } },
+    { type: 'tool_use', id: 't2', name: 'Read', input: { file_path: '/x/SKILL.md', limit: 5 } },
+    { type: 'text', text: 'blah' }] } };
+  put(r, 'p/s.jsonl', [asst, prompt('2026-11-06T10:01:00Z')], NOW - 1000);
+  const o = await cached(r, c);
+  assert.deepEqual(o.records[0].msg, { type: 'assistant', message: { role: 'assistant', content: [
+    { type: 'tool_use', id: 't1', name: 'Skill', input: { skill: 'a' } },
+    { type: 'tool_use', id: 't2', name: 'Read', input: { file_path: '/x/SKILL.md' } }] } });
+  assert.deepEqual(o.records[1].msg.message.content, [{ type: 'text', text: '<command-name>/a</command-name>' }]);
+  assert.deepEqual(Object.keys(o.records[0]).sort(), ['file', 'msg', 'project', 'session', 'ts', 'turn']);
+});
+test('cache: truncated run then resume finishes', async () => {
+  const r = mk(); const c = cacheOf();
+  for (let i = 0; i < 3; i++) put(r, `p/f${i}.jsonl`, [skillLine('2026-11-06T12:00:00Z')], NOW - 1000);
+  const o1 = await cached(r, c, { limits: { maxFiles: 2 } });
+  assert.equal(o1.truncated, 'max_files'); assert.equal(o1.records.length, 2);
+  const o2 = await cached(r, c, { limits: { maxFiles: 2 } });
+  assert.equal(o2.truncated, null); assert.equal(o2.cache_hits, 2); assert.equal(o2.files_parsed, 1); assert.equal(o2.records.length, 3);
+});
 test('subagents subfolder read, own turns', async () => {
   const r = mk();
   const f = put(r, 'p/sess/subagents/agent-1.jsonl', [prompt('2026-11-06T10:00:00Z')], NOW - 1000);
