@@ -63,13 +63,18 @@ export function native({ dir, pluginRoot = PLUGIN, inj = {} } = {}) {
   const lines = [];
   let code = 0;
   let installed = null;
+  let disabled = false;
   try {
     const out = inj.list ? inj.list() : spawnSync('agy', ['plugin', 'list', '--json'], { encoding: 'utf8', timeout: 15000, windowsHide: true, shell: process.platform === 'win32' }).stdout;
     const j = JSON.parse(String(out || ''));
+    // agy 1.5.2: JSON array [{name, enabled, version, path, skills...}]
     const arr = Array.isArray(j) ? j : (j && (j.plugins || j.items)) || [];
-    installed = arr.some((p) => /harness-kit/.test(typeof p === 'string' ? p : String((p && (p.name || p.id)) || '')));
+    const me = arr.find((p) => (p && typeof p === 'object' ? p.name === 'harness-kit' : p === 'harness-kit'));
+    installed = !!me;
+    if (me && typeof me === 'object' && me.enabled === false) disabled = true;
   } catch { /* khong co agy / khong parse duoc */ }
-  if (installed === true) lines.push('[OK] agy da cai plugin harness-kit (native)');
+  if (installed === true && disabled) { code = 1; lines.push('[warn] plugin harness-kit da cai nhung dang tat (enabled=false) -> hook khong chay', '-> chay: agy plugin enable harness-kit'); }
+  else if (installed === true) lines.push('[OK] agy da cai plugin harness-kit (native)');
   else { code = 1; lines.push(installed === null ? '[?] khong doc duoc `agy plugin list --json` (agy chua cai?)' : '[THIEU] agy chua cai plugin harness-kit', `-> chay: agy plugin install "${path.resolve(pluginRoot)}"`); }
   const raw = read(path.join(dir, '.agents', 'hooks.json'));
   if (raw && /"harness-kit"/.test(raw)) lines.push(`[warn] ${path.join(dir, '.agents', 'hooks.json')} con khoa "${HOOK_KEY}" cu -> hook chay doi khi plugin da cai; xoa khoa do (va .agents/${SHIM}, .agents/${LOCAL}) bang tay`);
@@ -143,5 +148,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const dir = path.resolve(di >= 0 && a[di + 1] ? a[di + 1] : (process.env.CLAUDE_PROJECT_DIR || '').trim() || process.cwd());
   if (sub === 'init') { const r = a.includes('--legacy') ? init({ dir, check: a.includes('--check') }) : native({ dir }); console.log(`du an: ${dir}`); for (const l of r.lines) console.log(l); process.exit(r.code); }
   else if (sub === 'rules') process.exit(await rules(a.includes('--apply')));
-  else { console.log('harness agy init [--check] [--dir <du an>] | rules [--print|--apply]'); process.exit(sub === 'index' ? 0 : 2); }
+  else { console.log('harness agy init [--dir <du an>] [--legacy [--check]] | rules [--print|--apply]'); process.exit(sub === 'index' ? 0 : 2); }
 }
