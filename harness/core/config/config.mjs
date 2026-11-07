@@ -118,7 +118,8 @@ export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) 
   if (ci > 0) pname = m[ci + 2];
   // CLI khac (agy): plugin cai o <goc>/plugins/<ten> (khong layout cache cua Claude) -> du lieu o <goc>/plugin_data/<ten>, KHONG cham ~/.claude (sandbox agy khong doc duoc).
   // Suy tu vi tri cai that cua chinh CLI do (khong tin env), khong co legacy.
-  if (ci < 0 && m.length >= 3 && m[m.length - 2] === 'plugins' && m[m.length - 3] !== '.claude') {
+  // CHI vi tri cai that cua agy (.gemini/config/plugins/<ten>); `--plugin-dir` cua Claude (X/plugins/<ten>) giu hanh vi cu.
+  if (ci < 0 && m.length >= 5 && m[m.length - 2] === 'plugins' && m[m.length - 3] === 'config' && m[m.length - 4].toLowerCase() === '.gemini') {
     const primaryDir = path.join(m.slice(0, -2).join(path.sep) || path.sep, 'plugin_data', m[m.length - 1]);
     let projectDir = null; try { projectDir = path.join(workspaceRoot({ env, repoDir }), '.harness', 'config'); } catch { /* khong co */ }
     return { machineDir: path.join(primaryDir, 'config'), projectDir, primaryDir, legacyDir: primaryDir };

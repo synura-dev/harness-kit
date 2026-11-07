@@ -88,24 +88,38 @@ export function readAll(opts) {
 }
 export function writeAll(opts, j) {
   const f = machineFile(opts); fs.mkdirSync(path.dirname(f), { recursive: true });
-  const text = JSON.stringify(j, null, 2) + '\n';
-  const atomic = (file) => { const t = `${file}.${process.pid}.tmp`; try { fs.writeFileSync(t, text); fs.renameSync(t, file); } catch (e) { try { fs.unlinkSync(t); } catch { /* khong co */ } throw e; } };
-  atomic(f);
-  // Sao nguyen van sang thu muc du lieu cua CLI khac (roots.json `data`), de CLI do (agy khong doc duoc ~/.claude) doc ban cua chinh no.
-  // Day chi la ban chep quyet dinh cua nguoi dung (hash ghim van kiem luc chay). Chi chay trong writeAll (CLI TTY); mot ban loi -> canh bao, giu ban chinh.
-  const underTest = process.env.NODE_ENV === 'test' || !!process.env.BUN_TEST;
-  if (!opts.shimDir && (underTest || opts.machineFile)) return; // test / duong tiem tay: khong cham home that
-  let roots; try { roots = readRoots(rootsFile(opts.shimDir || defaultShimDir({ env: opts.env || process.env }))); } catch { return; }
-  const self = path.resolve(f);
-  for (const [tool, ent] of Object.entries(roots)) {
-    if (!ent || typeof ent.data !== 'string' || !ent.data) continue;
-    const dest = path.join(path.resolve(ent.data), 'config', 'ext', 'local.json');
-    if (dest === self) continue;
+  atomicWrite(f, JSON.stringify(j, null, 2) + '\n');
+}
+// tmp ngau nhien + 'wx' (khong theo link co san), roi rename.
+function atomicWrite(file, text) {
+  const t = `${file}.${crypto.randomUUID()}.tmp`;
+  try { fs.writeFileSync(t, text, { flag: 'wx' }); fs.renameSync(t, file); } catch (e) { try { fs.unlinkSync(t); } catch { /* khong co */ } throw e; }
+}
+const samePath = (a, b) => { const x = path.resolve(a), y = path.resolve(b); return process.platform === 'win32' ? x.toLowerCase() === y.toLowerCase() : x === y; };
+
+/**
+ * Sao nguyen van ban chinh vua ghi sang thu muc du lieu cua CLI khac (roots.json `data`), de CLI do (agy khong doc duoc ~/.claude) doc ban cua chinh no.
+ * CHI goi sau buoc nguoi dung xac nhan o TTY (register/approve/remove-co-guard). Chi chep khi thu muc du lieu cua tien trinh nay (suy tu machineFile) trung
+ * DUNG `data` cua mot tool trong roots.json (env CLAUDE_PLUGIN_DATA / code chep di noi khac => khong khop => khong chep). Ban chep khong phai nguon tin cay moi: hash ghim van kiem luc chay.
+ * -> {mirrored:[tool], failed:[mo ta]}; failed khac rong => caller tra ma khac 0.
+ */
+export function mirrorRegistry(opts = {}) {
+  const out = { mirrored: [], failed: [] };
+  const f = machineFile(opts);
+  let roots; try { roots = readRoots(rootsFile(opts.shimDir || defaultShimDir({ home: opts.home }))); } catch { return out; }
+  const ents = Object.entries(roots).filter(([, e]) => e && typeof e.data === 'string' && e.data);
+  const cur = path.resolve(path.dirname(f), '..', '..');
+  if (!ents.some(([, e]) => samePath(e.data, cur) && samePath(path.join(e.data, 'config', 'ext', 'local.json'), f))) return out;
+  let text; try { text = fs.readFileSync(f, 'utf8'); } catch (e) { out.failed.push(`khong doc ban chinh ${f} (${e && e.code})`); return out; }
+  for (const [tool, e] of ents) {
+    if (samePath(e.data, cur)) continue;
+    const dest = path.join(path.resolve(e.data), 'config', 'ext', 'local.json');
     try {
-      if (!fs.existsSync(ent.data)) continue;
-      fs.mkdirSync(path.dirname(dest), { recursive: true }); atomic(dest);
-    } catch (e) { console.error(`ext: canh bao: khong sao chep dang ky sang ${tool} (${dest}): ${e && e.code || e && e.message}`); }
+      if (!fs.existsSync(e.data)) throw Object.assign(new Error('data da dang ky khong ton tai'), { code: 'ENOENT' });
+      fs.mkdirSync(path.dirname(dest), { recursive: true }); atomicWrite(dest, text); out.mirrored.push(tool);
+    } catch (err) { out.failed.push(`${tool}: ${dest} (${err && err.code || err && err.message})`); }
   }
+  return out;
 }
 export const findKey = (all, ws) => Object.keys(all.extensions).find((k) => sameWs(k, ws));
 

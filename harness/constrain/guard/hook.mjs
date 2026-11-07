@@ -33,7 +33,16 @@ const PLUGIN_CMD_RE = new RegExp(`${LAUNCHER_VERB}[^\\n;|&]*?${PLUGIN_PATH}|>>?\
 const PLUGIN_REASON = 'Cam sua so dang ky plugin (installed_plugins.json/known_marketplaces.json) va thu muc plugin guard; chi nguoi dung sua (claude plugin ...). / Plugin registry and guard plugin files are protected; the human changes them.';
 /** Bao ve cung (trong code, config/lop du an khong tat duoc): file dang ky extension lop may (config/ext/local.json) + lenh ext register/approve tu agent. */
 // Moi ban sao: config/ext/local.json (ca plugin_data cua agy), moi thu duoi plugin_data/ (thu muc du lieu plugin cua CLI khac), roots.json (truong `data` chi ban sao).
-const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b|(?:^|[^\w-])plugin_data[\\/]+[\w.@-]+[\\/]+config[\\/]|(?:^|[^\w-])bin[\\/]+roots\.json\b/i;
+const EXT_CONFIG_RE = /(?:^|[^\w-])config[\\/]+ext[\\/]+local\.json\b|(?:^|[^\w-])bin[\\/]+roots\.json\b/i;
+// Thu muc du lieu plugin cua CLI khac + thu muc shim: cong cu ghi file -> chan moi duong; lenh shell -> chan khi co dong tu ghi/doi ten/tao link (EXT_DATA_RE && WRITE_VERB_RE).
+// shortcut: khong giai bien gian tiep ($p=...; Rename-Item $p) - rui ro con lai, ghi trong bao cao.
+const EXT_DATA_RE = /(?:^|[^\w-])plugin_data[\\/]+[\w.@-]+|(?:^|[^\w-])\.harness-kit[\\/]+bin\b/i;
+const WRITE_VERB_RE = />|\b(?:Rename-Item|ren|rename\w*|mv|Move-Item|mi|New-Item|ni|mklink|ln|symlink\w*|junction|cp|copy|Copy-Item|cpi|Set-Content|sc|Add-Content|ac|Out-File|tee|rm|del|erase|Remove-Item|ri|rd|rmdir|robocopy|xcopy|sed|writeFile\w*)\b/i;
+const GIT_MSG_LEAD_RE = /^git\s+(?:-c\s+\S+\s+)*(?:commit|tag|notes)\b/i;
+/** Bo doan `\.\` `/./` thua (lach regex duong dan). */
+const dotNorm = (s) => { let p = s, q; do { q = p; p = p.replace(/([\\/])(?:\.[\\/]+)+/g, '$1'); } while (p !== q); return p; };
+/** Duong cua tool ghi file: resolve (`..`, `.`) roi bo `\.\`, khop ca ban goc lan ban chuan hoa. */
+const extPathHit = (p) => { const n = dotNorm(path.resolve(p)); return [p, dotNorm(p), n].some((x) => EXT_CONFIG_RE.test(x) || EXT_DATA_RE.test(x)); };
 // Chi chan lenh GHI/CHAY: `harness ext register|approve`; ext-cmd/ext-registry cung dong voi register|approve; chay ext-cmd bang node/bun/deno;
 // ghi/xoa/di chuyen file ext-cmd/ext-registry (LAUNCHER_VERB, redirect). Lenh chi doc (git diff/log/show, cat, rg, grep...) duoc qua (isReadOnlyCmd).
 const EXT_FILE = String.raw`ext-(?:cmd|registry)(?:\.mjs)?(?![\w.-])`;
@@ -45,12 +54,12 @@ const isReadOnlyCmd = (cmd) => !/[;&<>`\n]|\$\(/.test(cmd) && cmd.split('|').eve
 // Chi bo khi chuoi khong the thuc thi: lenh co $( / backtick / <( / eval / iex / pipe vao shell-interpreter thi GIU NGUYEN (van chan).
 const INERT_LEAD_RE = /^(?:git\s+(?:-c\s+\S+\s+)*(?:commit|tag|notes)|echo|printf|Write-Output|Write-Host)\b/i;
 const EXEC_RISK_RE = /\\["']|\$\(|\x60|<\(|\b(?:eval|iex|Invoke-Expression|source)\b|\|\s*(?:sudo\s+)?(?:sh|bash|zsh|dash|ksh|fish|pwsh|powershell|cmd|node|bun|deno|python\d?|perl|ruby|xargs|\.)(?![\w-])/i;
-export function stripInertText(cmd) {
+export function stripInertText(cmd, lead = INERT_LEAD_RE) {
   if (typeof cmd !== 'string' || EXEC_RISK_RE.test(cmd)) return cmd;
   let out = '', seg = '', q = null, buf = '';
   for (const ch of cmd) {
     if (q) {
-      if (ch === q) { out += INERT_LEAD_RE.test(seg.trimStart()) ? q + q : q + buf + q; seg += q + q; q = null; buf = ''; }
+      if (ch === q) { out += lead.test(seg.trimStart()) ? q + q : q + buf + q; seg += q + q; q = null; buf = ''; }
       else buf += ch;
       continue;
     }
@@ -223,7 +232,9 @@ export function protectedPathHit(text, cfg, opts = {}) {
 export function evaluate(cmd, cfg) {
   if (typeof cmd !== 'string' || !cmd.trim()) return null;
   const extCmd = stripInertText(cmd);
-  if (EXT_CONFIG_RE.test(extCmd) || (EXT_CMD_RE.test(extCmd) && !isReadOnlyCmd(cmd))) return { id: 'ext-config-protect', reason: EXT_REASON };
+  // Duong file/redirect: chay tren lenh goc (chi bo thong diep git commit/tag) de `echo x > "...roots.json"` khong lot qua stripInert; EXT_CMD_RE van tren ban strip.
+  const pc = dotNorm(stripInertText(cmd, GIT_MSG_LEAD_RE));
+  if (EXT_CONFIG_RE.test(pc) || (EXT_DATA_RE.test(pc) && WRITE_VERB_RE.test(pc)) || (EXT_CMD_RE.test(extCmd) && !isReadOnlyCmd(cmd))) return { id: 'ext-config-protect', reason: EXT_REASON };
   if (cmd.length > (cfg.maxCommandChars ?? 100000)) return { id: 'command-too-long', reason: 'Lenh qua dai (> maxCommandChars), khong the kiem; chia nho. / Command too long to inspect; split it.' };
   if (LAUNCHER_CMD_RE.test(cmd) && !(isReadOnlyCmd(cmd) && !/\s(?:-o|--output)(?:[\s=]|$)/i.test(cmd))) return { id: 'launcher-protect', reason: LAUNCHER_REASON }; // doc launcher (cat/ls/git diff...) duoc qua; ghi/redirect/rm/node van chan
   if (PLUGIN_CMD_RE.test(cmd)) return { id: 'launcher-protect', reason: PLUGIN_REASON };
@@ -250,7 +261,7 @@ function extract(inp) {
   if (/^(Edit|Write|MultiEdit|NotebookEdit)$/.test(inp.tool_name)) {
     const ti = inp.tool_input || {}; const p = ti.file_path || ti.notebook_path;
     const fp = typeof p === 'string' ? p : '';
-    if (typeof p === 'string' && EXT_CONFIG_RE.test(p)) return { cmd: p, tool: inp.tool_name, agy: false, filePath: fp };
+    if (typeof p === 'string' && p && extPathHit(p)) return { cmd: `> ${p} > ${dotNorm(path.resolve(p))}`, tool: inp.tool_name, agy: false, filePath: fp };
     const np = typeof p === 'string' ? p.replace(/\\/g, '/') : '';
     if (np && PLUGIN_FILE_RE.test(np)) return { cmd: '> .claude/plugins/installed_plugins.json', tool: inp.tool_name, agy: false, filePath: fp };
     const hit = !!np && LAUNCHER_FILE_RE.test(np);

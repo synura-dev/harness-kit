@@ -34,3 +34,32 @@ test('agy toolCall write_file/edit_file (qua toClaudeInput): ghi ban sao / roots
     }
   expect(denied(toClaudeInput({ toolCall: { name: 'write_file', args: { Path: 'E:\\p\\a.txt', Content: 'x' } } }))).toBe(false);
 });
+
+const PD = 'C:\\Users\\u\\.gemini\\config\\plugin_data\\harness-kit';
+test('CAO-2: redirect/Out-File/Set-Content vao roots.json voi duong trong nhay don/kep bi chan', () => {
+  for (const command of [
+    `echo '{}' > "$HOME\\.harness-kit\\bin\\roots.json"`, `echo "{}" > '$HOME\\.harness-kit\\bin\\roots.json'`,
+    `printf '{}' >> "C:\\Users\\u\\.harness-kit\\bin\\roots.json"`,
+    `'{}' | Out-File '${ROOTS}'`, `'{}' | Out-File "${ROOTS}"`, `Set-Content '${ROOTS}' '{}'`, `Set-Content "${ROOTS}" "{}"`,
+  ]) expect(denied({ tool_name: 'PowerShell', tool_input: { command } })).toBe(true);
+  expect(denied({ tool_name: 'Bash', tool_input: { command: `git commit -m "nhac bin/roots.json va config/ext/local.json" -- x` } })).toBe(false);
+});
+
+test('TB-3: duong co .\\ thua, plugin_data khong can config\\ phia sau, resolve cho tool ghi file', () => {
+  for (const file_path of [
+    'C:\\Users\\u\\.gemini\\config\\plugin_data\\.\\harness-kit\\config\\ext\\x.json', 'C:\\Users\\u\\.gemini\\config\\.\\plugin_data\\harness-kit\\config\\ext\\x.json',
+    PD, `${PD}\\x.txt`, 'C:\\Users\\u\\.gemini\\config\\plugin_data\\harness-kit\\..\\harness-kit\\a', 'C:\\Users\\u\\.harness-kit\\bin\\.\\roots.json',
+    'C:\\Users\\u\\.harness-kit\\bin\\..\\bin\\roots.json',
+  ]) for (const tool_name of ['Write', 'Edit']) expect(denied({ tool_name, tool_input: { file_path } })).toBe(true);
+  expect(denied(toClaudeInput({ toolCall: { name: 'replace_file_content', args: { TargetFile: PD + '\\config', ReplacementContent: 'x' } } }))).toBe(true);
+});
+
+test('TB-3: shell doi ten/junction/link/ghi quanh plugin_data va .harness-kit\\bin bi chan; doc thuan thi qua', () => {
+  for (const command of [
+    `Rename-Item ${PD}\\config c2`, `ren ${PD}\\config c2`, `mv ${PD} x`, `Move-Item C:\\Users\\u\\.harness-kit\\bin C:\\t`,
+    `New-Item -ItemType Junction -Path C:\\t -Target ${PD}`, `New-Item -ItemType SymbolicLink -Path ${PD}\\config -Target C:\\t`, `mklink /J C:\\t ${PD}`,
+    `Rename-Item C:\\Users\\u\\.gemini\\config\\plugin_data\\.\\harness-kit\\config c2`, 'rm -rf ~/.gemini/config/plugin_data/harness-kit', `Remove-Item -Recurse ${PD}`,
+  ]) expect(denied({ tool_name: 'PowerShell', tool_input: { command } })).toBe(true);
+  for (const command of [`ls ${PD}`, 'Get-ChildItem C:\\Users\\u\\.harness-kit\\bin', 'git status'])
+    expect(denied({ tool_name: 'PowerShell', tool_input: { command } })).toBe(false);
+});
