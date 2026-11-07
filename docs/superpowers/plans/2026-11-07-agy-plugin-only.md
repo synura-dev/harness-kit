@@ -67,12 +67,12 @@ Phu thuoc: "Ket qua T0" da chep vao plan.
 
 ### Task 3: Xoa mien `harness agy` + doctor tool-neutral (TDD phan legacy) [song song, merge TRUOC T1]
 Files: `harness/cli/manifest.json` (xoa :16-21, helper :31, test :41), `harness/cli/commands/agy.mjs` va `agy.test.mjs` (xoa), `harness/core/agy/legacy.mjs` + `legacy.test.mjs` (moi), `harness/cli/commands/doctor.mjs` (:55-64), `harness/cli/commands/doctor.test.mjs`, `harness/core/registry/plugin-registry.test.mjs:37` (bo "agy" khoi danh sach domain).
-- [ ] Test DO truoc `legacyFindings(dir)` -> mang chuoi (ham thuan, fixture thu muc tam): khoa `"harness-kit"` trong `.agents/hooks.json`; file `.agents/harness-agy-shim.mjs`; `.agents/harness-agy.local.json`; thu muc `.agents/plugins/harness-kit`; sach -> []. `legacySummary(dir)` -> MOT chuoi `[warn] ...` gop + huong dan xoa tay (khong tu xoa), hoac null.
-- [ ] Code `legacy.mjs` (chuyen y tu `legacyHooksWarn` + phan clone o agy.mjs:42-45); doctor goi `legacySummary` thay `import('./agy.mjs')`; giu `walkAgyHooks`/`findBadHookCommands` (paths.mjs khong sua). Test doctor: fixture co di san -> dung 1 dong `[warn]` di san, exit code khong doi (warn khong thanh MISS); fixture sach -> khong dong nao.
-- [ ] Xoa mien + file + sua test registry. Grep `commands/agy`, `agy.mjs'` (khong tinh `dispatch/agy.mjs`, `adapters/agy.mjs`) = rong.
-- [ ] Chay: `timeout 120 bun test harness/core/agy/legacy.test.mjs harness/cli/commands/doctor.test.mjs harness/core/registry/plugin-registry.test.mjs harness/cli/commands/adapters.test.mjs`; thu tay: `node harness/cli/harness.mjs agy` -> bao domain khong ton tai (exit != 0); `node harness/cli/harness.mjs doctor` khong crash (import dong loi cu da het).
+- [x] Test DO truoc `legacyFindings(dir)` -> mang chuoi (ham thuan, fixture thu muc tam): khoa `"harness-kit"` trong `.agents/hooks.json`; file `.agents/harness-agy-shim.mjs`; `.agents/harness-agy.local.json`; thu muc `.agents/plugins/harness-kit`; sach -> []. `legacySummary(dir)` -> MOT chuoi `[warn] ...` gop + huong dan xoa tay (khong tu xoa), hoac null.
+- [x] Code `legacy.mjs` (chuyen y tu `legacyHooksWarn` + phan clone o agy.mjs:42-45); doctor goi `legacySummary` thay `import('./agy.mjs')`; giu `walkAgyHooks`/`findBadHookCommands` (paths.mjs khong sua). Test doctor: fixture co di san -> dung 1 dong `[warn]` di san, exit code khong doi (warn khong thanh MISS); fixture sach -> khong dong nao.
+- [x] Xoa mien + file + sua test registry. Grep `commands/agy`, `agy.mjs'` (khong tinh `dispatch/agy.mjs`, `adapters/agy.mjs`) = rong.
+- [x] Chay: `timeout 120 bun test harness/core/agy/legacy.test.mjs harness/cli/commands/doctor.test.mjs harness/core/registry/plugin-registry.test.mjs harness/cli/commands/adapters.test.mjs`; thu tay: `node harness/cli/harness.mjs agy` -> bao domain khong ton tai (exit != 0); `node harness/cli/harness.mjs doctor` khong crash (import dong loi cu da het).
 - Done: cac test tren xanh; tay: hai lenh nhu tren dung ket qua.
-- [ ] Commit: `cli: xoa mien agy, doctor canh bao di san agy gop mot dong`.
+- [x] Commit: `cli: xoa mien agy, doctor canh bao di san agy gop mot dong`.
 
 ### Task 4: Xoa agy-sync [song song]
 Files: `harness/build/agy-sync/` (xoa ca thu muc: hook.mjs, hook.test.mjs, hook.config.json, manifest.json), `harness/hooks/dispatch/modules.mjs` (:26 AGY_SYNC, :33 OPTIONAL, :46 SessionStart), `harness/hooks/dispatch/run.mjs:28` (MAINTENANCE_MODULES), cac test dispatch con nhac `agy-sync` (grep: `unit.test.mjs`, `run.test.mjs`, ghi lai trong bao cao danh sach thuc te).
