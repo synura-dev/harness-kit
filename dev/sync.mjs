@@ -72,6 +72,7 @@ export async function syncAll({ root = ROOT, check = false, only = null } = {}) 
   const out = [];
   for (const [name, cfg] of Object.entries(tools)) {
     if (!cfg || cfg.enabled === false || (only && only !== name)) continue;
+    if (name === 'agy') continue; // shortcut: config cu con khoa agy -> bo qua (agy dung plugin native, khong con adapter dong bo)
     let file = path.join(root, 'harness', 'tools', 'adapters', `${name}.mjs`);
     if (!fs.existsSync(file)) file = path.join(root, 'tools', 'adapters', `${name}.mjs`);
     if (!fs.existsSync(file)) { out.push({ tool: name, changes: [], problems: [`thieu adapter harness/tools/adapters/${name}.mjs`] }); continue; }
