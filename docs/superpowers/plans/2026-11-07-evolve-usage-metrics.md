@@ -29,9 +29,9 @@ Files: `harness/evolve/loop/prune.mjs`, `prune.test.mjs`, `prune-cli.mjs`.
 
 ### Task 3: Transcript reader, bounded (RED/GREEN)
 Files: create `harness/evolve/usage/transcripts.mjs`, `transcripts.test.mjs`.
-- [ ] Failing tests with tmp fixture dirs: (a) only files with mtime >= window start are read; (b) `maxBytes`/`maxFiles` exceeded -> `truncated:'max_bytes'|'max_files'`; (c) `timeoutMs:1` on a big fixture -> `truncated:'timeout'`; (d) bad JSON lines skipped; (e) yields `{session: sessionId, project, ts, turn, msg}` only for lines passing the substring prefilter (`"Skill"`, `<command-name>`, `SKILL.md`, `.md"`, `skills:`).
-- [ ] Implement `readTranscripts({roots,fromMs,nowMs,limits})` (stream by line like `readUsageEvents`; default root `os.homedir()/.claude/projects`, overridable; limits in `PRUNE.limits`).
-- [ ] Run: `node --test harness/evolve/usage/transcripts.test.mjs`.
+- [x] Failing tests with tmp fixture dirs: (a) only files with mtime >= window start are read; (b) `maxBytes`/`maxFiles` exceeded -> `truncated:'max_bytes'|'max_files'`; (c) `timeoutMs:1` on a big fixture -> `truncated:'timeout'`; (d) bad JSON lines skipped; (e) yields `{session: sessionId, project, ts, turn, msg}` only for lines passing the substring prefilter (`"Skill"`, `<command-name>`, `SKILL.md`, `.md"`, `skills:`).
+- [x] Implement `readTranscripts({roots,fromMs,nowMs,limits})` (stream by line like `readUsageEvents`; default root `os.homedir()/.claude/projects`, overridable; limits in `PRUNE.limits`).
+- [x] Run: `node --test harness/evolve/usage/transcripts.test.mjs`.
 
 ### Task 4: Skill detector (RED/GREEN)
 Files: create `harness/evolve/usage/detectors/skill.mjs`, `skill.test.mjs`, `detectors/index.mjs`.
