@@ -44,13 +44,21 @@ export function projectOf(cwd, cfg = {}) {
 export function readUsage(file, maxBytes = 8388608) { return readUsageEx(file, maxBytes).usage; }
 
 // -> { usage|null, reason: null|no_path|not_found|too_big|parse_fail } (never throws)
-function readUsageEx(file, maxBytes = 8388608) {
+function readUsageEx(file, maxBytes = 8388608, sum = null) {
   let st;
   if (typeof file !== 'string' || !file) return { usage: null, reason: 'no_path' };
   if (!/\.jsonl$/i.test(file)) return { usage: null, reason: 'parse_fail' };
   try { st = fs.statSync(file); } catch { return { usage: null, reason: 'not_found' }; }
   if (!st.isFile()) return { usage: null, reason: 'not_found' };
   if (st.size > maxBytes) return { usage: null, reason: 'too_big' };
+  if (sum) { // parser theo tool: sum(text) -> {input, output, cache_read, cache_creation, msgs, model}; loi -> fail-open
+    try {
+      const r = sum(fs.readFileSync(file, 'utf8'));
+      if (!r) return { usage: null, reason: 'parse_fail' };
+      if (!r.msgs) return { usage: null, reason: 'no_usage' };
+      return { usage: { turns: r.msgs, tokens_in: (r.input || 0) + (r.cache_creation || 0), tokens_out: r.output || 0, tokens_cache: r.cache_read || 0, model: r.model || null }, reason: null };
+    } catch { return { usage: null, reason: 'parse_fail' }; }
+  }
   const usage = parseUsage(file);
   return usage ? { usage, reason: null } : { usage: null, reason: 'parse_fail' };
 }
@@ -286,15 +294,18 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
     if (event === 'SubagentStop' && !file && typeof inp.transcript_path === 'string' && inp.session_id && agent_id) {
       file = path.join(path.dirname(inp.transcript_path), String(inp.session_id), 'subagents', 'agent-' + agent_id + '.jsonl');
     }
-    const { usage: u, reason } = readUsageEx(file, cfg.transcript_max_bytes || 8388608);
+    const sum = typeof opts.usage?.sum === 'function' ? opts.usage.sum : null;
+    const { usage: u, reason } = readUsageEx(file, cfg.transcript_max_bytes || 8388608, sum);
     if (!u && event === 'SubagentStop' && !agent_type && (reason === 'no_path' || reason === 'not_found')) {
       // phantom: no agent_type, no matching SubagentStart, no readable transcript -> label.
       data.phantom = true; data.usage = 'unavailable'; data.usage_reason = 'no_transcript';
     } else if (u) { turns = u.turns; tokens_in = u.tokens_in; tokens_out = u.tokens_out; data.tokens_cache = u.tokens_cache; data.usage_mode = 'cumulative'; model = model || u.model; }
     else if (tokens_in == null && tokens_out == null) { data.usage = 'unavailable'; data.usage_reason = reason; }
+    if (!model && opts.usage?.model) model = cut(String(opts.usage.model), 60);
     try { // usage moi ke tu Stop truoc (doc duoi transcript, tran 512KB/200ms, offset theo transcript trong state audit)
-      const d = readUsageDelta(file, { root: typeof opts.root === 'string' ? opts.root : null });
-      if (d) {
+      const d = readUsageDelta(file, { root: typeof opts.root === 'string' ? opts.root : null, ...(sum ? { sum } : {}) });
+      if (d && !(sum && !u && reason === 'no_usage' && !d.msgs)) { // parser rieng khong thay usage nao: khong ghi token 0 gia
+
         const { model: dm, ...usage } = d;
         data.usage = usage; delete data.usage_reason; delete data.phantom;
         if (tokens_in == null && tokens_out == null) { tokens_in = d.input + d.cache_creation; tokens_out = d.output; if (turns == null) turns = d.msgs; data.usage_mode = 'delta'; }
