@@ -2,7 +2,7 @@
 import { test, expect } from 'bun:test';
 import { mergeResults, render, applyUpdate } from './merge.mjs';
 import { dispatch, CLAUDE } from './run.mjs';
-import { ORDER, applies } from './modules.mjs';
+import { ORDER, OPTIONAL, applies } from './modules.mjs';
 import { validateHookModule } from '../../core/config/shape.mjs';
 import { renderAgy, AGY_ORDER } from './agy.mjs';
 
@@ -113,4 +113,9 @@ test('agy: render Pre luon co decision (allow mac dinh), con lai {}; order chi s
   expect(JSON.parse(renderAgy('PreToolUse', mergeResults([{ id: 'x', result: { decision: 'deny', reason: 'r' } }])).stdout)).toEqual({ decision: 'deny', reason: 'r' });
   expect(renderAgy('PostToolUse', mergeResults([])).stdout).toBe('{}\n');
   expect(Object.keys(AGY_ORDER).sort()).toEqual(['PostInvocation', 'PostToolUse', 'PreToolUse', 'SessionStart', 'Stop']);
+});
+
+test('agy-sync da xoa: khong con trong SessionStart ORDER va OPTIONAL', () => {
+  expect(ORDER.SessionStart.map((m) => m.id)).not.toContain('agy-sync');
+  expect(OPTIONAL).not.toContain('agy-sync');
 });

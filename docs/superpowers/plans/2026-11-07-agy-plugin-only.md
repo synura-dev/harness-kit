@@ -76,11 +76,11 @@ Files: `harness/cli/manifest.json` (xoa :16-21, helper :31, test :41), `harness/
 
 ### Task 4: Xoa agy-sync [song song]
 Files: `harness/build/agy-sync/` (xoa ca thu muc: hook.mjs, hook.test.mjs, hook.config.json, manifest.json), `harness/hooks/dispatch/modules.mjs` (:26 AGY_SYNC, :33 OPTIONAL, :46 SessionStart), `harness/hooks/dispatch/run.mjs:28` (MAINTENANCE_MODULES), cac test dispatch con nhac `agy-sync` (grep: `unit.test.mjs`, `run.test.mjs`, ghi lai trong bao cao danh sach thuc te).
-- [ ] Grep `agy-sync|AGY_SYNC|HARNESS_AGY_AUTOSYNC` toan repo (bo docs/) lam danh sach; sua cac test dung `OPTIONAL`/`MAINTENANCE_MODULES` (them test: SessionStart ORDER khong con 'agy-sync'; OPTIONAL khong chua).
-- [ ] Xoa + sua. Khong dong vao ten tien trinh `agy plugin install` o noi khac (se het vi hook bi xoa).
-- [ ] Chay: `timeout 120 bun test harness/hooks/dispatch/unit.test.mjs harness/hooks/dispatch/run.test.mjs harness/hooks/dispatch/agy.test.mjs`; grep lai = rong (tru CHANGELOG).
+- [x] Grep `agy-sync|AGY_SYNC|HARNESS_AGY_AUTOSYNC` toan repo (bo docs/) lam danh sach; sua cac test dung `OPTIONAL`/`MAINTENANCE_MODULES` (them test: SessionStart ORDER khong con 'agy-sync'; OPTIONAL khong chua).
+- [x] Xoa + sua. Khong dong vao ten tien trinh `agy plugin install` o noi khac (se het vi hook bi xoa).
+- [x] Chay: `timeout 120 bun test harness/hooks/dispatch/unit.test.mjs harness/hooks/dispatch/run.test.mjs harness/hooks/dispatch/agy.test.mjs`; grep lai = rong (tru CHANGELOG).
 - Done: test xanh; `node harness/hooks/dispatch/run.mjs SessionStart < /dev/null` (hoac payload rong) in JSON hop le, khong spawn `agy` (khong co tien trinh `agy` con).
-- [ ] Commit: `build: xoa hook agy-sync (agy chi cai bang agy plugin install)`.
+- [x] Commit: `build: xoa hook agy-sync (agy chi cai bang agy plugin install)`.
 
 ### Task 5: Xoa adapter cong cu agy + tham chieu dev [sau T2]
 Files: `harness/tools/adapters/agy.mjs`, `harness/tools/agy.test.mjs` (xoa), `harness/tools/adapters/manifest.json`, `harness/tools/adapters/_util.mjs`/`claude.mjs` (chi neu nhac agy), `dev/adapters-report-core.mjs:12`, `dev/adapters-report.test.mjs`, `dev/sync.mjs` (:77 vong ten adapter; GIU `core/agy/agents.mjs` lien quan roles :32-44 neu con dung), `dev/sync.test.mjs`, `harness/core/config/constants.mjs` (:222-223; them `rules` vao allowlist thu muc goc NEU T2 them `rules/AGENTS.md` va `dev/checks/clutter-check` dang chan).
