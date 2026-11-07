@@ -23,13 +23,14 @@ const PROC_ORPHANS = { id: 'proc-orphans', load: () => import('../../constrain/p
 const DATA_CHECK = { id: 'data-check', load: () => import('../../observe/data-check/hook.mjs') };
 const WORKTREE = { id: 'worktree-hook', load: () => import('../../constrain/worktree/hook.mjs') };
 const USER_SHIM = { id: 'user-shim', load: () => import('../../build/user-shim/hook.mjs') };
+const AGY_SYNC = { id: 'agy-sync', load: () => import('../../build/agy-sync/hook.mjs') };
 const LEDGER_WARN = { id: 'ledger-warn', load: () => import('../../observe/ledger/hook.mjs') };
 // ownBudgetMs: budget rieng cho ext-guard (khong bi guard loi an); chi dung khi module that su chay (khop matcher), khong khop thi tra ngay.
 const EXT_GUARD = { id: 'ext-guard', gate: true, ownBudgetMs: 3000, load: () => import('../../build/ext-guard/hook.mjs') };
 const EXT_INJECT = { id: 'ext-inject', load: () => import('../../build/ext-inject/hook.mjs') };
 
 /** su kien -> danh sach entry theo thu tu chay. Su kien khong co = dispatcher in {} (khong lam gi). */
-export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'ext-inject', 'ledger-warn']);
+export const OPTIONAL = Object.freeze(['data-check', 'proc-orphans', 'model-policy', 'user-shim', 'agy-sync', 'ext-inject', 'ledger-warn']);
 
 export const ORDER = Object.freeze({
   PreToolUse: [GUARD, DATA_GATE, BASH_GUARD, MODEL_POLICY, EXT_GUARD, { ...AUDIT, ownBudgetMs: 300 }], // audit: budget rieng toi thieu 300ms, khong bi bo khi ext-guard chay lau (tong < timeout hooks.json 8s)
@@ -42,7 +43,7 @@ export const ORDER = Object.freeze({
   SessionEnd: [AUDIT],
   Stop: [AUDIT, PROC_ORPHANS],
   SubagentStop: [AUDIT, PROC_ORPHANS],
-  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, LEDGER_WARN, EXT_INJECT],
+  SessionStart: [AUDIT, WORKTREE, DATA_CHECK, USER_SHIM, AGY_SYNC, LEDGER_WARN, EXT_INJECT],
   UserPromptSubmit: [AUDIT, LEDGER_WARN],
   WorktreeCreate: [WORKTREE],
   WorktreeRemove: [WORKTREE],
