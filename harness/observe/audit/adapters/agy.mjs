@@ -140,10 +140,11 @@ export function handle(event, input, ctx = {}) {
         return {};
       }
 
-      // transcript: payload (SessionStart/PostInvocation/Stop) hoac suy tu conversationId (Post tool khong co); file khong ton tai/loi -> bo
+      // transcript: lay tu payload neu co; chi o Stop moi suy tu conversationId khi payload thieu (Post khong doc transcript); file khong ton tai/loi -> bo
       try {
         let tPath = typeof inp.transcriptPath === 'string' && inp.transcriptPath.endsWith('.jsonl') ? inp.transcriptPath : null;
-        if (!tPath) {
+        const isStop = (inp.hookEventName || inp.hook_event_name || inp.event || inp.eventName) === 'Stop' || (!(inp.hookEventName || inp.hook_event_name || inp.event || inp.eventName) && (inp.terminationReason != null || inp.fullyIdle != null));
+        if (!tPath && isStop) {
           const d = safeTranscriptPath(inp.conversationId, ctx.home || os.homedir());
           if (d && fs.existsSync(d)) tPath = d;
         }

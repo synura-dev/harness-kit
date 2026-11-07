@@ -24,6 +24,7 @@ export function sumAgyUsage(text, deadline = Infinity) {
 
 const DUR = /^Created At:\s*(\S+)\nCompleted At:\s*(\S+)/;
 
+// shortcut: stepDuration/stepDurations/exitCodeOf chi test dung (Post khong con doc transcript); giu cho backfill sau.
 const durOf = (e) => {
   if (!e || e.type !== 'GENERIC' || typeof e.content !== 'string') return null;
   const m = DUR.exec(e.content); if (!m) return null;

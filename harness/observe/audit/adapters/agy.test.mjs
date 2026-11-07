@@ -297,6 +297,15 @@ test('Stop: transcript 2MB < 1500ms', () => {
   expect(r).toBeDefined();
 });
 
+test('Stop: transcript 2MB dong GENERIC Created At < 1500ms', () => {
+  const root = mkRoot(); const f = path.join(root, 'big2.jsonl');
+  fs.writeFileSync(f, (gen(1, 'x'.repeat(800)) + '\n').repeat(2300) + model(9, 7, 1, 0) + '\n');
+  const t = Date.now();
+  const r = call({ hookEventName: 'Stop', transcriptPath: fwd(f), terminationReason: 'NO_TOOL_CALL' }, { root });
+  expect(Date.now() - t).toBeLessThan(1500);
+  expect(r.data.usage.tool_steps).toBe(1);
+});
+
 test('Post: KHONG doc transcript (agy ghi GENERIC sau hook): khong dur/exit tu transcript', () => {
   const root = mkRoot(); const home = mkRoot();
   const f = agyTranscriptPath('c1', home); fs.mkdirSync(path.dirname(f), { recursive: true });
