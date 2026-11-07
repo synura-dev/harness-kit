@@ -84,11 +84,11 @@ Files: `harness/build/agy-sync/` (xoa ca thu muc: hook.mjs, hook.test.mjs, hook.
 
 ### Task 5: Xoa adapter cong cu agy + tham chieu dev [sau T2]
 Files: `harness/tools/adapters/agy.mjs`, `harness/tools/agy.test.mjs` (xoa), `harness/tools/adapters/manifest.json`, `harness/tools/adapters/_util.mjs`/`claude.mjs` (chi neu nhac agy), `dev/adapters-report-core.mjs:12`, `dev/adapters-report.test.mjs`, `dev/sync.mjs` (:77 vong ten adapter; GIU `core/agy/agents.mjs` lien quan roles :32-44 neu con dung), `dev/sync.test.mjs`, `harness/core/config/constants.mjs` (:222-223; them `rules` vao allowlist thu muc goc NEU T2 them `rules/AGENTS.md` va `dev/checks/clutter-check` dang chan).
-- [ ] Truoc khi xoa: doc `dev/sync.mjs:60-90` + `adapters-report-core.mjs` de xem adapter list duoc nap the nao (manifest/cau hinh). Ghi: xoa ten `agy` khoi vong lap, KHONG lam hong adapter `claude`.
-- [ ] Xoa + sua; `harness/core/agy/*` va `checkAgentFile` (neu dev dung) -> neu `dev/sync.mjs` can ham trong adapter da xoa, di chuyen sang `core/agy/` (tach helper truoc) thay vi xoa chuc nang role-doi-ung.
-- [ ] Chay: `timeout 120 bun test dev/adapters-report.test.mjs dev/sync.test.mjs harness/core/agy dev/checks/clutter-check.test.mjs`; `timeout 60 node dev/sync.mjs --help` (hoac lenh kiem cua sync, khong ghi) khong loi.
+- [x] Truoc khi xoa: doc `dev/sync.mjs:60-90` + `adapters-report-core.mjs` de xem adapter list duoc nap the nao (manifest/cau hinh). Ghi: xoa ten `agy` khoi vong lap, KHONG lam hong adapter `claude`.
+- [x] Xoa + sua; `harness/core/agy/*` va `checkAgentFile` (neu dev dung) -> neu `dev/sync.mjs` can ham trong adapter da xoa, di chuyen sang `core/agy/` (tach helper truoc) thay vi xoa chuc nang role-doi-ung.
+- [x] Chay: `timeout 120 bun test dev/adapters-report.test.mjs dev/sync.test.mjs harness/core/agy dev/checks/clutter-check.test.mjs`; `timeout 60 node dev/sync.mjs --help` (hoac lenh kiem cua sync, khong ghi) khong loi.
 - Done: test xanh; grep `tools/adapters/agy` = rong ngoai CHANGELOG.
-- [ ] Commit: `tools: xoa adapter dong bo agy (plugin native thay the)`.
+- [x] Commit: `tools: xoa adapter dong bo agy (plugin native thay the)`.
 
 ### Task 8: Shim `harness` tool-neutral (TDD) [sau T0 S3 va T2]
 Files: `harness/core/runtime/user-shim.mjs` + `user-shim.test.mjs`, `harness/build/user-shim/hook.mjs` + `hook.test.mjs`, `harness/build/user-shim/claude-cache.mjs` (moi, chi-Claude, chua `pluginCacheDir`), `harness/build/user-shim/manifest.json` (helpers), mot dong trong `SESSION_AGY` (`hooks/dispatch/agy.mjs`, chi sau khi T2 da merge). Spec 3.5.
