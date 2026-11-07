@@ -78,7 +78,7 @@ const HARNESS_AGY = {
   async handle(event, input) {
     const tc = input && typeof input === 'object' ? input.toolCall : null;
     if (!tc || tc.name !== 'run_command' || !tc.args || typeof tc.args !== 'object') return {};
-    const r = classifyHarnessCommand(getCommand(tc.args));
+    const r = classifyHarnessCommand(getCommand(tc.args), { pluginRoot: path.resolve(HERE, '..', '..', '..') });
     if (r.kind === 'none') return {};
     if (r.kind === 'safe') return { decision: 'allow', records: [gateRec(SAFE_RULE, r.reason)] };
     return { records: [gateRec(UNSAFE_RULE, r.reason)] };

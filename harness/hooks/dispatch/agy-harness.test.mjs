@@ -14,6 +14,20 @@ test('safe: chi lenh doc trong allowlist da duyet', () => {
   expect(c('harness knowledge get architecture').argv).toEqual(['knowledge', 'get', 'architecture']);
 });
 
+test('node <pluginRoot>/bin/harness: phan loai nhu `harness`, chi dung duong dan cua plugin', () => {
+  const root = 'C:\\Users\\u\\.gemini\\config\\plugins\\harness-kit';
+  const k = (s) => c(s, { pluginRoot: root }).kind;
+  expect(k('node C:\\Users\\u\\.gemini\\config\\plugins\\harness-kit\\bin\\harness knowledge search deploy')).toBe('safe');
+  expect(k('node C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness doctor')).toBe('safe');
+  expect(c('node C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness knowledge get a', { pluginRoot: root }).argv).toEqual(['knowledge', 'get', 'a']);
+  expect(k('node C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness ext approve x')).toBe('unsafe');
+  expect(k('node C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness doctor && ls')).toBe('unsafe');
+  expect(k('node C:/evil/bin/harness knowledge get a')).toBe('none');
+  expect(k('node C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness-x knowledge get a')).toBe('none');
+  expect(k('node --eval x C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness doctor')).toBe('none');
+  expect(c('node C:/Users/u/.gemini/config/plugins/harness-kit/bin/harness knowledge get a').kind).toBe('none'); // khong co pluginRoot
+});
+
 test('none: khong phai harness -> khong can thiep', () => {
   for (const s of ['git status', 'node --version', 'echo harness doctor', '', undefined, null, 42, 'cd x && harness doctor']) expect([s, kind(s)]).toEqual([s, 'none']);
 });
