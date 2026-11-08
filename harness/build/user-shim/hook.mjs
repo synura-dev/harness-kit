@@ -32,7 +32,7 @@ export async function handle(event, input, ctx = {}) {
     // claude: chay tu nguon (khong cache plugin) -> bo qua; tool khac (agy): chi can goc plugin co bin/harness, khong doc thu muc cai cua Claude.
     const scan = tool === 'claude' ? pluginCacheDir(pluginRoot, inj) : null; // claude: ban cu co the bi xoa -> shim quet thu muc cache; agy: thu muc cai on dinh
     if (tool === 'claude' ? !scan : !fs.existsSync(path.join(pluginRoot, 'bin', 'harness'))) return {};
-    // thu muc du lieu plugin cua CLI nay (claude: CLAUDE_PLUGIN_DATA/suy tu cache; agy: plugin_data canh plugins): ext approve sao chep dang ky vao day.
+    // thu muc du lieu plugin cua CLI nay (claude: CLAUDE_PLUGIN_DATA/suy tu cache; agy: env PLUGIN_DATA hoac <.gemini>/antigravity-cli/plugin_data/<ten>): ext approve sao chep dang ky vao day.
     const data = path.dirname(pluginLayerDirs({ env: inj.env || process.env, repoDir: pluginRoot }).machineDir);
     const s = syncUserShim({ pluginRoot, tool, data, ...(scan ? { scan } : {}), ...inj });
     const tag = 'harness-kit user-shim:';

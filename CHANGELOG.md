@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.3
+### Fixed
+- agy doc duoc registry extension: du lieu plugin cua agy la env `PLUGIN_DATA` hoac `<.gemini>/antigravity-cli/plugin_data/<ten>` (truoc day harness tu che `<.gemini>/config/plugin_data`, sandbox agy chan EPERM). `readAll` khong coi ENOENT la "chua dang ky" khi thu muc cha khong doc duoc (EPERM/EACCES), va bao loi ro khi agy chay ban cai Claude. Shim `harness` uu tien khoa roots.json trung CLI goi (ANTIGRAVITY_AGENT -> agy, CLAUDECODE -> claude) truoc registry/version.
+
 ## 0.4.2
 ### Fixed
 - Shim `harness` chon root: uu tien root co thu muc `data` chua registry extension khong rong (it nhat 1 muc), roi moi xet version cao nhat, roi thu tu khoa. Truoc day hai root bang version thi chon khoa sau (agy, chua co registry) nen moi lenh extension bao chua dang ky. Khong root nao co registry thi giu logic cu.

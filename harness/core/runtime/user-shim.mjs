@@ -37,13 +37,15 @@ export const readRoots = (file) => { try { const o = JSON.parse(read(file) || '{
 const js = (R) => [
   "const f=require('fs'),p=require('path'),c=require('child_process');",
   `const R='${R}';let r={};try{r=JSON.parse(f.readFileSync(R,'utf8'))}catch(e){}`,
-  "let L=[];for(const k of Object.keys(r)){const e=r[k]||{};if(e.scan){let d=[];try{d=f.readdirSync(e.scan)}catch(x){}for(const v of d)L.push({root:p.join(e.scan,v),version:v,data:e.data})}else if(e.root)L.push(e)}",
+  // nguoi goi: ANTIGRAVITY_AGENT -> agy (kiem truoc: CLAUDECODE ro ri khi agy chay tu phien Claude), CLAUDECODE -> claude; khoa roots.json trung nguoi goi thang (agy khong doc duoc data cua Claude)
+  "const me=process.env.ANTIGRAVITY_AGENT?'agy':process.env.CLAUDECODE?'claude':'';",
+  "let L=[];for(const k of Object.keys(r)){const e=r[k]||{};if(e.scan){let d=[];try{d=f.readdirSync(e.scan)}catch(x){}for(const v of d)L.push({root:p.join(e.scan,v),version:v,data:e.data,m:k==me?1:0})}else if(e.root)L.push(Object.assign({},e,{m:k==me?1:0}))}",
   "L=L.filter(e=>f.existsSync(p.join(e.root,'bin','harness')));",
   // uu tien root co registry ext khong rong (data/config/ext/local.json), roi version, roi thu tu khoa (sort on dinh)
   "const g=e=>{try{const x=JSON.parse(f.readFileSync(p.join(e.data,'config','ext','local.json'),'utf8')).extensions||{};return Object.keys(x).some(k=>Array.isArray(x[k])&&x[k].length)?1:0}catch(y){return 0}};",
   "L.forEach(e=>{e.g=g(e)});",
   "if(!L.length){console.error('harness: khong tim thay plugin harness-kit (roots.json: '+R+'); chay lai phien CLI de shim tu cap nhat');process.exit(3)}",
-  "L.sort((x,y)=>x.g-y.g||String(x.version||'').localeCompare(String(y.version||''),'en',{numeric:true}));",
+  "L.sort((x,y)=>x.m-y.m||x.g-y.g||String(x.version||'').localeCompare(String(y.version||''),'en',{numeric:true}));",
   "const b=p.join(L.pop().root,'bin','harness');",
   "const s=c.spawnSync(process.execPath,[b,...process.argv.slice(1)],{stdio:'inherit'});process.exit(s.status==null?1:s.status)",
 ].join('');

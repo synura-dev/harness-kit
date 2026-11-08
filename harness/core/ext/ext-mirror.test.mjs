@@ -29,7 +29,13 @@ function agyPlugin(t) {
 test('agy: pluginLayerDirs tro vao plugin_data cua agy (chi .gemini/config/plugins/<ten>), KHONG ~/.claude', () => {
   const t = mk(); const root = agyPlugin(t);
   const d = pluginLayerDirs({ env: { CLAUDE_PROJECT_DIR: t }, repoDir: root });
-  expect(d.machineDir).toBe(path.join(t, '.gemini', 'config', 'plugin_data', 'harness-kit', 'config'));
+  expect(d.machineDir).toBe(path.join(t, '.gemini', 'antigravity-cli', 'plugin_data', 'harness-kit', 'config'));
+});
+
+test('agy: env PLUGIN_DATA thang suy tu duong cai; CLAUDE_PLUGIN_DATA bi bo qua', () => {
+  const t = mk(); const root = agyPlugin(t); const pd = path.join(t, 'given');
+  expect(pluginLayerDirs({ env: { PLUGIN_DATA: pd, CLAUDE_PLUGIN_DATA: path.join(t, 'claude') }, repoDir: root }).primaryDir).toBe(pd);
+  expect(pluginLayerDirs({ env: { CLAUDE_PLUGIN_DATA: path.join(t, 'claude') }, repoDir: root }).primaryDir).toBe(path.join(t, '.gemini', 'antigravity-cli', 'plugin_data', 'harness-kit'));
 });
 
 test('TB-5: --plugin-dir cua Claude (X/plugins/<ten>) giu hanh vi cu, khong sang X/plugin_data', () => {
@@ -126,7 +132,7 @@ test('CAO-1b: CLAUDE_PLUGIN_DATA tro vao thu muc gia (khong dang ky) + remove co
 test('CAO-1c: plugin chep sang X/.gemini/config/plugins/harness-kit (data khong dang ky) -> khong chep vao ban that', async () => {
   const t = mk(); const w = ws0(t); const real = path.join(t, 'real'), B = path.join(t, 'b');
   put(real, J); put(B, J);
-  const repoDir = agyPlugin(path.join(t, 'evil')); put(path.join(t, 'evil', '.gemini', 'config', 'plugin_data', 'harness-kit'), withGuard(w));
+  const repoDir = agyPlugin(path.join(t, 'evil')); put(path.join(t, 'evil', '.gemini', 'antigravity-cli', 'plugin_data', 'harness-kit'), withGuard(w));
   const shimDir = roots(t, { claude: { data: real }, agy: { data: B } });
   const before = fs.readFileSync(reg(real), 'utf8');
   const r = await remove('dummy', { workspace: w, repoDir, env: { CLAUDE_PROJECT_DIR: w }, shimDir, yes: true, confirm: () => true });
@@ -163,6 +169,6 @@ test('hook SessionStart agy dang ky data = plugin_data cua agy; chi khoa agy', a
   const dir = path.join(inj.home, process.platform === 'win32' ? '.harness-kit' : '.local', 'bin');
   const r = JSON.parse(fs.readFileSync(rootsFile(dir), 'utf8'));
   expect(Object.keys(r)).toEqual(['agy']);
-  expect(r.agy.data).toBe(path.join(t, '.gemini', 'config', 'plugin_data', 'harness-kit'));
+  expect(r.agy.data).toBe(path.join(t, '.gemini', 'antigravity-cli', 'plugin_data', 'harness-kit'));
   expect(fs.existsSync(r.agy.data)).toBe(true);
 });
