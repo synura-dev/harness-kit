@@ -94,14 +94,13 @@ export function readAll(opts) {
   const f = machineFile(opts);
   const env = (opts && opts.env) || process.env;
   const repoDir = (opts && opts.repoDir) || REPO_DIR;
-  // agy chay ban cai cua Claude: du lieu o ~/.claude khong doc duoc tu sandbox agy -> loi ro, khong de roi thanh "chua dang ky".
-  if (!opts?.machineFile && env.ANTIGRAVITY_AGENT && isPluginMode(repoDir) && /(^|[\\/])\.claude([\\/]|$)|[\\/]plugins[\\/]cache[\\/]/i.test(path.resolve(repoDir))) {
-    throw new Error(`agy dang chay ban cai harness-kit cua Claude (${path.resolve(repoDir)}): thu muc du lieu cua no khong doc duoc tu sandbox agy. Goi ban cai cua agy: <.gemini>/config/plugins/harness-kit/bin/harness (hoac shim \`harness\`). CHAN (fail-closed).`);
-  }
+  // agy chay ban cai cua Claude: du lieu o ~/.claude khong doc duoc tu sandbox agy -> loi ro (chi khi doc that bai; doc duoc thi dung binh thuong, vd Claude con sinh tu agy).
+  const agyOnClaude = () => !opts?.machineFile && env.ANTIGRAVITY_AGENT && isPluginMode(repoDir) && /(^|[\\/])\.claude([\\/]|$)|[\\/]plugins[\\/]cache[\\/]/i.test(path.resolve(repoDir))
+    ? new Error(`agy dang chay ban cai harness-kit cua Claude (${path.resolve(repoDir)}): thu muc du lieu cua no khong doc duoc tu sandbox agy. Goi ban cai cua agy: <.gemini>/config/plugins/harness-kit/bin/harness (hoac shim \`harness\`). CHAN (fail-closed).`) : null;
   let txt;
   try { txt = fs.readFileSync(f, 'utf8'); } catch (e) {
-    if (e && e.code === 'ENOENT') { const u = unreadableAncestor(f); if (!u) return { extensions: {} }; throw notReadable(`${u.code} tai ${u.dir}`, f); }
-    throw notReadable(e && e.code, f);
+    if (e && e.code === 'ENOENT') { const u = unreadableAncestor(f); const a = agyOnClaude(); if (a) throw a; if (!u) return { extensions: {} }; throw notReadable(`${u.code} tai ${u.dir}`, f); }
+    throw agyOnClaude() || notReadable(e && e.code, f);
   }
   const broken = () => new Error(`dang ky extension hong (JSON loi/sai kieu): ${f}. KHONG ghi de; moi external bi CHAN. Nguoi dung sua tay hoac khoi phuc file (hoac xoa de dang ky lai tu dau) roi chay lai.`);
   let j; try { j = JSON.parse(txt.replace(/^﻿/, '')); } catch { throw broken(); }

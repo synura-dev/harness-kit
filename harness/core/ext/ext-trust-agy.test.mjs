@@ -17,6 +17,12 @@ test('unreadableAncestor: stat tung cap, EPERM/EACCES -> tra {dir, code}; ENOENT
   expect(unreadableAncestor(f, mkfs(path.join(os.tmpdir(), 'zzz')))).toBeNull();
 });
 
+test('unreadableAncestor: cap ton tai gan nhat readdir EPERM -> bao', () => {
+  const f = path.join(os.tmpdir(), 'q', 'c.json'); const T = path.resolve(os.tmpdir());
+  const fsx = { statSync: (p) => { if (T.startsWith(path.resolve(p))) return {}; const e = new Error('n'); e.code = 'ENOENT'; throw e; }, readdirSync: () => { const e = new Error('x'); e.code = 'EPERM'; throw e; } };
+  expect(unreadableAncestor(f, fsx)).toEqual({ dir: T, code: 'EPERM' });
+});
+
 test('readAll: file that su vang trong thu muc doc duoc -> rong (khong dang ky)', () => {
   const t = mk();
   expect(readAll({ machineFile: path.join(t, 'config', 'ext', 'local.json') })).toEqual({ extensions: {} });
@@ -29,6 +35,10 @@ test('readAll: agy (ANTIGRAVITY_AGENT=1) chay ban cai Claude (cache layout) -> l
   fs.writeFileSync(path.join(repoDir, '.claude-plugin', 'plugin.json'), '{"name":"harness-kit"}');
   const env = { ANTIGRAVITY_AGENT: '1', CLAUDECODE: '1', CLAUDE_PROJECT_DIR: t };
   expect(() => readAll({ repoDir, env })).toThrow(/agy.*\.gemini.*plugins.*harness-kit/s);
+  // doc duoc (vd Claude con sinh tu agy) -> dung registry, khong chan
+  const d = path.join(t, 'd'); fs.mkdirSync(path.join(d, 'config', 'ext'), { recursive: true });
+  fs.writeFileSync(path.join(d, 'config', 'ext', 'local.json'), JSON.stringify({ extensions: { w: [{ id: 'k' }] } }));
+  expect(readAll({ repoDir, env: { ...env, CLAUDE_PLUGIN_DATA: d } }).extensions.w[0].id).toBe('k');
   // khong phai agy: hanh vi cu (ENOENT -> rong)
-  expect(readAll({ repoDir, env: { CLAUDE_PLUGIN_DATA: path.join(t, 'd'), CLAUDE_PROJECT_DIR: t } })).toEqual({ extensions: {} });
+  expect(readAll({ repoDir, env: { CLAUDE_PLUGIN_DATA: path.join(t, 'none'), CLAUDE_PROJECT_DIR: t } })).toEqual({ extensions: {} });
 });
