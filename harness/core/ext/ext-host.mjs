@@ -97,7 +97,7 @@ export function runExternal(ext, domain, argv = [], opts = {}) {
     const k = extErr(status, ext, domain, { timeoutS, maxBytes });
     auditExt(ext.id, { ok: false, event: 'run', status: 'ext-fail', target: domain, ms: Date.now() - t0, error: `${status}: ${why}`, data: { exit: code, reason: status, code: k.code, fix_command: k.fix_command, next_step: k.next_step } });
     const line = hkerrLine(k.code, `${status}: ${why}`, { severity: 'error', fix_command: k.fix_command, next_step: k.next_step, safe: k.safe, source: `ext:${ext.id}/${domain}` });
-    return { code, status, stdout: extra.stdout || '', stderr: `${line}\next ${ext.id}/${domain}: ${status}: ${why}. Tiep: ${k.next_step}\n${extra.stderr || ''}`.slice(0, 2000) };
+    return { code, status, stdout: extra.stdout || '', stderr: `${line}\next ${ext.id}/${domain}: ${status}: ${why}. Tiep: ${k.next_step}\n${extra.stderr || ''}`.slice(0, 3000) };
   };
   try {
     const coreDir = opts.coreDir || HARNESS_DIR;
@@ -126,7 +126,12 @@ export function runExternal(ext, domain, argv = [], opts = {}) {
       if (r.error.code === 'ENOBUFS') return fail(EXIT.OVERFLOW, 'output-overflow', `output > ${maxBytes} byte`);
       return fail(EXIT.FAIL, 'spawn-error', String(r.error.message).slice(0, 120));
     }
-    if (r.status !== 0) return fail(r.status === null ? EXIT.FAIL : r.status, 'exit', `thoat ${r.status} ${String(r.stderr || '').trim().split('\n').slice(-1)[0].slice(0, 160)}`, { stdout: r.stdout });
+    if (r.status !== 0) {
+      const lines = String(r.stderr || '').trim().split('\n');
+      const why = [...lines].reverse().find((l) => l.trim() && !/^Bun v\d/.test(l.trim())) || '';
+      const tail = lines.slice(-20).join('\n').slice(-1500); // duoi stderr that (Bun crash: footer khong the hien nguyen nhan)
+      return fail(r.status === null ? EXIT.FAIL : r.status, 'exit', `thoat ${r.status} ${why.trim().slice(0, 160)}`, { stdout: r.stdout, stderr: tail });
+    }
     if (opts.json) { try { JSON.parse(r.stdout); } catch { return fail(EXIT.BAD_OUTPUT, 'bad-output', `stdout khong phai JSON (${hash8(r.stdout)})`); } }
     auditExt(ext.id, { ok: true, event: 'run', status: 'ext-ok', target: domain, ms: Date.now() - t0 });
     return { code: 0, status: 'ok', stdout: r.stdout, stderr: r.stderr };

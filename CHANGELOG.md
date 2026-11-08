@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.4
+### Fixed
+- Extension thoat != 0: `why` bo dong footer runtime (`Bun v...`) va stderr (20 dong cuoi, toi da 1500 ky tu) duoc in ra, nen khong mat loi that khi Bun crash (vd trong sandbox agy). Tran stderr tong 2000 -> 3000.
+
 ## 0.4.3
 ### Fixed
 - agy doc duoc registry extension: du lieu plugin cua agy la env `PLUGIN_DATA` hoac `<.gemini>/antigravity-cli/plugin_data/<ten>` (truoc day harness tu che `<.gemini>/config/plugin_data`, sandbox agy chan EPERM). `readAll` khong coi ENOENT la "chua dang ky" khi thu muc cha khong doc duoc (EPERM/EACCES), va bao loi ro khi agy chay ban cai Claude. Shim `harness` uu tien khoa roots.json trung CLI goi (ANTIGRAVITY_AGENT -> agy, CLAUDECODE -> claude) truoc registry/version.
