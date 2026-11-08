@@ -22,11 +22,13 @@ const noWrite = () => { throw new Error('khong duoc ghi PATH that'); };
 // inj chung: home/env/shimDir tam, khong cham PATH may
 const mkInj = (home = mk('home')) => ({ env: { LOCALAPPDATA: path.join(tmp, 'Local'), APPDATA: path.join(tmp, 'Roaming'), PATH: '' }, home, regPath: 'C:\\x', setUserPath: () => null });
 const rootsOf = (dir) => JSON.parse(fs.readFileSync(rootsFile(dir), 'utf8'));
-const runShim = (dir, args = []) => {
+const runShim = (dir, args = [], extraEnv = {}) => {
   const runs = [];
+  const base = { ...process.env }; delete base.ANTIGRAVITY_AGENT; delete base.CLAUDECODE; // ket qua khong phu thuoc CLI dang chay test
+  const env = { ...base, ...extraEnv };
   const q = (s) => `"${s}"`; // cmd /s /c "<dong lenh>": tu quote vi duong dan co dau cach
-  if (process.platform === 'win32') runs.push(spawnSync('cmd.exe', ['/d', '/s', '/c', q([path.join(dir, 'harness.cmd'), ...args].map(q).join(' '))], { encoding: 'utf8', timeout: 20000, windowsVerbatimArguments: true }));
-  if (spawnSync('sh', ['-c', 'exit 0'], { timeout: 5000 }).status === 0) runs.push(spawnSync('sh', [path.join(dir, 'harness'), ...args], { encoding: 'utf8', timeout: 20000 }));
+  if (process.platform === 'win32') runs.push(spawnSync('cmd.exe', ['/d', '/s', '/c', q([path.join(dir, 'harness.cmd'), ...args].map(q).join(' '))], { encoding: 'utf8', timeout: 20000, windowsVerbatimArguments: true, env }));
+  if (spawnSync('sh', ['-c', 'exit 0'], { timeout: 5000 }).status === 0) runs.push(spawnSync('sh', [path.join(dir, 'harness'), ...args], { encoding: 'utf8', timeout: 20000, env }));
   return runs;
 };
 beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), "us 'x-")); }); // dau cach + nhay don trong duong dan
@@ -377,4 +379,21 @@ test('chon root: khong root nao co registry (rong/thieu) -> giu logic cu', () =>
   applyShim(planShim({ dir }));
   fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { root: fakeRoot('c', '0.4.1'), version: '0.4.1', data: withRegistry('cdata', { '/ws': [] }) }, agy: { root: fakeRoot('a', '0.4.2'), version: '0.4.2', data: mk('adata') } }));
   for (const r of runShim(dir)) expect(lastVer(r)).toBe('0.4.2');
+});
+
+// Nguoi goi: ANTIGRAVITY_AGENT -> agy, CLAUDECODE -> claude. Khoa roots.json trung nguoi goi thang version/registry (agy khong doc duoc data cua Claude).
+test('chon root: ANTIGRAVITY_AGENT=1 (CLAUDECODE=1 ro ri) -> agy du claude co registry va version cao hon', () => {
+  const dir = mk('bin');
+  applyShim(planShim({ dir }));
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { root: fakeRoot('c', '0.9.0'), version: '0.9.0', data: withRegistry('cdata', { '/ws': [{ id: 'x' }] }) }, agy: { root: fakeRoot('a', '0.4.1'), version: '0.4.1', data: mk('adata') } }));
+  const runs = runShim(dir, [], { ANTIGRAVITY_AGENT: '1', CLAUDECODE: '1' });
+  expect(runs.length).toBeGreaterThan(0);
+  for (const r of runs) expect(lastVer(r)).toBe('0.4.1');
+});
+test('chon root: chi CLAUDECODE=1 -> claude du agy version cao hon; khong nguoi goi -> logic cu (version)', () => {
+  const dir = mk('bin');
+  applyShim(planShim({ dir }));
+  fs.writeFileSync(rootsFile(dir), JSON.stringify({ claude: { root: fakeRoot('c', '0.4.1'), version: '0.4.1', data: mk('cdata') }, agy: { root: fakeRoot('a', '0.9.0'), version: '0.9.0', data: mk('adata') } }));
+  for (const r of runShim(dir, [], { CLAUDECODE: '1' })) expect(lastVer(r)).toBe('0.4.1');
+  for (const r of runShim(dir)) expect(lastVer(r)).toBe('0.9.0');
 });

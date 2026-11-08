@@ -120,7 +120,9 @@ export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) 
   // Suy tu vi tri cai that cua chinh CLI do (khong tin env), khong co legacy.
   // CHI vi tri cai that cua agy (.gemini/config/plugins/<ten>); `--plugin-dir` cua Claude (X/plugins/<ten>) giu hanh vi cu.
   if (ci < 0 && m.length >= 5 && m[m.length - 2] === 'plugins' && m[m.length - 3] === 'config' && m[m.length - 4].toLowerCase() === '.gemini') {
-    const primaryDir = path.join(m.slice(0, -2).join(path.sep) || path.sep, 'plugin_data', m[m.length - 1]);
+    // Thu muc du lieu THAT cua agy = env PLUGIN_DATA (agy truyen cho hook/MCP) hoac <.gemini>/antigravity-cli/plugin_data/<ten> (sandbox agy chi doc/ghi duoc day; <.gemini>/config/plugin_data bi EPERM). Khong dung CLAUDE_PLUGIN_DATA.
+    const given = typeof env.PLUGIN_DATA === 'string' && env.PLUGIN_DATA.trim();
+    const primaryDir = given ? env.PLUGIN_DATA : path.join(m.slice(0, -2).join(path.sep) || path.sep, '..', 'antigravity-cli', 'plugin_data', m[m.length - 1]);
     let projectDir = null; try { projectDir = path.join(workspaceRoot({ env, repoDir }), '.harness', 'config'); } catch { /* khong co */ }
     return { machineDir: path.join(primaryDir, 'config'), projectDir, primaryDir, legacyDir: primaryDir };
   }

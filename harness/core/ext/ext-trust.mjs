@@ -75,10 +75,34 @@ export function machineFile(opts = {}) {
 }
 
 /** Chua co file => rong. File hong (JSON loi / sai kieu) => NEM (fail-closed): khong doc thanh rong roi ghi de mat moi muc. */
+/** Cap tien to gan nhat ton tai/khong doc duoc cua file: stat tung cap tu goc xuong; EPERM/EACCES -> {dir, code}; khong co -> null. fsx tiem cho test. */
+export function unreadableAncestor(file, fsx = fs) {
+  const parts = path.resolve(file).split(path.sep);
+  let cur = parts[0] + path.sep;
+  let last = null;
+  for (let i = 1; i < parts.length - 1; i++) {
+    cur = path.join(cur, parts[i]);
+    try { fsx.statSync(cur); last = cur; } catch (e) { if (e && (e.code === 'EPERM' || e.code === 'EACCES')) return { dir: cur, code: e.code }; if (e && e.code === 'ENOENT') break; }
+  }
+  // cap ton tai gan nhat khong liet ke duoc (EPERM/EACCES) cung la khong doc duoc
+  if (last && typeof fsx.readdirSync === 'function') { try { fsx.readdirSync(last); } catch (e) { if (e && (e.code === 'EPERM' || e.code === 'EACCES')) return { dir: last, code: e.code }; } }
+  return null;
+}
+const notReadable = (code, f) => new Error(`dang ky extension khong doc duoc (${code}): ${f}. CHAN (fail-closed). Nguoi dung chay \`harness ext approve <id>\` o terminal de dong bo dang ky vao thu muc du lieu cua CLI nay.`);
+
 export function readAll(opts) {
   const f = machineFile(opts);
+  const env = (opts && opts.env) || process.env;
+  const repoDir = (opts && opts.repoDir) || REPO_DIR;
+  // agy chay ban cai cua Claude: du lieu o ~/.claude khong doc duoc tu sandbox agy -> loi ro, khong de roi thanh "chua dang ky".
+  if (!opts?.machineFile && env.ANTIGRAVITY_AGENT && isPluginMode(repoDir) && /(^|[\\/])\.claude([\\/]|$)|[\\/]plugins[\\/]cache[\\/]/i.test(path.resolve(repoDir))) {
+    throw new Error(`agy dang chay ban cai harness-kit cua Claude (${path.resolve(repoDir)}): thu muc du lieu cua no khong doc duoc tu sandbox agy. Goi ban cai cua agy: <.gemini>/config/plugins/harness-kit/bin/harness (hoac shim \`harness\`). CHAN (fail-closed).`);
+  }
   let txt;
-  try { txt = fs.readFileSync(f, 'utf8'); } catch (e) { if (e && e.code === 'ENOENT') return { extensions: {} }; throw new Error(`dang ky extension khong doc duoc (${e && e.code}): ${f}. CHAN (fail-closed). Nguoi dung chay \`harness ext approve <id>\` o terminal de dong bo dang ky vao thu muc du lieu cua CLI nay.`); }
+  try { txt = fs.readFileSync(f, 'utf8'); } catch (e) {
+    if (e && e.code === 'ENOENT') { const u = unreadableAncestor(f); if (!u) return { extensions: {} }; throw notReadable(`${u.code} tai ${u.dir}`, f); }
+    throw notReadable(e && e.code, f);
+  }
   const broken = () => new Error(`dang ky extension hong (JSON loi/sai kieu): ${f}. KHONG ghi de; moi external bi CHAN. Nguoi dung sua tay hoac khoi phuc file (hoac xoa de dang ky lai tu dau) roi chay lai.`);
   let j; try { j = JSON.parse(txt.replace(/^﻿/, '')); } catch { throw broken(); }
   if (!j || typeof j !== 'object' || Array.isArray(j)) throw broken();
