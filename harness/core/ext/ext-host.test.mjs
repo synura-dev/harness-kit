@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { loadExternals, runExternal, EXIT } from './ext-host.mjs';
+import { loadExternals, runExternal, EXIT, EXT_LIMITS } from './ext-host.mjs';
 import { readAuditEvents } from '../audit/scan.mjs';
 import { repeatedFailureCandidates } from '../audit/candidates.mjs';
 
@@ -148,3 +148,55 @@ test('3 loi cung dau van tay -> evolve candidate co source ext', async () => {
   expect(c[0].source).toBe('ext:flaky');
   expect(c[0].evidenceCount).toBe(3);
 }, 60000);
+
+// ---- manifest `tty`: lenh nguoi dung chay inherit stdio chi khi CLI cha co TTY ----
+const ttyExt = mkExt('ttyx', `export function main(ctx, argv) { return 'OUT ' + argv.join(' '); }`, { tty: ['tags approve', 'retire'] });
+const yes = () => true, no = () => false;
+// inherit => stdout khong duoc bat (r.stdout rong); piped => r.stdout co 'OUT'
+test('tty: lenh danh dau + cha co TTY -> inherit (khong bat stdout)', () => {
+  const r = runExternal(get(ttyExt), 'ttyx', ['tags', 'approve', 'x'], { isTTY: yes });
+  expect(r.code).toBe(0);
+  expect(r.stdout).toBe('');
+});
+test('tty: lenh khong danh dau + cha co TTY -> van piped', () => {
+  expect(runExternal(get(ttyExt), 'ttyx', ['list'], { isTTY: yes }).stdout).toContain('OUT list');
+});
+test('tty: lenh danh dau + cha khong TTY -> van piped', () => {
+  expect(runExternal(get(ttyExt), 'ttyx', ['retire', 'a'], { isTTY: no }).stdout).toContain('OUT retire a');
+});
+test('tty: khop theo token nguyen (tags approvex, tags, approve tags, retirex khong khop)', () => {
+  for (const a of [['tags', 'approvex'], ['tags'], ['approve', 'tags'], ['retirex']]) expect(runExternal(get(ttyExt), 'ttyx', a, { isTTY: yes }).stdout).toContain('OUT');
+});
+test('tty: inherit van co timeout + HKERR khi exit != 0', () => {
+  const h = mkExt('ttyhang', `export function main() { return new Promise(() => setInterval(() => {}, 1000)); }`, { tty: ['go'] });
+  expect(runExternal(get(h), 'ttyhang', ['go'], { isTTY: yes, timeoutS: 2 }).code).toBe(EXIT.TIMEOUT);
+  const t = mkExt('ttythrow', `export function main() { throw new Error('boom'); }`, { tty: ['go'] });
+  const r = runExternal(get(t), 'ttythrow', ['go'], { isTTY: yes });
+  expect(r.code).toBe(EXIT.FAIL);
+  expect(r.stderr).toContain('HKERR');
+}, 60000);
+test('tty: inherit co tran rieng (ttyTimeoutS 600) va timeout khong nham voi ext tu thoat 124', () => {
+  expect(EXT_LIMITS.ttyTimeoutS).toBe(600);
+  const h = mkExt('ttyhang2', `export function main() { return new Promise(() => setInterval(() => {}, 1000)); }`, { tty: ['go'] });
+  // khong dat timeoutS: tran inherit lay tu ttyTimeoutS (2s o day) chu khong phai 30s mac dinh
+  const r = runExternal(get(h), 'ttyhang2', ['go'], { isTTY: yes, ttyTimeoutS: 2 });
+  expect(r.code).toBe(EXIT.TIMEOUT); expect(r.stderr).toContain('qua 2s');
+  const e = mkExt('tty124', `export function main() { process.exit(124); }`, { tty: ['go'] });
+  const x = runExternal(get(e), 'tty124', ['go'], { isTTY: yes });
+  expect(x.status).toBe('exit'); expect(x.stderr).not.toContain('truncated: timeout');
+  const e2 = mkExt('tty197', `export function main() { process.exit(197); }`, { tty: ['go'] });
+  expect(runExternal(get(e2), 'tty197', ['go'], { isTTY: yes }).status).toBe('exit');
+}, 60000);
+test('tty: opts.isTTY chi duoc tin duoi test runner; ngoai test doc TTY that', () => {
+  const saved = [process.env.BUN_TEST, process.env.NODE_ENV]; delete process.env.BUN_TEST; delete process.env.NODE_ENV;
+  try { expect(runExternal(get(ttyExt), 'ttyx', ['retire', 'a'], { isTTY: yes }).stdout).toContain('OUT retire a'); } // test khong co TTY that -> piped
+  finally { if (saved[0] !== undefined) process.env.BUN_TEST = saved[0]; if (saved[1] !== undefined) process.env.NODE_ENV = saved[1]; }
+});
+test('tty: manifest tty sai bi tu choi', () => {
+  const bad = [['a', 'x'], ['b', [1]], ['c', ['']], ['d', ['  ']], ['e', Array(33).fill('a b')], ['f', ['x'.repeat(81)]]];
+  for (const [n, v] of bad) {
+    const l = load([mkExt('ttybad' + n, `export function main() { return 1; }`, { tty: v })]);
+    expect(Object.keys(l.byDomain)).toEqual([]);
+    expect(l.errors.join()).toContain('tty');
+  }
+});

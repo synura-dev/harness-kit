@@ -28,6 +28,7 @@ description: "Logic cốt lõi của harness: vai trò tay chân, cổng CLI, c�
 
 ## Thêm một tool mới đúng chuẩn
 1. Đặt tool trong thư mục extension riêng, kèm `manifest.json`: id, kind, entry, domain, desc, cmds, tests, data.
+   - `tty` (tùy chọn): mảng tiền tố lệnh chỉ người dùng được chạy (không gồm domain), vd `["tags approve","retire"]`, tối đa 32 mục, mỗi mục chuỗi không rỗng <= 80 ký tự. Lệnh khớp theo từng token && CLI cha có TTY thật thì ext chạy với stdio kế thừa (không bắt output, vẫn timeout + kill cây); ngược lại chạy qua pipe như thường nên kiểm TTY của ext vẫn từ chối. Không có biến môi trường/cờ nào báo "là người" cho ext.
 2. Nếu tool ghi dữ liệu: đăng ký zone/class (`data register`) trước khi chạy lần đầu.
 3. Lệnh có timeout và giới hạn đọc; hết hạn thì dừng êm và báo `truncated`.
 4. Viết test cạnh tool; dữ liệu thử đặt trong thư mục tạm, xóa khi xong.

@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.6
+### Fixed
+- Ext: manifest `tty` (mang tien to lenh, vd `["tags approve"]`) -> lenh khop + CLI cha co TTY thi ext chay stdio inherit (ext tu kiem isTTY nhu hub knowledge approve gio qua duoc); khong khop hoac khong TTY van piped. Khong them env/co bao "la nguoi". Supervisor nhan `inherit` thay maxBytes (van timeout + kill).
+
 ## 0.4.5
 ### Added
 - agy: SessionStart (hook ngoai sandbox) chep loi harness sang `plugin_data/<ten>/core/<ver>` (core-mirror); `bin/harness` trong agy dat HARNESS_PLUGIN_DIR = ban sao CHI khi moi file == goc plugin (thua/sai -> warn + dung goc), de Bun cua ext con import duoc loi. `pluginLayerDirs` nhan layout ban sao.

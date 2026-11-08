@@ -66,6 +66,7 @@ test('register van chan: entry khong ton tai, domain trung core, thieu domain', 
   expect((await run({ ...PROJECTS_MANIFEST, domain: 'data' })).text).toContain('domain trung core');
   const { domain, ...noDom } = PROJECTS_MANIFEST;
   expect((await run(noDom)).text).toContain('thieu entry/domain');
+  expect((await run({ ...PROJECTS_MANIFEST, tty: 'x' })).text).toContain('tty:'); // tty sai bi chan ngay luc register
 });
 
 test('ext-runner chay main(ctx) cua projects (manifest hub that)', () => {

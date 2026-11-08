@@ -10,7 +10,8 @@ import { hkerrLine } from '../io/paths.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const HARNESS_DIR = path.resolve(HERE, '..', '..');
-export const EXT_LIMITS = Object.freeze({ maxManifests: 40, timeoutS: 30, maxBytes: 262144 });
+export const EXT_LIMITS = Object.freeze({ maxManifests: 40, timeoutS: 30, ttyTimeoutS: 600, maxBytes: 262144 });
+export const TTY_TIMEOUT_CODE = 197; // supervisor inherit: timeout (exit 197 cua chinh ext bi doi thanh 1) -> khong nham voi ext tu thoat 124
 // Ma thoat ro rang cho lenh goi.
 export const EXIT = Object.freeze({ MISSING_CORE: 3, BAD_MANIFEST: 64, BAD_OUTPUT: 65, FAIL: 70, TIMEOUT: 124, OVERFLOW: 125, BLOCKED: 66 });
 
@@ -22,6 +23,25 @@ export function blockExternal(ext, domain, status = 'drift') {
 }
 
 
+
+export const TTY_LIMITS = Object.freeze({ maxPrefixes: 32, maxLen: 80 });
+/** manifest `tty`: mang tien to lenh (khong gom domain), vd ["tags approve","retire"]. -> chuoi loi hoac '' neu hop le/vang. */
+export function validateTty(t) {
+  if (t === undefined) return '';
+  if (!Array.isArray(t)) return 'phai la mang chuoi';
+  if (t.length > TTY_LIMITS.maxPrefixes) return `toi da ${TTY_LIMITS.maxPrefixes} tien to`;
+  for (const p of t) if (typeof p !== 'string' || !p.trim() || p.length > TTY_LIMITS.maxLen) return `moi tien to la chuoi khong rong <= ${TTY_LIMITS.maxLen} ky tu`;
+  return '';
+}
+/** argv (sau domain) bat dau bang du moi token cua 1 tien to (so khop token nguyen). */
+export function matchesTty(tty, argv) {
+  if (!Array.isArray(tty)) return false;
+  const a = (argv || []).map(String);
+  return tty.some((p) => { const tk = String(p).trim().split(/\s+/); return tk.length <= a.length && tk.every((x, i) => a[i] === x); });
+}
+// Seam test: opts.isTTY CHI duoc tin duoi test runner (cung mau underTest() o ext-registry); ngoai test luon doc TTY that cua stdin/stdout.
+const underTest = () => process.env.NODE_ENV === 'test' || !!process.env.BUN_TEST;
+const hasTty = (opts) => (underTest() && typeof opts.isTTY === 'function' ? !!opts.isTTY() : !!(process.stdin.isTTY && process.stdout.isTTY));
 
 const readJsonSafe =(f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const isUnder = (p, root) => { const r = path.relative(root, p); return !!r && !r.startsWith('..') && !path.isAbsolute(r); };
@@ -54,14 +74,16 @@ export function loadExternals(list, { coreDomains = {}, limits = {} } = {}) {
       if (!ctxCompatible(m.requires && m.requires.ctx)) { bad(`can ctx ${m.requires.ctx}, loi co ${CTX_VERSION}`); continue; }
       const entry = path.resolve(item.root, m.entry);
       if (m.entry.split(/[\\/]/).includes('..') || !isUnder(entry, path.resolve(item.root))) { bad('entry ra ngoai root'); continue; }
-      const dataDecl = normalizeDataEntries(Array.isArray(m.data) ? m.data : null, id);
+      const ttyErr = validateTty(m.tty);
+      if (ttyErr) { bad(`tty: ${ttyErr}`); continue; }
+      const dataDecl =normalizeDataEntries(Array.isArray(m.data) ? m.data : null, id);
       for (const er of dataDecl.errors) errors.push(`ext ${id}: data: ${er}`);
       const dataList = Array.isArray(m.data) ? m.data.filter((x) => x && typeof x === 'object') : undefined;
       for (const d of manifestDomains(m)) {
         const dn = String(d);
         if (core.has(dn)) { errors.push(`ext ${id}: domain ${dn} trung core (core thang)`); continue; }
         if (byDomain[dn]) { errors.push(`ext ${id}: domain ${dn} trung ext ${byDomain[dn].id}`); continue; }
-        byDomain[dn] = { id, root: path.resolve(item.root), entry, caps: Array.isArray(m.caps) ? m.caps : undefined, data: dataList, workspaces: item.workspaces };
+        byDomain[dn] = { id, root: path.resolve(item.root), entry, caps: Array.isArray(m.caps) ? m.caps : undefined, data: dataList, tty: m.tty, workspaces: item.workspaces };
       }
     } catch (e) { bad(String(e.message).slice(0, 80)); }
   }
@@ -91,7 +113,8 @@ export function extErr(status, ext, domain, { timeoutS = EXT_LIMITS.timeoutS, ma
 
 export function runExternal(ext, domain, argv = [], opts = {}) {
   const t0 = Date.now();
-  const timeoutS = opts.timeoutS || EXT_LIMITS.timeoutS;
+  const inherit = matchesTty(ext.tty, argv) && hasTty(opts);
+  const timeoutS = opts.timeoutS || (inherit ? (opts.ttyTimeoutS || EXT_LIMITS.ttyTimeoutS) : EXT_LIMITS.timeoutS); // lenh tuong tac can lau hon 30s
   const maxBytes = opts.maxBytes || EXT_LIMITS.maxBytes;
   const fail = (code, status, why, extra = {}) => {
     const k = extErr(status, ext, domain, { timeoutS, maxBytes });
@@ -115,11 +138,12 @@ export function runExternal(ext, domain, argv = [], opts = {}) {
     // spawnSync timeout/maxBuffer chi con la luoi du phong (giet supervisor).
     const sup = path.join(HERE, 'ext-supervisor.mjs');
     // Hop dong stdin: chi khi env HARNESS_STDIN_FORWARD=1 (ext-guard dat) moi doc stdin cua CLI (toi da 1MB) va chuyen cho ext qua supervisor -> runner. Mac dinh stdin ext = rong (khong treo khi stdin mo).
+    // Lenh danh dau `tty` trong manifest + CLI cha co TTY that -> inherit stdio (ext tu kiem TTY se thay terminal that). Khong co env/co/arg bao "la nguoi" cho ext.
     let fwd;
-    if (process.env.HARNESS_STDIN_FORWARD === '1') { try { fwd = fs.readFileSync(0).subarray(0, 1048576); } catch { fwd = ''; } }
-    const r = spawnSync(process.execPath, [sup, String(timeoutS * 1000), String(maxBytes), ...args], { ...(fwd !== undefined ? { input: fwd } : {}), encoding: 'utf8', timeout: timeoutS * 1000 + 15000, maxBuffer: maxBytes + 65536, killSignal: 'SIGKILL', windowsHide: true, env: { ...process.env, HARNESS_EXT: ext.id } });
+    if (!inherit && process.env.HARNESS_STDIN_FORWARD === '1') { try { fwd = fs.readFileSync(0).subarray(0, 1048576); } catch { fwd = ''; } }
+    const r = spawnSync(process.execPath, [sup, String(timeoutS * 1000), inherit ? 'inherit' : String(maxBytes), ...args], { ...(fwd !== undefined ? { input: fwd } : {}), ...(inherit ? { stdio: 'inherit' } : {}), encoding: 'utf8', timeout: timeoutS * 1000 + 15000, maxBuffer: maxBytes + 65536, killSignal: 'SIGKILL', windowsHide: true, env: { ...process.env, HARNESS_EXT: ext.id } });
     const supMark = (why) => String(r.stderr || '').includes(`[ext-supervisor] ${why}`);
-    if (r.status === 124 && supMark('timeout')) return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
+    if (inherit ? r.status === TTY_TIMEOUT_CODE : (r.status === 124 && supMark('timeout'))) return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
     if (r.status === 125 && supMark('overflow')) return fail(EXIT.OVERFLOW, 'output-overflow', `output > ${maxBytes} byte`);
     if (r.error) {
       if (r.error.code === 'ETIMEDOUT') return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
@@ -132,9 +156,9 @@ export function runExternal(ext, domain, argv = [], opts = {}) {
       const tail = lines.slice(-20).join('\n').slice(-1500); // duoi stderr that (Bun crash: footer khong the hien nguyen nhan)
       return fail(r.status === null ? EXIT.FAIL : r.status, 'exit', `thoat ${r.status} ${why.trim().slice(0, 160)}`, { stdout: r.stdout, stderr: tail });
     }
-    if (opts.json) { try { JSON.parse(r.stdout); } catch { return fail(EXIT.BAD_OUTPUT, 'bad-output', `stdout khong phai JSON (${hash8(r.stdout)})`); } }
+    if (opts.json && !inherit) { try { JSON.parse(r.stdout); } catch { return fail(EXIT.BAD_OUTPUT, 'bad-output', `stdout khong phai JSON (${hash8(r.stdout)})`); } }
     auditExt(ext.id, { ok: true, event: 'run', status: 'ext-ok', target: domain, ms: Date.now() - t0 });
-    return { code: 0, status: 'ok', stdout: r.stdout, stderr: r.stderr };
+    return { code: 0, status: 'ok', stdout: r.stdout || '', stderr: r.stderr || '' };
   } catch (e) {
     return fail(EXIT.FAIL, 'host-error', String(e.message).slice(0, 120));
   }
