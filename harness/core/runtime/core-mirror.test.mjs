@@ -5,6 +5,15 @@ import path from 'node:path';
 import { syncCoreMirror, mirrorRoot, pickCoreMirror, verifyCoreMirror } from './core-mirror.mjs';
 import { pluginLayerDirs } from '../config/config.mjs';
 
+test('dataDir la junction -> bo qua, khong tao core/ trong nan nhan', () => {
+  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-'));
+  const root = path.join(t, 'plug'); const victim = path.join(t, 'victim'); const data = path.join(t, 'data');
+  w(path.join(root, 'harness', 'core', 'ext', 'ctx.mjs'), 'a'); w(path.join(victim, 'keep.txt'), 'x');
+  fs.symlinkSync(victim, data, 'junction');
+  expect(syncCoreMirror({ pluginRoot: root, dataDir: data, version: '1.2.3' }).ok).toBe(false);
+  expect(fs.readdirSync(victim)).toEqual(['keep.txt']);
+});
+
 test('core/ la symlink/junction -> bo qua, khong xoa file nan nhan', () => {
   const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-'));
   const root = path.join(t, 'plug'); const data = path.join(t, 'data');

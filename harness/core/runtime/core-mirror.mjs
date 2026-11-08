@@ -37,6 +37,8 @@ function collect(pluginRoot, lim, deadline) {
 /** <dataDir>/core that su (khong symlink/junction, realpath dung vi tri) hoac null; tao neu chua co. */
 function safeCoreDir(dataDir) {
   fs.mkdirSync(dataDir, { recursive: true });
+  const same = (a, b) => (process.platform === 'win32' ? a.toLowerCase() === b.toLowerCase() : a === b);
+  if (fs.lstatSync(dataDir).isSymbolicLink() || !same(fs.realpathSync(dataDir), path.resolve(dataDir))) return null; // dataDir la junction/symlink -> khong ghi gi
   const coreDir = path.join(dataDir, 'core');
   let l = null; try { l = fs.lstatSync(coreDir); } catch { /* chua co */ }
   if (!l) fs.mkdirSync(coreDir);
