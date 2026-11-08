@@ -2,8 +2,36 @@ import { test, expect } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { syncCoreMirror, mirrorRoot, pickCoreMirror } from './core-mirror.mjs';
+import { syncCoreMirror, mirrorRoot, pickCoreMirror, verifyCoreMirror } from './core-mirror.mjs';
 import { pluginLayerDirs } from '../config/config.mjs';
+
+test('core/ la symlink/junction -> bo qua, khong xoa file nan nhan', () => {
+  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-'));
+  const root = path.join(t, 'plug'); const data = path.join(t, 'data');
+  w(path.join(root, 'harness', 'core', 'ext', 'ctx.mjs'), 'a');
+  const victim = path.join(t, 'victim'); w(path.join(victim, 'keep.txt'), 'x'); w(path.join(victim, '0.0.1', 'f'), 'x');
+  fs.mkdirSync(data, { recursive: true });
+  fs.symlinkSync(victim, path.join(data, 'core'), 'junction');
+  expect(syncCoreMirror({ pluginRoot: root, dataDir: data, version: '1.2.3' }).ok).toBe(false);
+  expect(fs.existsSync(path.join(victim, 'keep.txt'))).toBe(true);
+  expect(fs.existsSync(path.join(victim, '0.0.1', 'f'))).toBe(true);
+  expect(fs.existsSync(path.join(victim, '1.2.3'))).toBe(false);
+});
+
+test('stamp nguyen nhung file ban sao bi sua -> sync khoi phuc; plugin.json bi sua bi tu choi', () => {
+  const t = fs.mkdtempSync(path.join(os.tmpdir(), 'cm-'));
+  const root = path.join(t, 'plug'); const data = path.join(t, 'data');
+  w(path.join(root, 'harness', 'core', 'ext', 'ctx.mjs'), 'a');
+  w(path.join(root, 'harness', 'y.mjs'), 'y');
+  w(path.join(root, '.antigravity-plugin', 'plugin.json'), '{"version":"1.2.3"}');
+  syncCoreMirror({ pluginRoot: root, dataDir: data, version: '1.2.3' });
+  const d = mirrorRoot(data, '1.2.3');
+  fs.writeFileSync(path.join(d, 'harness', 'y.mjs'), 'evil');
+  expect(syncCoreMirror({ pluginRoot: root, dataDir: data, version: '1.2.3' }).action).toBe('copied');
+  expect(fs.readFileSync(path.join(d, 'harness', 'y.mjs'), 'utf8')).toBe('y');
+  fs.writeFileSync(path.join(d, '.antigravity-plugin', 'plugin.json'), '{"version":"9"}');
+  expect(verifyCoreMirror({ pluginRoot: root, mirrorDir: d }).ok).toBe(false);
+});
 
 const w = (p, s) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, s); };
 function fixture() {

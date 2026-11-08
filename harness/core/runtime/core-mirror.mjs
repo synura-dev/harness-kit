@@ -34,6 +34,16 @@ function collect(pluginRoot, lim, deadline) {
   return files;
 }
 
+/** <dataDir>/core that su (khong symlink/junction, realpath dung vi tri) hoac null; tao neu chua co. */
+function safeCoreDir(dataDir) {
+  fs.mkdirSync(dataDir, { recursive: true });
+  const coreDir = path.join(dataDir, 'core');
+  let l = null; try { l = fs.lstatSync(coreDir); } catch { /* chua co */ }
+  if (!l) fs.mkdirSync(coreDir);
+  else if (l.isSymbolicLink() || !l.isDirectory()) return null;
+  return fs.realpathSync(coreDir) === path.join(fs.realpathSync(dataDir), 'core') ? coreDir : null;
+}
+
 /**
  * Kiem ban sao MOI LAN dung (agent ghi duoc thu muc ban sao): moi file trong <mirrorDir>/harness phai co file cung duong dan trong <pluginRoot>/harness
  * (doc truc tiep, khong liet ke goc) va cung noi dung; thua/sai -> {ok:false, file}. Chan tran so file/byte.
@@ -55,7 +65,8 @@ export function verifyCoreMirror({ pluginRoot, mirrorDir, limits = {} }) {
     }
     return null;
   };
-  try { return walk('harness') || { ok: true, files: n }; } catch (e) { return bad('harness', String((e && e.message) || e)); }
+  const extra = () => { for (const x of EXTRA) { const r = path.join(...x); let a; try { a = fs.readFileSync(path.join(mirrorDir, r)); } catch { continue; } let b; try { b = fs.readFileSync(path.join(pluginRoot, r)); } catch { return bad(r, 'khong co ban goc'); } if (!a.equals(b)) return bad(r, 'khac ban goc'); } return null; };
+  try { return walk('harness') || extra() || { ok: true, files: n }; } catch (e) { return bad('harness', String((e && e.message) || e)); }
 }
 
 /**
@@ -85,11 +96,14 @@ export function syncCoreMirror({ pluginRoot, dataDir, version, limits = {} }) {
     const digest = crypto.createHash('sha1').update(String(version) + JSON.stringify(files)).digest('hex');
     const dest = mirrorRoot(dataDir, version);
     const stampFile = path.join(dest, '.stamp.json');
+    // coreDir nam trong thu muc agent ghi duoc: hook chay ngoai sandbox -> tuyet doi khong theo symlink/junction (readdir/rm/ghi) ra ngoai.
+    const coreDir = safeCoreDir(dataDir);
+    if (!coreDir) return { ok: false, action: 'skipped', reason: 'core/ la symlink/junction hoac ngoai dataDir; bo qua, khong xoa gi' };
+    let st = null; try { st = fs.lstatSync(dest); } catch { /* chua co */ }
+    if (st && (st.isSymbolicLink() || !st.isDirectory())) return { ok: false, action: 'skipped', reason: 'ban sao la symlink/khong phai thu muc; bo qua' };
     let fresh = false;
-    try { fresh = JSON.parse(fs.readFileSync(stampFile, 'utf8')).digest === digest && fs.existsSync(path.join(dest, 'harness', 'core', 'ext', 'ctx.mjs')); } catch { /* chua co */ }
-    const coreDir = path.join(dataDir, 'core');
+    try { fresh = JSON.parse(fs.readFileSync(stampFile, 'utf8')).digest === digest && verifyCoreMirror({ pluginRoot, mirrorDir: dest, limits: lim }).ok; } catch { /* chua co */ }
     if (!fresh) {
-      fs.mkdirSync(coreDir, { recursive: true });
       const tmp = path.join(coreDir, `.tmp-${version}-${process.pid}-${Date.now()}`);
       try {
         for (const f of files) { const to = path.join(tmp, f.rel); fs.mkdirSync(path.dirname(to), { recursive: true }); fs.copyFileSync(path.join(pluginRoot, f.rel), to); }
@@ -98,7 +112,11 @@ export function syncCoreMirror({ pluginRoot, dataDir, version, limits = {} }) {
         fs.renameSync(tmp, dest);
       } finally { fs.rmSync(tmp, { recursive: true, force: true }); }
     }
-    for (const e of fs.readdirSync(coreDir)) if (path.join(coreDir, e) !== dest) fs.rmSync(path.join(coreDir, e), { recursive: true, force: true });
+    for (const e of fs.readdirSync(coreDir)) {
+      const p = path.join(coreDir, e);
+      if (p === dest || !/^(\d[\w.+-]*|\.tmp-.*)$/.test(e)) continue;
+      try { const l = fs.lstatSync(p); if (l.isDirectory() && !l.isSymbolicLink()) fs.rmSync(p, { recursive: true, force: true }); } catch { /* bo qua */ }
+    }
     return { ok: true, action: fresh ? 'fresh' : 'copied', dir: dest, files: files.length };
   } catch (e) { return { ok: false, action: 'skipped', reason: String((e && e.message) || e) }; }
 }
