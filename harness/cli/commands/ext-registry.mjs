@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { manifestDomains } from '../../core/ext/manifest-domains.mjs';
+import { validateTty } from '../../core/ext/ext-host.mjs';
 import { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted, guardDecl, mirrorRegistry, seedFromCopies, readAll, writeAll, findKey, readEntries, extensionStatus } from '../../core/ext/ext-trust.mjs';
 
 export { hash8, hashTree, registryWorkspace, machineFile, listRegistered, isExtensionTrusted };
@@ -18,6 +19,8 @@ function scanManifest(rootAbs, coreDomains = new Set()) {
   const entry = path.resolve(rootAbs, m.entry), rel = path.relative(rootAbs, entry);
   if (m.entry.split(/[\\/]/).includes('..') || !rel || rel.startsWith('..') || path.isAbsolute(rel)) return { error: 'entry ra ngoai root' };
   if (!fs.existsSync(entry)) return { error: `entry khong ton tai: ${m.entry}` };
+  const ttyErr = validateTty(m.tty);
+  if (ttyErr) return { error: `tty: ${ttyErr}` };
   const dup = domains.filter((d) => coreDomains.has(d));
   if (dup.length) return { error: `domain trung core: ${dup.join(',')}` };
   let guard = null;

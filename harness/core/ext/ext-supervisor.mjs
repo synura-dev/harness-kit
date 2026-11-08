@@ -26,6 +26,7 @@ function main() {
   if (fwd) { child.stdin.on('error', () => {}); child.stdin.end(inp); }
   let bytes = 0, ended = false;
   const stop = (code, why) => {
+    if (inherit && why === 'timeout') code = 197; // = TTY_TIMEOUT_CODE o ext-host (stderr khong bat duoc o inherit)
     if (ended) return; ended = true; clearTimeout(timer);
     killTree(child.pid);
     process.stderr.write(`\n${MARK} ${why}\n`);
@@ -35,7 +36,7 @@ function main() {
   if (!inherit) { pipe(child.stdout, process.stdout); pipe(child.stderr, process.stderr); }
   const timer = setTimeout(() => stop(124, 'timeout'), timeoutMs);
   child.on('error', (e) => { if (ended) return; ended = true; clearTimeout(timer); process.stderr.write(`${MARK} spawn-error ${String(e.message).slice(0, 120)}\n`); process.exitCode = 70; });
-  child.on('close', (code) => { if (ended) return; ended = true; clearTimeout(timer); process.exitCode = code === null ? 70 : code; });
+  child.on('close', (code) => { if (ended) return; ended = true; clearTimeout(timer); process.exitCode = code === null ? 70 : (inherit && code === 197 ? 1 : code); });
 }
 
 if (process.argv[1] && /ext-supervisor\.mjs$/.test(process.argv[1].replace(/\\/g, '/'))) main();

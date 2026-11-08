@@ -10,7 +10,8 @@ import { hkerrLine } from '../io/paths.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const HARNESS_DIR = path.resolve(HERE, '..', '..');
-export const EXT_LIMITS = Object.freeze({ maxManifests: 40, timeoutS: 30, maxBytes: 262144 });
+export const EXT_LIMITS = Object.freeze({ maxManifests: 40, timeoutS: 30, ttyTimeoutS: 600, maxBytes: 262144 });
+export const TTY_TIMEOUT_CODE = 197; // supervisor inherit: timeout (exit 197 cua chinh ext bi doi thanh 1) -> khong nham voi ext tu thoat 124
 // Ma thoat ro rang cho lenh goi.
 export const EXIT = Object.freeze({ MISSING_CORE: 3, BAD_MANIFEST: 64, BAD_OUTPUT: 65, FAIL: 70, TIMEOUT: 124, OVERFLOW: 125, BLOCKED: 66 });
 
@@ -38,7 +39,9 @@ export function matchesTty(tty, argv) {
   const a = (argv || []).map(String);
   return tty.some((p) => { const tk = String(p).trim().split(/\s+/); return tk.length <= a.length && tk.every((x, i) => a[i] === x); });
 }
-const outerTty = () => !!(process.stdin.isTTY && process.stdout.isTTY);
+// Seam test: opts.isTTY CHI duoc tin duoi test runner (cung mau underTest() o ext-registry); ngoai test luon doc TTY that cua stdin/stdout.
+const underTest = () => process.env.NODE_ENV === 'test' || !!process.env.BUN_TEST;
+const hasTty = (opts) => (underTest() && typeof opts.isTTY === 'function' ? !!opts.isTTY() : !!(process.stdin.isTTY && process.stdout.isTTY));
 
 const readJsonSafe =(f) => JSON.parse(fs.readFileSync(f, 'utf8'));
 const isUnder = (p, root) => { const r = path.relative(root, p); return !!r && !r.startsWith('..') && !path.isAbsolute(r); };
@@ -110,7 +113,8 @@ export function extErr(status, ext, domain, { timeoutS = EXT_LIMITS.timeoutS, ma
 
 export function runExternal(ext, domain, argv = [], opts = {}) {
   const t0 = Date.now();
-  const timeoutS = opts.timeoutS || EXT_LIMITS.timeoutS;
+  const inherit = matchesTty(ext.tty, argv) && hasTty(opts);
+  const timeoutS = opts.timeoutS || (inherit ? (opts.ttyTimeoutS || EXT_LIMITS.ttyTimeoutS) : EXT_LIMITS.timeoutS); // lenh tuong tac can lau hon 30s
   const maxBytes = opts.maxBytes || EXT_LIMITS.maxBytes;
   const fail = (code, status, why, extra = {}) => {
     const k = extErr(status, ext, domain, { timeoutS, maxBytes });
@@ -135,12 +139,11 @@ export function runExternal(ext, domain, argv = [], opts = {}) {
     const sup = path.join(HERE, 'ext-supervisor.mjs');
     // Hop dong stdin: chi khi env HARNESS_STDIN_FORWARD=1 (ext-guard dat) moi doc stdin cua CLI (toi da 1MB) va chuyen cho ext qua supervisor -> runner. Mac dinh stdin ext = rong (khong treo khi stdin mo).
     // Lenh danh dau `tty` trong manifest + CLI cha co TTY that -> inherit stdio (ext tu kiem TTY se thay terminal that). Khong co env/co/arg bao "la nguoi" cho ext.
-    const inherit = matchesTty(ext.tty, argv) && (opts.isTTY || outerTty)();
     let fwd;
     if (!inherit && process.env.HARNESS_STDIN_FORWARD === '1') { try { fwd = fs.readFileSync(0).subarray(0, 1048576); } catch { fwd = ''; } }
     const r = spawnSync(process.execPath, [sup, String(timeoutS * 1000), inherit ? 'inherit' : String(maxBytes), ...args], { ...(fwd !== undefined ? { input: fwd } : {}), ...(inherit ? { stdio: 'inherit' } : {}), encoding: 'utf8', timeout: timeoutS * 1000 + 15000, maxBuffer: maxBytes + 65536, killSignal: 'SIGKILL', windowsHide: true, env: { ...process.env, HARNESS_EXT: ext.id } });
-    const supMark = (why) => inherit ? why === 'timeout' : String(r.stderr || '').includes(`[ext-supervisor] ${why}`); // inherit: khong co stderr bat -> 124 = timeout
-    if (r.status === 124 && supMark('timeout')) return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
+    const supMark = (why) => String(r.stderr || '').includes(`[ext-supervisor] ${why}`);
+    if (inherit ? r.status === TTY_TIMEOUT_CODE : (r.status === 124 && supMark('timeout'))) return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
     if (r.status === 125 && supMark('overflow')) return fail(EXIT.OVERFLOW, 'output-overflow', `output > ${maxBytes} byte`);
     if (r.error) {
       if (r.error.code === 'ETIMEDOUT') return fail(EXIT.TIMEOUT, 'timeout', `qua ${timeoutS}s (truncated: timeout)`);
