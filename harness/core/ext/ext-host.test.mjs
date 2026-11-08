@@ -35,6 +35,7 @@ const good = mkExt('good', `export async function main(ctx, argv) {
   return ctx.paths.dataRoot().length > 0 && blocked ? 'OK ' + argv.join(',') + ' ' + f : 'BAD';
 }`);
 const thrower = mkExt('thrower', `export function main() { throw new Error('boom 12345'); }`);
+const crasher = mkExt('crasher', `export function main() { process.stderr.write('error: real cause ABC\\n  at x.mjs:1\\n\\nBun v1.3.14 (Windows x64)\\n'); process.exit(1); }`);
 const hang = mkExt('hang', `export function main() { return new Promise(() => setInterval(() => {}, 1000)); }`);
 const junk = mkExt('junk', `export function main() { return '<<not json>>'; }`);
 const noMain = mkExt('nomain', `export const x = 1;`);
@@ -108,6 +109,15 @@ test('ext-fail: HKERR dong dau + audit co code/fix_command/next_step, exit giu n
   const ev = (await audit()).filter((e) => e.status === 'ext-fail' && e.source === 'ext:thrower').pop();
   expect(ev.data).toMatchObject({ code: 'HK_EXT_EXIT', reason: 'exit' });
   expect(ev.data.fix_command).toBeTruthy(); expect(ev.data.next_step).toBeTruthy();
+});
+
+test('ext-fail: why bo dong footer Bun, stderr tail den tay nguoi dung', () => {
+  const r = runExternal(get(crasher), 'crasher');
+  expect(r.code).toBe(1);
+  const l2 = r.stderr.split('\n')[1];
+  expect(l2).toContain('at x.mjs:1');
+  expect(l2).not.toContain('Bun v');
+  expect(r.stderr).toContain('error: real cause ABC');
 });
 
 test('external loi khong lam hong core: throw, treo, rac, khong main, manifest hong', async () => {
