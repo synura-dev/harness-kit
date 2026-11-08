@@ -113,7 +113,14 @@ export function pluginLayerDirs({ env = process.env, repoDir = REPO_DIR } = {}) 
   let pname = 'harness-kit'; try { pname = JSON.parse(fs.readFileSync(path.join(repoDir, '.claude-plugin', 'plugin.json'), 'utf8')).name || pname; } catch { /* mac dinh */ }
   // Claude Code dat CLAUDE_PLUGIN_DATA = <plugins>/data/<ten>@<mkt> (ky tu ngoai [A-Za-z0-9_-] -> '-'); CLI khong co env nen suy id tu duong dan cache de hook va CLI cung thu muc.
   // repoDir ngoai cache (HARNESS_PLUGIN_DIR / pluginRoot / --plugin-dir) -> quay ve thu muc chi theo ten nhu cu.
-  const m = path.resolve(repoDir).split(path.sep);
+  let m = path.resolve(repoDir).split(path.sep);
+  // Ban sao loi (core-mirror): <...>/plugin_data/<ten>/core/<ver> -> quy ve primaryDir agy <...>/plugin_data/<ten> (cung du lieu/cau hinh nhu chay tu goc).
+  const L = m.length;
+  if (L >= 5 && m[L - 2] === 'core' && m[L - 4] === 'plugin_data' && m[L - 5] === 'antigravity-cli') {
+    const primaryDir = typeof env.PLUGIN_DATA === 'string' && env.PLUGIN_DATA.trim() ? env.PLUGIN_DATA : m.slice(0, -2).join(path.sep);
+    let projectDir = null; try { projectDir = path.join(workspaceRoot({ env, repoDir }), '.harness', 'config'); } catch { /* khong co */ }
+    return { machineDir: path.join(primaryDir, 'config'), projectDir, primaryDir, legacyDir: primaryDir };
+  }
   const ci = m.length >= 6 && m[m.length - 4] === 'cache' && m[m.length - 5] === 'plugins' ? m.length - 4 : -1;
   if (ci > 0) pname = m[ci + 2];
   // CLI khac (agy): plugin cai o <goc>/plugins/<ten> (khong layout cache cua Claude) -> du lieu o env PLUGIN_DATA hoac <.gemini>/antigravity-cli/plugin_data/<ten>, KHONG cham ~/.claude (sandbox agy khong doc duoc).

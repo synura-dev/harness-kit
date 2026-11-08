@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadHookConfig, pluginLayerDirs } from '../../core/config/config.mjs';
 import { REPO_DIR } from '../../core/io/paths.mjs';
-import { syncUserShim } from '../../core/runtime/user-shim.mjs';
+import { syncCoreMirror } from '../../core/runtime/core-mirror.mjs';
+import { syncUserShim, rootVersion } from '../../core/runtime/user-shim.mjs';
 import { pluginCacheDir } from '../../core/runtime/claude-cache.mjs';
 import fs from 'node:fs';
 
@@ -35,6 +36,8 @@ export async function handle(event, input, ctx = {}) {
     // thu muc du lieu plugin cua CLI nay (claude: CLAUDE_PLUGIN_DATA/suy tu cache; agy: env PLUGIN_DATA hoac <.gemini>/antigravity-cli/plugin_data/<ten>): ext approve sao chep dang ky vao day.
     const data = path.dirname(pluginLayerDirs({ env: inj.env || process.env, repoDir: pluginRoot }).machineDir);
     const s = syncUserShim({ pluginRoot, tool, data, ...(scan ? { scan } : {}), ...inj });
+    // agy: hook chay NGOAI sandbox (liet ke duoc goc plugin) -> dong bo ban sao loi cho ext con cua bin/harness; best-effort, khong bao gio lam hong hook.
+    if (tool === 'agy') { try { syncCoreMirror({ pluginRoot, dataDir: data, version: rootVersion(pluginRoot) }); } catch { /* best-effort */ } }
     const tag = 'harness-kit user-shim:';
     if (s.blocked) return { additionalContext: `${tag} ${s.files.find((f) => f.action === 'foreign').file} khong do harness-kit sinh, khong ghi de. Muon thay: harness install --shim --force` };
     if (s.path.state === 'error') return { additionalContext: `${tag} khong them duoc ${s.dir} vao PATH user (${s.path.error}); tu them vao PATH` };

@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.5
+### Added
+- agy: SessionStart (hook ngoai sandbox) chep loi harness sang `plugin_data/<ten>/core/<ver>` (core-mirror); `bin/harness` trong agy dat HARNESS_PLUGIN_DIR = ban sao CHI khi moi file == goc plugin (thua/sai -> warn + dung goc), de Bun cua ext con import duoc loi. `pluginLayerDirs` nhan layout ban sao.
+
 ## 0.4.4
 ### Fixed
 - Extension thoat != 0: `why` bo dong footer runtime (`Bun v...`) va stderr (20 dong cuoi, toi da 1500 ky tu) duoc in ra, nen khong mat loi that khi Bun crash (vd trong sandbox agy). Tran stderr tong 2000 -> 3000.

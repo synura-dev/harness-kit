@@ -15,7 +15,13 @@ try {
     const g = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
     env.CLAUDE_PROJECT_DIR = g.status === 0 && g.stdout.trim() ? path.resolve(g.stdout.trim()) : process.cwd();
   }
-  if (!(env.HARNESS_PLUGIN_DIR || '').trim()) env.HARNESS_PLUGIN_DIR = ROOT;
+  if (!(env.HARNESS_PLUGIN_DIR || '').trim()) {
+    env.HARNESS_PLUGIN_DIR = ROOT;
+    // agy: Bun trong sandbox khong liet ke duoc goc plugin -> ext con nap loi tu ban sao (data/core/<ver>) CHI khi verify tung file == goc; hook/guard khong bao gio dung ban sao.
+    const { pickCoreMirror } = await import(pathToFileURL(path.join(ROOT, 'harness', 'core', 'runtime', 'core-mirror.mjs')).href);
+    const mir = pickCoreMirror({ root: ROOT, env });
+    if (mir && mir.dir) env.HARNESS_PLUGIN_DIR = mir.dir; else if (mir && mir.warn) process.stderr.write(mir.warn + '\n');
+  }
   applyWorkspaceEnv(env, env.CLAUDE_PROJECT_DIR);
 } catch (e) {
   process.stderr.write('HKERR ' + JSON.stringify({ code: 'HK-CLI-001', severity: 'error', cause: 'khoi dong CLI loi: ' + (e && e.message), fix_command: null, next_step: 'kiem plugin harness-kit con du file (harness/core/io/paths.mjs)', safe: false, source: 'bin/harness' }) + '\n');
