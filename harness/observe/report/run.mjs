@@ -83,7 +83,7 @@ const safeRoot = () => { try { return workspaceRoot(); } catch { return ''; } };
 
 /** Module cung cap derive: moi module export `derive = {ten: ({events,from,to,deadline}) => rows | {rows, truncated}}` (DONG BO; producer kiem deadline, qua han thi tra truncated).
  *  Cac Task tiep theo (producer cost-*) them ten module vao day. Module chua co -> bo qua; loi import khac / ten derive trung -> errors[]. */
-export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs']);
+export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs', './context-tax.mjs']);
 export async function loadDerived(modules = DERIVED_MODULES) {
   const map = {}; const errors = [];
   for (const f of modules) {
