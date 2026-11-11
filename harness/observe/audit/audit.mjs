@@ -257,15 +257,22 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
     const n = typeof r === 'string' ? r.length : (typeof r === 'object' ? (typeof r.stdout === 'string' ? r.stdout.length : 0) + (typeof r.stderr === 'string' ? r.stderr.length : 0) : null);
     if (n != null) data.out_len = Math.min(n, 1e9);
   } else if (READ_TOOLS.has(tool) && event === 'PostToolUse' && inp.tool_response != null) { // tong do dai chuoi la, duyet toi da 64 nut (khong luu noi dung)
-    let n = 0, left = 64;
+    let n = 0, left = 64, trunc = false;
     const st = [inp.tool_response];
-    while (st.length && left-- > 0) {
+    while (st.length) {
+      if (left-- <= 0) { trunc = true; break; }
       const v = st.pop();
       if (typeof v === 'string') n += v.length;
-      else if (Array.isArray(v)) { for (let i = 0; i < v.length && i < 64; i++) st.push(v[i]); }
-      else if (v && typeof v === 'object') { for (const k in v) st.push(v[k]); }
+      else if (Array.isArray(v)) {
+        const m = Math.min(v.length, 64); let s = 0;
+        for (let i = 0; i < m; i++) { if (typeof v[i] === 'string') s += v[i].length; else st.push(v[i]); }
+        n += s;
+        if (v.length > m) { trunc = true; n += Math.round((s / m) * (v.length - m)); } // uoc luong: TB phan tu da duyet x so con lai
+      }
+      else if (v && typeof v === 'object') { let c = 0; for (const k in v) { if (c++ >= 64) { trunc = true; break; } st.push(v[k]); } }
     }
     data.out_len = Math.min(n, 1e9);
+    if (trunc) data.out_len_truncated = true;
   }
   if (inp.tool_use_id) data.tool_use_id = cut(String(inp.tool_use_id).replace(/[^A-Za-z0-9_-]/g, ''), 80);
   if (typeof inp.prompt === 'string') data.prompt_len = inp.prompt.length;

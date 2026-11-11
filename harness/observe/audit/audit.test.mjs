@@ -79,6 +79,23 @@ for(let i=0;i<300;i++)writeEnvelope(e,c,process.env.CLAUDE_AUDIT_DIR);`;
   const lines = walk(root).filter((x) => x.endsWith('.jsonl')).flatMap((x) => fs.readFileSync(x, 'utf8').split('\n').filter(Boolean));
   expect(lines.length).toBe(600);
   for (const l of lines) JSON.parse(l);
+}, 20000);
+
+test('T12: out_len_truncated khi mang >64 (uoc luong) hoac object >64 khoa / >64 nut', () => {
+  const post = (tool_response) => buildEnvelope({ hook_event_name: 'PostToolUse', session_id: 't12', tool_name: 'Glob', tool_input: {}, tool_response }, cfg);
+  const a = post({ filenames: Array.from({ length: 100 }, () => 'abcd') });
+  expect(a.data.out_len).toBe(400); expect(a.data.out_len_truncated).toBe(true);
+  const o = {}; for (let i = 0; i < 100; i++) o['k' + i] = 'x';
+  expect(post(o).data.out_len_truncated).toBe(true);
+  expect(post(o).data.out_len).toBeLessThanOrEqual(64);
+  expect('out_len_truncated' in post({ filenames: ['a'] }).data).toBe(false);
+});
+
+test('T12: Stop dung model mac dinh opts.usage.model khi payload khong co model', () => {
+  const sum = () => ({ usage: null, reason: 'no_usage' });
+  const e = (inp) => buildEnvelope({ hook_event_name: 'Stop', session_id: 't12m', ...inp }, cfg, new Date(), { usage: { sum, model: 'dflt' } });
+  expect(e({}).model).toBe('dflt');
+  expect(e({ model: 'real' }).model).toBe('real');
 });
 
 // --- config layering: must work with missing / broken / partial audit.config.json ---
