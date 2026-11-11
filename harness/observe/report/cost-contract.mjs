@@ -65,7 +65,8 @@ export const ROUTING = Object.freeze({
   priceRel: Object.freeze({ haiku: 1, sonnet: 3, opus: 5 }),
   largeReadChars: 400000, // ~100k token
   builderTurns: 25,
-  riskRe: /auth|perm|guard|deploy|secret|migrat|security/i,
+  riskRe: /(^|\/)(auth|perm|permission|permissions|guard|deploy|secret|secrets|migrate|migration|migrations|security)(\/|\.|$)/i,
+  overreadChars: 20000, // ~5k token: main doc tong out_len > nguong => main_overread
   redoMs: 24 * 3600 * 1000,
 });
 
