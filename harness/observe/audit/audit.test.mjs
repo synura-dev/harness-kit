@@ -169,3 +169,18 @@ test('PostToolUse Bash: data.out_len tu stdout+stderr, khong luu noi dung', () =
   expect(mkr('hello').data.out_len).toBe(5);
   expect('out_len' in mkr(undefined).data).toBe(false);
 });
+
+test('T12: Agent/Task ghi data.model + run_in_background (envelope model khong doi); doc tool ghi out_len', () => {
+  const pre = buildEnvelope({ hook_event_name: 'PreToolUse', session_id: 't12', model: 'opus-real', tool_name: 'Agent', tool_input: { subagent_type: 'scout', model: 'haiku', run_in_background: true, prompt: 'x' } }, cfg);
+  expect(pre.data.model).toBe('haiku'); expect(pre.data.run_in_background).toBe(true); expect(pre.model).toBe('opus-real');
+  expect(buildEnvelope({ hook_event_name: 'PreToolUse', session_id: 't12', tool_name: 'Task', tool_input: { subagent_type: 's', model: 'sonnet' } }, cfg).data.model).toBe('sonnet');
+  const post = (tool_name, tool_response) => buildEnvelope({ hook_event_name: 'PostToolUse', session_id: 't12', tool_name, tool_input: {}, tool_response }, cfg);
+  const r = post('Read', { type: 'text', file: { filePath: '/a', content: 'SECRETBODY', numLines: 1 } });
+  expect(r.data.out_len).toBeGreaterThan(10); expect(JSON.stringify(r)).not.toContain('SECRETBODY');
+  expect(post('Grep', { filenames: ['a', 'bb'], content: 'xyz' }).data.out_len).toBe(6);
+  expect(post('Glob', { filenames: ['abc'] }).data.out_len).toBe(3);
+  expect(post('WebFetch', { result: 'hello', bytes: 5 }).data.out_len).toBe(5);
+  expect(post('WebSearch', { results: [{ title: 'ab', content: [{ url: 'cd' }] }] }).data.out_len).toBe(4);
+  expect(post('Read', 'str').data.out_len).toBe(3);
+  expect('out_len' in post('Read', undefined).data).toBe(false);
+});

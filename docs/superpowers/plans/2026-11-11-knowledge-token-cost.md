@@ -188,12 +188,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Test: `harness/observe/audit/audit.test.mjs`, `harness/observe/audit/adapters/agy.test.mjs`
 - Modify: `harness/observe/README.md` (trường mới)
 
-- [ ] Chú ý: audit.mjs:270 loại khoá `model` khỏi event_data (tránh đè model thực tế) - rule tool `data` ở :251 KHÔNG bị loại, ghi vào `data.model` (khác trường envelope `model`); test assert envelope `model` của PreToolUse không đổi.
-- [ ] Hình `tool_response` của Read/Grep/Glob/WebFetch/WebSearch CHƯA xác minh: lấy payload thật (fixture hook thật trong repo nếu có, hoặc transcript `toolUseResult` mẫu) trước khi code; tính độ dài = tổng độ dài chuỗi lá (string) có trần duyệt 64 nút, không lưu chuỗi.
-- [ ] Test đỏ: Agent PreToolUse `{subagent_type:'scout', model:'haiku'}` -> `data.model==='haiku'`; Read PostToolUse -> `data.out_len > 0`, record không chứa nội dung file.
-- [ ] agy: kiểm `agy.test.mjs`/`agy-usage.test.mjs` rằng Stop agy có `model` và token; thiếu -> test đỏ + sửa adapter.
-- [ ] Done-when: `timeout 60 bun test harness/observe/audit/audit.test.mjs harness/observe/audit/adapters/agy.test.mjs harness/observe/audit/adapters/agy-usage.test.mjs` -> 0 fail.
-- [ ] Commit `audit: ghi model dispatch, out_len tool doc`.
+- [x] Chú ý: audit.mjs:270 loại khoá `model` khỏi event_data (tránh đè model thực tế) - rule tool `data` ở :251 KHÔNG bị loại, ghi vào `data.model` (khác trường envelope `model`); test assert envelope `model` của PreToolUse không đổi.
+- [x] Hình `tool_response` của Read/Grep/Glob/WebFetch/WebSearch CHƯA xác minh: lấy payload thật (fixture hook thật trong repo nếu có, hoặc transcript `toolUseResult` mẫu) trước khi code; tính độ dài = tổng độ dài chuỗi lá (string) có trần duyệt 64 nút, không lưu chuỗi.
+- [x] Test đỏ: Agent PreToolUse `{subagent_type:'scout', model:'haiku'}` -> `data.model==='haiku'`; Read PostToolUse -> `data.out_len > 0`, record không chứa nội dung file.
+- [x] agy: kiểm `agy.test.mjs`/`agy-usage.test.mjs` rằng Stop agy có `model` và token; thiếu -> test đỏ + sửa adapter.
+- [x] Done-when: `timeout 60 bun test harness/observe/audit/audit.test.mjs harness/observe/audit/adapters/agy.test.mjs harness/observe/audit/adapters/agy-usage.test.mjs` -> 0 fail.
+- [x] Commit `audit: ghi model dispatch, out_len tool doc`.
 
 ### Task 13: `routing.mjs` - tuân thủ định tuyến + agy vs Claude
 
