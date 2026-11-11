@@ -240,6 +240,31 @@ export function proposeMetricFix(pair, o = {}) {
   return p;
 }
 
+// kind fix theo chi so dinh tuyen: doi luat Subagent trong AGENTS.md (hoac .claude/agents/<x>.md) -> retro do kpi-routing/kpi-agy. KHONG ghi file dich; note la loi nguoi dung (cat 200, che bi mat), khong luu prompt.
+export function proposeRoutingFix({ kpi, better, path: file = 'AGENTS.md', note = '' } = {}, o = {}) {
+  if (!/^kpi-(routing|agy)\.[a-z_]+$/.test(String(kpi))) throw new Error('--kpi phai la kpi-routing.<khoa> hoac kpi-agy.<khoa>');
+  if (better !== 'up' && better !== 'down') throw new Error('--better up|down');
+  const c = ctx(o);
+  const id = assertSafeId(`p_route_${crypto.createHash('sha256').update(`${kpi}|${file}`).digest('hex').slice(0, 8)}_fix`);
+  if (fs.existsSync(pFile(c, id))) return null;
+  const last = readSeries(path.join(c.evo, 'retro', 'series.jsonl')).series.at(-1);
+  const v = last?.kpi?.[kpi];
+  const fresh = Date.parse(last?.ts) >= (Number(o.nowMs) || Date.now()) - BASE_MAX_AGE_MS;
+  const text = maskSecrets(String(note)).slice(0, 200);
+  const rel = toPosix(file).slice(0, 300);
+  const after = `Sua tay (doc): doi luat dinh tuyen o ${rel}; retro do ${kpi} (${better}).${text ? ` Ghi chu: ${text}` : ''}\n`;
+  const p = {
+    id, candidate: id, kind: 'fix', created: new Date().toISOString(), status: 'proposed',
+    evidence: { routing_rule: { kpi, path: rel } },
+    change: { target: null, fix_target: { area: 'doc', a: { path: rel } }, after, after_sha: sha(Buffer.from(after, 'utf8')) },
+    target_metric: { kpi, better, baseline: fresh && typeof v === 'number' && Number.isFinite(v) ? v : null },
+    policy: { ok: true, forbidden: false, reason: 'fix: khong ghi file' }, check: null, ver: null,
+  };
+  saveProposal(p, o);
+  appendLog(c, { op: 'propose', id, kind: 'fix', target: null, metric: kpi });
+  return p;
+}
+
 // ---- ghi dich (file truc tiep). abs LUON suy tu classifyTarget, khong lay tu file proposals/versions ----
 const targetAbs = (kind, pol) => pol.abs;
 

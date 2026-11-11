@@ -44,7 +44,10 @@ async function defaultKpi({ nowMs, timeoutMs }) {
   const b = (() => { try { return JSON.parse(fs.readFileSync(run.baselineFile(), 'utf8')); } catch { return null; } })();
   const baseline = {};
   for (const [id, rows] of Object.entries((b && b.kpis) || {})) for (const [k, v] of Object.entries(rows || {})) baseline[`${id}.${k}`] = v;
-  return { kpi, baseline, truncated: res.truncated || ev.truncated || null, events: ev.events };
+  const rm = (res.results || []).find((r) => r.def && r.def.id === 'routing-misses');
+  const ci = (n) => (rm && rm.cols ? rm.cols.indexOf(n) : -1);
+  const routingMisses = rm && rm.rows ? rm.rows.map((r) => ({ key: r.key, excess: r.vals[ci('excess')], n: r.vals[ci('n')], upper: r.vals[ci('upper')] })) : [];
+  return { kpi, baseline, routingMisses, truncated: res.truncated || ev.truncated || null, events: ev.events };
 }
 
 /** Chi section `kpi-*` vao series (bo cost-session theo sid, subagent-vs-main theo actor: khoa dong, khong lam chuoi). */
@@ -117,9 +120,9 @@ export async function retro(o = {}) {
   const errors = [];
   let truncated = null, srcTrunc = null; // truncated = timeout cua chinh retro; srcTrunc = tu nguon KPI
 
-  let kpi = o.kpi, baseline = o.baseline || {}, events = o.events;
+  let kpi = o.kpi, baseline = o.baseline || {}, events = o.events, routingMisses = o.routingMisses || [];
   if (!kpi) {
-    try { const k = await defaultKpi({ nowMs: asOf, timeoutMs: timeoutS * 500 }); kpi = k.kpi; baseline = k.baseline; srcTrunc = k.truncated; events = events || k.events; } catch (e) { kpi = {}; errors.push(`kpi: ${e.message}`); }
+    try { const k = await defaultKpi({ nowMs: asOf, timeoutMs: timeoutS * 500 }); kpi = k.kpi; baseline = k.baseline; routingMisses = k.routingMisses; srcTrunc = k.truncated; events = events || k.events; } catch (e) { kpi = {}; errors.push(`kpi: ${e.message}`); }
   }
   // signals: cung nguon audit voi KPI3 (rec.signal ?? data.signal; phien theo sid) - dem tu su kien da doc (buildReport) hoac o.events
   const signals = o.signals || (events ? signalsFrom(events, asOf) : {});
@@ -181,6 +184,7 @@ export async function retro(o = {}) {
     ...((pc && pc.repeat) || []).map((r) => ({ key: `file:${r.path}`, score: r.edits, summary: redact(`sua lap ${r.path} (${r.edits} lan/14 ngay)`) })),
     ...(grew(series) ? [{ key: 'context:growth', score: Math.round(growthPct(series)), summary: `static_tokens (ngu canh nap san) tang ${Math.round(growthPct(series))}% so voi tuan truoc (> ${RETRO.ctxGrowthPct}%)` }] : []),
     ...(num(kpi['kpi-knowledge.retire_candidates']) >= 1 ? [{ key: 'knowledge:retire-candidates', score: kpi['kpi-knowledge.retire_candidates'], summary: `${kpi['kpi-knowledge.retire_candidates']} ung vien retire tri thuc (chi liet ke; retire do nguoi/TTY)` }] : []),
+    ...(num(kpi['kpi-routing.unknown_share']) !== null && kpi['kpi-routing.unknown_share'] < 0.5 ? routingMisses.filter((m) => num(m.n) >= 3 && /^[a-z_]+:[a-z_]+$/.test(String(m.key))).sort((a, b) => (num(b.excess) || 0) - (num(a.excess) || 0)).slice(0, 3).map((m) => ({ key: `routing:${m.key}`, score: num(m.excess) || 0, summary: `ca lech dinh tuyen ${m.key}: ${m.n} lan, chenh uoc ${Math.round(num(m.excess) || 0)} token (sua luat Subagent roi evolve propose-metric)` })) : []),
   ]) if (!best.has(c.key) || c.score > best.get(c.key).score) best.set(c.key, c);
   const cand = [...best.values()].filter((c) => isNew(c.key)).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, RETRO.maxIssues);
   const issues = cand.map(({ key, summary }) => ({ key, summary }));
