@@ -93,7 +93,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       const h2 = setTimeout(() => die('autopilot', 'autopilot timeout', 3), 115000);
       try { const { runAutopilot } = await import('../../evolve/loop/autopilot.mjs'); await runAutopilot({}); } catch (e) { recordJobError(undefined, 'autopilot', e && e.message); }
       clearTimeout(h2);
-      try { const { demoteRun } = await import('../../evolve/loop/demote.mjs'); demoteRun({}); } catch (e) { recordJobError(undefined, 'demote', e && e.message); } // ha cap rule vo ich; fail-open
+      try { const { demoteRun } = await import('../../evolve/loop/demote.mjs'); const d = demoteRun({}); if (d.errors && d.errors.length) recordJobError(undefined, 'demote', d.errors.join('; ')); } catch (e) { recordJobError(undefined, 'demote', e && e.message); } // ha cap rule vo ich; fail-open
     }
     process.exit(0);
   }, (e) => die('exit', e && e.message, 1));

@@ -14,17 +14,19 @@ const EVOLVE_RULE = /^(?:[^/]+\/)*evolve\/rules\/evolve-[^/]+\.json$/; // khong 
 
 /** Thuan. rules: [{pid, ver, fp, entry_id?, target, source, protected?, autopilot}]. Tra [{action:'rollback'|'suggest', pid, ver, fp, warned, ignored}]. */
 export function demoteRules({ ledgerEntries = [], rules = [], nowMs = Date.now(), cfg = DEMOTE } = {}) {
-  const since = nowMs - cfg.days * DAY;
-  const inWin = (t) => { const ms = Date.parse(t); return Number.isFinite(ms) && ms >= since && ms <= nowMs; };
   const out = [];
   for (const r of rules) {
     if (out.length >= cfg.maxPerRun) break;
     if (r.protected || r.source !== 'evolve' || !EVOLVE_RULE.test(String(r.target || ''))) continue;
-    const e = ledgerEntries.find((x) => (r.entry_id && x.id === r.entry_id) || (r.fp && x.fp === r.fp));
+    // chi tinh su kien trong 14 ngay VA sau applied_at (khong tinh canh bao cua entry nguon truoc khi ap)
+    const from = Math.max(nowMs - cfg.days * DAY, Date.parse(r.applied_at) || 0);
+    const inWin = (t) => { const ms = Date.parse(t); return Number.isFinite(ms) && ms >= from && ms <= nowMs; };
+    const ruleName = path.basename(String(r.target), '.json'); // id ledger = `${rule}|${fp}`
+    const e = ledgerEntries.find((x) => x.rule === ruleName && x.fp === r.fp);
     if (!e) continue;
     const warned = (e.warn_ts || []).filter(inWin).length;
     const acted = e.acted && inWin(e.acted) ? 1 : 0;
-    const ignored = e.ignored && inWin(e.ignored) ? Number(e.ignored_count) || 0 : 0;
+    const ignored = e.ignored && inWin(e.ignored) ? Math.min(Number(e.ignored_count) || 0, warned) : 0;
     if (warned < cfg.minWarned || acted > 0 || ignored / warned < cfg.ignoredRatio) continue;
     out.push({ action: r.autopilot ? 'rollback' : 'suggest', pid: r.pid, ver: r.ver, fp: r.fp, warned, ignored });
   }
@@ -34,13 +36,22 @@ export function demoteRules({ ledgerEntries = [], rules = [], nowMs = Date.now()
 /** Tu state.applied (autopilot) + de xuat rule da ap (tay). */
 function collectRules(o) {
   const st = readState(o);
-  const ap = new Map(st.applied.filter((a) => a.status === 'applied' && a.ver).map((a) => [a.pid, a]));
-  const rules = [...ap.values()].map((a) => ({ pid: a.pid, ver: a.ver, fp: a.fp, entry_id: a.entry_id, target: a.target, source: 'evolve', autopilot: true }));
+  const ap = new Map(st.applied.map((a) => [a.pid, a])); // moi rec autopilot (ke ca rolled_back) de khong bi tinh la ap tay
+  const live = st.applied.filter((a) => ['applied', 'kept'].includes(a.status) && a.ver);
+  const rules = live.map((a) => ({ pid: a.pid, ver: a.ver, fp: a.fp, applied_at: a.ts, target: a.target, source: 'evolve', autopilot: true }));
   for (const p of listProposals(o, 1000)) {
     if (p.kind !== 'rule' || p.status !== 'applied' || ap.has(p.id)) continue;
-    rules.push({ pid: p.id, ver: p.ver, fp: p.evidence && p.evidence.fp, target: p.change && p.change.target, source: 'evolve', autopilot: false });
+    rules.push({ pid: p.id, ver: p.ver, fp: p.evidence && p.evidence.fp, applied_at: p.applied_at, target: p.change && p.change.target, source: 'evolve', autopilot: false });
   }
   return rules;
+}
+
+/** Danh dau rec autopilot da rollback trong state.json (nhu autopilot: status 'rolled_back'). Doc lai ngay truoc khi ghi. */
+function markRolledBack(o, pids) {
+  const file = path.join(apDir(o), 'state.json');
+  const st = readState(o);
+  for (const a of st.applied) if (pids.includes(a.pid)) a.status = 'rolled_back';
+  if (guardWrite(file).ok) { try { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(`${file}.${process.pid}.tmp`, JSON.stringify(st, null, 2) + '\n'); fs.renameSync(`${file}.${process.pid}.tmp`, file); } catch {} }
 }
 
 /** Wrapper I/O. Tra {rolledBack[], suggested[], errors[], skipped?, truncated?}. o co the inject: ledgerEntries, rules, rollbackFn, logFn, stateFile, nowMs. */
@@ -63,6 +74,7 @@ export function demoteRun(o = {}) {
       else res.errors.push(`${d.pid}: ${(r && r.reason) || 'rollback loi'}`);
     } else { res.suggested.push(d.pid); log({ op: 'demote_suggested', id: d.pid, ver: d.ver, warned: d.warned, ignored: d.ignored }); }
   }
+  if (res.rolledBack.length) markRolledBack(o, res.rolledBack);
   if (!res.truncated && guardWrite(sf).ok) { try { fs.mkdirSync(path.dirname(sf), { recursive: true }); fs.writeFileSync(sf, JSON.stringify({ lastRun: nowMs }) + '\n'); } catch {} }
   return res;
 }
