@@ -215,6 +215,28 @@ test('KPI series chi lay section kpi-* (allowlist)', () => {
   expect(pickKpi([mk('kpi-size', 'skill'), mk('cost-session', 'sid123'), mk('subagent-vs-main', 'actor')], kpiSnapshot)).toEqual({ 'kpi-size.skill': 3 });
 });
 
+test('pickKpi bo hang co nhan tuan hoac ten file (khoa khong on dinh)', () => {
+  const mk = (id, ...keys) => ({ def: { id }, rows: keys.map((key) => ({ key, vals: [2] })) });
+  const k = pickKpi([mk('kpi-process-changes', 'thay doi 2026-W44', 'lap AGENTS.md', 'lap .claude/agents/x.md'), mk('kpi-size', 'skill')], kpiSnapshot);
+  expect(k).toEqual({ 'kpi-size.skill': 2 });
+});
+
+test('process.changes_week + process.repeat_files vao kpi voi khoa on dinh', async () => {
+  const week = isoWeek(NOW - WEEK);
+  const pc = { weeks: [{ week, changes: 3, files: 2 }, { week: '2026-W01', changes: 9, files: 1 }], files: [], repeat: [{ path: 'AGENTS.md', edits: 2 }, { path: 'CLAUDE.md', edits: 3 }] };
+  const r = await retro({ ...base, current: false, processChanges: pc });
+  expect(r.kpi['process.changes_week']).toBe(3);
+  expect(r.kpi['process.repeat_files']).toBe(2);
+  expect(Object.keys(r.kpi).some((k) => /AGENTS|W\d\d/.test(k))).toBe(false);
+});
+
+test('top-3: ledger trung fp -> chi 1 van de (giu count cao nhat)', async () => {
+  const dup = [{ id: 'a', fp: 'same', status: 'open', count: 3, message: 'Ripgrep timeout' }, { id: 'b', fp: 'same', status: 'warned', count: 7, message: 'Ripgrep timeout' }, { id: 'c', fp: 'o', status: 'open', count: 2, message: 'khac' }];
+  const r = await retro({ ...base, ledgerEntries: dup });
+  expect(r.issues.map((i) => i.key)).toEqual(['ledger:same', 'ledger:o']);
+  expect(r.issues[0].summary).toContain('x7');
+});
+
 test('signalsFrom bo HookRun nhu engine report', () => {
   const s = signalsFrom([{ sid: 'a', type: 'hook', signal: 'correction' }, { sid: 'h', event: 'HookRun' }, { sid: 'a', signal: 'correction' }]);
   expect(s).toEqual({ sessions: 1, corrections: 1, interrupts: 0 });

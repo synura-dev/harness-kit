@@ -49,7 +49,9 @@ async function defaultKpi({ nowMs, timeoutMs }) {
 /** Chi section `kpi-*` vao series (bo cost-session theo sid, subagent-vs-main theo actor: khoa dong, khong lam chuoi). */
 export function pickKpi(results, snapshot) {
   const kpi = {};
-  for (const r of results || []) if (/^kpi-/.test(String(r.def && r.def.id))) for (const [k, v] of Object.entries(snapshot(r))) kpi[`${r.def.id}.${k}`] = v;
+  // bo hang co nhan tuan (2026-W44) hoac ten file/duong dan: khoa moi tuan moi khac -> khong thanh chuoi (process.* lay khoa on dinh rieng)
+  const unstable = /\d{4}-W\d{2}|[\/\\]|\.[a-z]{2,4}$/i;
+  for (const r of results || []) if (/^kpi-/.test(String(r.def && r.def.id))) for (const [k, v] of Object.entries(snapshot(r))) if (!unstable.test(k)) kpi[`${r.def.id}.${k}`] = v;
   return kpi;
 }
 
@@ -125,6 +127,10 @@ export async function retro(o = {}) {
   const proposals = o.proposals || (await import('./loop.mjs')).listProposals(o, 1000);
   const appliedLog = o.appliedLog || (() => { try { return fs.readFileSync(path.join(dataDir, 'applied.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; } })();
   const pc = o.processChanges !== undefined ? o.processChanges : await defaultProcess(nowMs);
+  if (pc && !Array.isArray(pc) && pc.truncated !== 'no_git') { // khoa on dinh cho series: so lan sua file quy tac trong tuan can xem + so file sua lap
+    const w = (pc.weeks || []).find((x) => x.week === week);
+    kpi = { ...kpi, 'process.changes_week': w ? w.changes : 0, 'process.repeat_files': (pc.repeat || []).length };
+  }
   const effects = proposals.filter((p) => p.effect && p.effect.verdict);
   const sdm = selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges: Array.isArray(pc) ? pc : pcRows(pc), signals, weekStartMs: start, weekEndMs: end });
   const selfdev = Object.fromEntries(Object.entries(sdm).map(([k, m]) => [k, m.value]));
@@ -165,10 +171,12 @@ export async function retro(o = {}) {
   const isNew = (k) => !emittedAll[k] || !!emittedAll[k].resolved;
   const emitted = [];
   // chi van de MOI (chua tao task; key khong gan tuan) -> van de da co task ma van open khong tao lai
-  const cand = [
+  const best = new Map(); // dedupe theo key (nhieu entry ledger cung fp): giu score cao nhat
+  for (const c of [
     ...ledgerEntries.filter((e) => ['open', 'warned'].includes(e.status) && (e.fp || e.id)).map((e) => ({ key: `ledger:${e.fp || e.id}`, score: Number(e.count) || 1, summary: redact(`${String(e.message || e.rule || e.id).slice(0, 100)} (x${e.count || 1})`) })),
     ...((pc && pc.repeat) || []).map((r) => ({ key: `file:${r.path}`, score: r.edits, summary: redact(`sua lap ${r.path} (${r.edits} lan/14 ngay)`) })),
-  ].filter((c) => isNew(c.key)).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, RETRO.maxIssues);
+  ]) if (!best.has(c.key) || c.score > best.get(c.key).score) best.set(c.key, c);
+  const cand = [...best.values()].filter((c) => isNew(c.key)).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, RETRO.maxIssues);
   const issues = cand.map(({ key, summary }) => ({ key, summary }));
 
   const sd = (k) => fmtVal(selfdev[k]);
