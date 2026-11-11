@@ -6,8 +6,9 @@ export const SERIES_LIMITS = { maxLines: 200, maxBytes: 2 * 1024 * 1024 };
 const BARS = '▁▂▃▄▅▆▇█';
 
 // Tuan ISO 'YYYY-Www' (tinh theo UTC).
-export function isoWeek(date = new Date()) {
-  const d = new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+export function isoWeek(input = new Date()) {
+  const date = input instanceof Date ? input : new Date(input); // nhan Date hoac ms
+  const d =new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
   const day = d.getUTCDay() || 7;
   d.setUTCDate(d.getUTCDate() + 4 - day);
   const y = d.getUTCFullYear();
@@ -68,7 +69,18 @@ export function appendSnapshot(file, { week, kpi = {}, selfdev = {}, nowMs = Dat
   const rev = parse(lines).filter((o) => o.week === week).reduce((m, o) => Math.max(m, o.rev || 1), 0) + 1;
   const row = { week, ts: new Date(nowMs).toISOString(), rev, kpi, selfdev };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.appendFileSync(file, JSON.stringify(row) + '\n');
+  let pre = '';
+  try {
+    const size = fs.statSync(file).size;
+    if (size > 0) {
+      const fd = fs.openSync(file, 'r');
+      const b = Buffer.alloc(1);
+      fs.readSync(fd, b, 0, 1, size - 1);
+      fs.closeSync(fd);
+      if (b[0] !== 10) pre = '\n'; // dong cuoi bi cut: tach de dong moi khong dinh vao
+    }
+  } catch { /* chua co file */ }
+  fs.appendFileSync(file, pre + JSON.stringify(row) + '\n');
   return row;
 }
 

@@ -52,6 +52,19 @@ test('readSeries: tran 2 MB -> truncated', () => {
   assert.equal(r.truncated, 'max_bytes');
 });
 
+test('isoWeek: nhan ca so ms', () => {
+  assert.equal(isoWeek(Date.parse('2026-11-11T00:00:00Z')), '2026-W46');
+  assert.match(isoWeek(Date.now()), /^\d{4}-W\d{2}$/);
+});
+
+test('appendSnapshot: file khong ket thuc bang newline -> them newline, dong moi khong dinh dong hong', () => {
+  const f = tmpFile();
+  fs.mkdirSync(path.dirname(f), { recursive: true });
+  fs.writeFileSync(f, '{"week":"2026-W44","kpi":{"x":1}'); // dong hong, thieu newline
+  appendSnapshot(f, { week: '2026-W45', kpi: { x: 2 } });
+  assert.deepEqual(readSeries(f).series.map((s) => s.week), ['2026-W45']);
+});
+
 const mk = (vals) => vals.map((v, i) => ({ week: `w${i}`, kpi: { k: v } }));
 
 test('trend: spark dung do dai, slope OLS, vs_prev, vs_baseline, direction', () => {
