@@ -258,6 +258,14 @@ test('agyTranscriptPath: thuan', () => {
   expect(agyTranscriptPath('abc', 'hh')).toBe(path.join('hh', '.gemini', 'antigravity-cli', 'brain', 'abc', '.system_generated', 'logs', 'transcript_full.jsonl'));
 });
 
+test('Stop: payload khong co modelName -> model null nhung token van co (adapter khong cap model mac dinh)', () => {
+  const root = mkRoot(); const f = path.join(root, 't.jsonl');
+  fs.writeFileSync(f, model(1, 10, 1, 0) + '\n');
+  const stop = { hookEventName: 'Stop', modelName: undefined, transcriptPath: fwd(f), terminationReason: 'NO_TOOL_CALL', executionNum: 0, error: '', fullyIdle: true };
+  const r = call(stop, { root });
+  expect(r.model).toBeNull(); expect(r.tokens_in).toBe(10); expect(r.tokens_out).toBe(1);
+});
+
 test('Stop: usage delta theo transcript, lan hai chi buoc moi, model', () => {
   const root = mkRoot(); const f = path.join(root, 't.jsonl');
   fs.writeFileSync(f, model(1, 100, 10, 50) + '\n' + model(2, 200, 20, 60) + '\n');
