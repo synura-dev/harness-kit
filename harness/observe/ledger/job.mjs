@@ -94,6 +94,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       try { const { runAutopilot } = await import('../../evolve/loop/autopilot.mjs'); await runAutopilot({}); } catch (e) { recordJobError(undefined, 'autopilot', e && e.message); }
       clearTimeout(h2);
       try { const { demoteRun } = await import('../../evolve/loop/demote.mjs'); const d = demoteRun({}); if (d.errors && d.errors.length) recordJobError(undefined, 'demote', d.errors.join('; ')); } catch (e) { recordJobError(undefined, 'demote', e && e.message); } // ha cap rule vo ich; fail-open
+      try { const { retroAuto } = await import('../../evolve/loop/retro.mjs'); const t = await retroAuto({}); if (t.errors && t.errors.length) recordJobError(undefined, 'retro', t.errors.join('; ').slice(0, 200)); } catch (e) { recordJobError(undefined, 'retro', e && e.message); } // retro 1 lan/isoWeek (autoApply mac dinh bat, config evolve retro.autoApply:false de tat); fail-open
     }
     process.exit(0);
   }, (e) => die('exit', e && e.message, 1));

@@ -526,6 +526,18 @@ test('kind fix: level 2, vao hang, khong bao gio tu ap; duyet khong ghi file', a
   expect(fs.existsSync(path.join(o.hubRoot, '.claude'))).toBe(false);
 });
 
+test('fix da co de xuat p_<cid>_fix (da duyet): khong dem vao st.week.proposals, khong xep hang lai', async () => {
+  const entries = [entry(FP, { evolve_kind: 'fix', evolve_fix_target: { area: 'brief', path: '.claude/agents/builder.md' } })];
+  await runAutopilot({ ...o, ledgerEntries: entries });
+  const q = readQueue(o)[0];
+  await queueOp({ ...o, approve: q.id, confirm: () => true }); // duyet: khong con pending, de xuat con status proposed
+  const before = readState(o).week.proposals;
+  const r = await runAutopilot({ ...o, ledgerEntries: entries, force: true });
+  expect(r.queued.length).toBe(0);
+  expect(readState(o).week.proposals).toBe(before);
+  expect(readQueue(o).filter((x) => x.status === 'pending').length).toBe(0);
+});
+
 test('fix applied duoc do qua autopilot: verdict ghi vao proposal, khong rollback', async () => {
   const pid = 'p_fix_x';
   fs.mkdirSync(path.join(o.dataRoot, 'proposals'), { recursive: true });
