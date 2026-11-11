@@ -157,7 +157,7 @@ export async function retro(o = {}) {
   const prevDir = prevSeries.length >= 2 ? (grew(prevSeries) ? 'worse' : compositeDirection(sdTrend(prevSeries))) : null;
   const stalled = ['flat', 'worse'].includes(direction) && ['flat', 'worse'].includes(prevDir);
 
-  const effectRows = effects.map((p) => ({ id: p.id, target: p.change && p.change.target, verdict: p.effect.verdict, suggest: p.effect.verdict === 'worse' ? 'rollback' : p.effect.verdict === 'better' ? 'keep' : 'xem lai' }));
+  const effectRows = effects.map((p) => ({ id: p.id, target: p.change && p.change.target, verdict: p.effect.verdict, suggest: p.effect.verdict === 'worse' ? 'rollback' : ['better', 'improved'].includes(p.effect.verdict) ? 'keep' : p.effect.verdict === 'no_effect' ? 'xem lai hoac hoan tac' : 'xem lai' }));
   // top van de: ledger open/warned (count) + file quy tac sua lap (A1); key on dinh = nguon + fp/path
   const emittedFile = path.join(dir, 'emitted.json');
   const tsOf = (v) => (typeof v === 'string' ? v : v && v.ts);

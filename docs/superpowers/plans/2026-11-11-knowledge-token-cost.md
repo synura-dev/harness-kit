@@ -166,6 +166,7 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - [x] `metricVerdict(series, kpi, appliedWeek, better)`: <= 0.95x better, >= 1.05x worse, còn lại unchanged, thiếu điểm insufficient; `measureDue` rẽ nhánh khi `target_metric.kpi`.
 - [x] Cập nhật test số đếm retro (:25,53-57,117,121,228) - đếm lại sau khi thêm khoá.
 - [x] Done-when: `timeout 60 bun test harness/evolve/loop/selfdev.test.mjs harness/evolve/loop/retro.test.mjs harness/evolve/loop/effect.test.mjs` -> 0 fail.
+- Ghi chu thuc hien: nguong issue/F3 `context:growth` dung 10% (khong 5%); khoa selfdev la `static_tokens` (thay `context_tax_tokens`) cung repeat_vs_first_ratio, eff_tokens_per_problem, dup_lines, roi_saved_tokens, key_coverage; qua maxRecheckDays -> inconclusive.
 - [x] Commit.
 
 ### Task H1 (repo hub, `isolation: worktree`): `harness knowledge export --json`

@@ -33,6 +33,12 @@ test('retire_candidates >= 1 -> issue knowledge:retire-candidates chi liet ke so
   expect(z.issues.map((x) => x.key)).not.toContain('knowledge:retire-candidates');
 });
 
+test('effectRows.suggest: improved=keep, no_effect=xem lai hoac hoan tac, worse=rollback', async () => {
+  const mk = (id, verdict) => ({ id, kind: 'fix', change: { target: null }, effect: { verdict } });
+  const r = await retro({ ...base, proposals: [mk('a', 'improved'), mk('b', 'no_effect'), mk('c', 'worse'), mk('d', 'better')] });
+  expect(r.effects.map((e) => e.suggest)).toEqual(['keep', 'xem lai hoac hoan tac', 'rollback', 'keep']);
+});
+
 test('dedupe: issue moi khong tao lai sau khi da emitted; tran 3 task van de van giu', async () => {
   const calls = [];
   const runner = (cmd, args) => { if (cmd === 'projects') calls.push(args); return { ok: true }; };

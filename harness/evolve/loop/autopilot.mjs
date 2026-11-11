@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
 import { findCandidates, propose, check, apply, rollback, ctx, classifyTarget, listProposals, appendLog } from './loop.mjs';
-import { measureDue, readBaselineCache, loadDupePairs, EFFECT } from './effect.mjs';
+import { measureDue, readBaselineCache, loadDupePairs, pairRecheckDue, EFFECT } from './effect.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { withLock } from '../../core/runtime/lockfile.mjs';
 
@@ -177,8 +177,7 @@ export async function runAutopilot(o = {}) {
       const e = { ...(fresh.effect || {}), ...patch };
       if (wr(pf, { ...fresh, effect: e })) p.effect = e;
     };
-    // shortcut: pair_recheck nap lai nguon trung noi dung MOT lan/lo khi con de xuat dang cho do (chua loc den han 7 ngay)
-    if (pend.some((p) => p.target_metric && p.target_metric.pair_recheck && !(p.effect && ['improved', 'no_effect', 'worse'].includes(p.effect.verdict)))) eo = { ...o, dupePairs: o.dupePairs || await loadDupePairs(o) };
+    if (pairRecheckDue(pend, nowMs, o)) eo = { ...o, dupePairs: o.dupePairs || await loadDupePairs(o) }; // chi nap khi co cap da den han do
     const due = pend.length ? measureDue(pend, nowMs, eo) : [];
     const retry = pend.filter((p) => p.kind === 'rule' && p.effect && p.effect.verdict === 'worse' && p.effect.rollback_error && (p.effect.rollback_attempts || 0) < RB_MAX).map((p) => ({ id: p.id, effect: p.effect }));
     for (const { id, effect } of [...due, ...retry]) {

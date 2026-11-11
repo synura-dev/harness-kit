@@ -1,5 +1,5 @@
 import { test, expect } from 'bun:test';
-import { measureDue, metricVerdict } from './effect.mjs';
+import { measureDue, metricVerdict, pairRecheckDue } from './effect.mjs';
 
 // T9: do hieu qua theo chi so (target_metric.kpi / pair_recheck); nhanh fp cu o effect.test.mjs
 const NOW = Date.parse('2026-10-30T12:00:00Z');
@@ -34,14 +34,29 @@ test('measureDue: target_metric.kpi doc series, khong doc audit, action keep (kh
   expect(i.effect).toMatchObject({ verdict: 'insufficient', action: 'none' });
 });
 
-test('measureDue: pair_recheck - cap het / score giam -> improved; tang -> worse; y nguyen -> no_effect', () => {
+test('pairRecheckDue: chi true khi cap da den han 7 ngay va chua chot', () => {
+  const tm = { pair_recheck: true, a: { file: 'A.md' }, b: { file: 'B.md' }, baseline: 0.8, better: 'down' };
+  expect(pairRecheckDue([mprop('x', tm)], NOW, opts())).toBe(true);
+  expect(pairRecheckDue([mprop('x', tm, { applied_at: '2026-10-28T00:00:00Z' })], NOW, opts())).toBe(false);
+  expect(pairRecheckDue([mprop('x', tm, { effect: { verdict: 'improved' } })], NOW, opts())).toBe(false);
+  expect(pairRecheckDue([mprop('x', { kpi: KEY, baseline: 1 })], NOW, opts())).toBe(false);
+});
+
+test('qua maxRecheckDays van insufficient -> inconclusive (keep), ca kpi lan pair_recheck', () => {
+  const old = { applied_at: '2026-09-01T00:00:00Z' }; // > 21 ngay
+  const [k] = measureDue([mprop('p_dup_6_fix', { kpi: KEY, better: 'down', baseline: null }, old)], NOW, opts({ series: [pt(1)] }));
+  expect(k.effect).toMatchObject({ verdict: 'inconclusive', action: 'keep' });
+  const [q] = measureDue([mprop('p_dup_7_fix', { pair_recheck: true, a: { file: 'A.md' }, b: { file: 'B.md' }, baseline: 0.8, better: 'down' }, old)], NOW, opts({}));
+  expect(q.effect).toMatchObject({ verdict: 'inconclusive', action: 'keep' });
+});
+
+test('measureDue: pair_recheck - cap het -> improved; tang -> worse; y nguyen -> no_effect', () => {
   const tm = { pair_recheck: true, a: { file: 'A.md' }, b: { file: 'B.md' }, baseline: 0.8, better: 'down' };
   const ft = { area: 'doc', a: { path: 'A.md' }, b: { id: 'kb-1' } }; // fix_target long a/b, khong co .path phang
   const pr = (pairs) => measureDue([mprop('p_dup_4_fix', tm, { change: { fix_target: ft } })], NOW, opts({ dupePairs: { pairs, truncated: null } }))[0].effect;
   const P = (s, a = 'A.md', b = 'B.md') => ({ a: { file: a }, b: { file: b }, score: s });
   expect(pr([]).verdict).toBe('improved');
   expect(pr([P(0.9, 'X.md', 'Y.md')]).verdict).toBe('improved'); // cap khac khong tinh
-  expect(pr([P(0.5)]).verdict).toBe('improved'); // < 0.6
   expect(pr([P(0.95)]).verdict).toBe('worse');
   expect(pr([P(0.8)]).verdict).toBe('no_effect');
   expect(pr([P(0.8, 'B.md', 'A.md')]).verdict).toBe('no_effect'); // thu tu hai phia khong quan trong
