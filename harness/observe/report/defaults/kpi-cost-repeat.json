@@ -1,0 +1,1 @@
+{"order":14,"id":"kpi-cost-repeat","title":"KPI 5: chi phi van de lap vs lan dau (eff_tokens; khoa kw khong vao ty le)","source":"derived","derive":"cost_repeat","group_by":["k"],"metric":"sum:v","window_days":28,"format":"kpi","empty_note":"chua du du lieu khoa van de (high|mid)"}
