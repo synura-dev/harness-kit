@@ -3,17 +3,17 @@
 // data.out_len (Read/Grep/Glob/Bash/Web*), cli='agy'. Khong luu noi dung: ca lech chi kem sid rut gon 8 ky tu, lop viec, so.
 // Thieu tin hieu (phantom, su kien cu thieu model/out_len) -> `unknown` (khong tinh lech, khong vao mau so).
 import { isHookRun } from '../../core/audit/signals.mjs';
-import { LIMITS, ROUTING, median, effTokens } from './cost-contract.mjs';
+import { LIMITS, median, effTokens } from './cost-contract.mjs';
+import { DEFAULT_POLICY, loadRoutingPolicy } from './routing-policy.mjs';
 
 const fam = (m) => { const x = String(m || '').toLowerCase().match(/haiku|sonnet|opus/); return x ? x[0] : null; };
-const price = (f) => ROUTING.priceRel[f] ?? null;
 const PLAN_RE = /docs\/superpowers\/(plans|specs)\//;
 const TEST_RE = /\b(bun test|npm test|tsc)\b/;
 const WEB = new Set(['WebSearch', 'WebFetch']);
 const READ = new Set(['Read', 'Grep', 'Glob']);
 const LEN_TOOLS = new Set(['Read', 'Grep', 'Glob', 'WebFetch', 'WebSearch', 'Bash']);
 const WRITE = new Set(['Edit', 'Write']);
-const MISS_ORDER = ['missed_agy', 'overuse_opus', 'underuse_haiku', 'under_model', 'builder_over_turns', 'main_overread'];
+const MISS_REST = ['overuse_opus', 'underuse_haiku', 'under_model', 'builder_over_turns', 'main_overread'];
 
 const CODE_RE = /\.(mjs|cjs|js|ts|tsx|jsx|json|py|sh)$/i;
 const NONCODE_RE = /(^|\/)(data|logs?|reports?|tmp|\.tmp)\//i;
@@ -21,7 +21,7 @@ const isCodeFile = (f) => CODE_RE.test(f) && !NONCODE_RE.test(f);
 
 /** Phan lop viec + tin hieu tu cac su kien cua mot don vi. legacy = co tool (Read/Grep/Glob/Bash) thieu out_len (khong loai tru duoc large_read).
  *  web_lookup chi khi web chu dao (> nua so call) hoac >= 3 lan web; code_edit chi khi ghi file code (hoac agent builder). */
-function classify(evs, agentType) {
+function classify(evs, agentType, pol, riskRx) {
   const posts = evs.filter((e) => e.event === 'PostToolUse');
   let web = 0, chars = 0, write = false, plan = false, test = false, legacy = false, risk = false, reads = 0, fail = 0;
   for (const e of evs) if (e.event === 'PostToolUseFailure') fail++;
@@ -36,12 +36,12 @@ function classify(evs, agentType) {
       if (e.tool === 'Write' && ft.some((f) => PLAN_RE.test(f))) plan = true;
     }
     if (e.tool === 'Bash' && TEST_RE.test(String(e.target || ''))) test = true;
-    if (ft.some((f) => ROUTING.riskRe.test(f))) risk = true;
+    if (ft.some((f) => riskRx.test(f))) risk = true;
   }
   const webMain = web >= 3 || (posts.length > 0 && web / posts.length > 0.5);
   let cls = 'read_small';
   if (webMain) cls = 'web_lookup';
-  else if (chars >= ROUTING.largeReadChars) cls = 'large_read';
+  else if (chars >= pol.thresholds.largeReadChars) cls = 'large_read';
   else if (agentType === 'planner' || plan) cls = 'plan';
   else if (write || agentType === 'builder') cls = 'code_edit';
   else if (agentType === 'reviewer') cls = 'review';
@@ -50,17 +50,18 @@ function classify(evs, agentType) {
   return { cls, risk, reads, chars, fail, calls: posts.length + fail, legacy: legacy && !decided };
 }
 
-const expectedMode = (cls, risk) => {
-  if (cls === 'web_lookup' || cls === 'large_read') return 'agy';
-  if (cls === 'plan') return 'opus';
-  if (cls === 'review') return risk ? 'opus' : 'sonnet';
-  if (cls === 'code_edit') return 'sonnet';
-  return 'haiku';
+/** Mode ky vong tu chinh sach: backend khai bao lop nay -> ten backend; khong thi expected[lop] (null = khong co luat); lop la -> haiku. */
+const expectedMode = (cls, risk, pol) => {
+  for (const [name, b] of Object.entries(pol.backends)) if (b.classes.includes(cls)) return name;
+  const k = cls === 'review' && risk ? 'review_risk' : cls;
+  return k in pol.expected ? pol.expected[k] : 'haiku';
 };
 
 /** Loai lech chinh (1 / don vi) cho mode thuc te `act` (haiku|sonnet|opus) so voi ky vong `exp`; null = dung. */
-function modelMiss(exp, act, cls) {
-  if (exp === 'agy') return 'missed_agy';
+function modelMiss(exp, act, cls, pol) {
+  if (exp == null) return null;
+  if (pol.backends[exp]) return `missed_${exp}`;
+  const price = (f) => pol.prices[f] ?? null;
   if (act === 'opus' && cls === 'review') return null; // opus la mac dinh an toan cho review (cuoi dot): bao trung tinh review_opus_share
   if (act === 'opus' && exp !== 'opus') return 'overuse_opus';
   if (exp === 'haiku' && act === 'sonnet') return 'underuse_haiku';
@@ -72,7 +73,13 @@ function modelMiss(exp, act, cls) {
  * @param {{events:object[], segments:object[]|{segments:object[],truncated:string|null}, from?:number, to?:number, deadline?:number, limits?:object}} a
  * @returns {{rows:{k:string,v:number|null}[], agy:{k:string,v:number|null}[], misses:object[], byClass:object, units:number, unknown:number, agyNote:string, truncated:string|null}}
  */
-export function routing({ events = [], segments = [], from = 0, to = 0, deadline, limits, hubDir = null } = {}) {
+export function routing({ events = [], segments = [], from = 0, to = 0, deadline, limits, hubDir = null, policy = DEFAULT_POLICY, policySource = 'default' } = {}) {
+  const pol = policy, riskRx = new RegExp(pol.riskRe, 'i');
+  const price = (f) => pol.prices[f] ?? null;
+  const bnames = Object.keys(pol.backends);
+  const MISS_ORDER = ['missed_external', ...bnames.map((b) => `missed_${b}`), ...MISS_REST];
+  // backend ngoai cua mot segment: audit cli thuoc policy.backends (khac claude), du phong tien to sid `<cli>-`
+  const backendOf = (s, all) => bnames.find((b) => all.some((e) => e.cli === b)) || bnames.find((b) => String(s.sid).startsWith(`${b}-`)) || null;
   // main_overread chi o phien hub (cwd = hubDir, lay tu projectDir cua run.mjs); khong biet hub -> khong ket luan
   const inHub = (evsU) => !!hubDir && evsU.some((e) => typeof e.cwd === 'string' && (e.cwd === hubDir || e.cwd.startsWith(hubDir.replace(/\/$/, '') + '/')));
   const lim = { ...LIMITS, ...(limits || {}) };
@@ -117,17 +124,17 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
     if (st && !typed) st.used = true;
     else if (st) {
       st.used = true;
-      const k = `${p.sid}|${st.e.agent_id}`; const c = classify(byAgent.get(k) || [], st.e.agent_type); const stop = stops.get(k);
+      const k = `${p.sid}|${st.e.agent_id}`; const c = classify(byAgent.get(k) || [], st.e.agent_type, pol, riskRx); const stop = stops.get(k);
       const act = stop ? fam(stop.model) : null;
       // eff cung don vi voi segment (in+out+0.1*cache); thieu data.tokens_cache -> eff null (raw, khong tron vao eff)
-      u.cls = c.cls; u.fail = c.fail; u.calls = c.calls; u.exp = expectedMode(c.cls, c.risk);
+      u.cls = c.cls; u.fail = c.fail; u.calls = c.calls; u.exp = expectedMode(c.cls, c.risk, pol);
       u.eff = stop && stop.cache != null ? effTokens({ input: stop.tin, output: stop.tout, cache_read: stop.cache }) : null;
       u.act = act; u.turns = stop ? stop.turns : 0; u.builder = st.e.agent_type === 'builder';
       const w = stop ? Date.parse(stop.ts) - Date.parse(p.ts) : NaN; u.wall = Number.isFinite(w) && w > 0 ? w : null;
       if (act && !c.legacy) {
         u.unknown = false;
-        u.miss = modelMiss(u.exp, act, c.cls);
-        if (!u.miss && u.builder && u.turns > ROUTING.builderTurns) u.miss = 'builder_over_turns';
+        u.miss = modelMiss(u.exp, act, c.cls, pol);
+        if (!u.miss && u.builder && u.turns > pol.thresholds.builderTurns) u.miss = 'builder_over_turns';
       }
     }
     units.push(u);
@@ -138,14 +145,14 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
   // (b)(c) segment main / agy
   for (const s of segIn.segments) {
     const x = info.get(s); if (!x) continue;
-    const isAgy = String(s.sid).startsWith('agy-') || x.all.some((e) => e.cli === 'agy');
+    const bk = backendOf(s, x.all), isAgy = !!bk; // isAgy = phien backend ngoai (ten cu giu cho tuong thich)
     const evsU = isAgy ? x.all : x.main;
     if (!evsU.some((e) => e.event === 'PostToolUse')) continue;
-    const c = classify(evsU, null);
-    const u = { src: isAgy ? 'agy' : 'main', sid: s.sid, cls: c.cls, exp: expectedMode(c.cls, c.risk), act: isAgy ? 'agy' : 'main', eff: isAgy && !s.eff_tokens ? null : (s.eff_tokens || 0), wall: s.wall_ms || null, fail: c.fail, calls: c.calls, miss: null, unknown: false, problem: s.problem || null, start: s.start_ts, end: s.end_ts, write: evsU.some((e) => e.event === 'PostToolUse' && WRITE.has(e.tool)), model: x.model };
+    const c = classify(evsU, null, pol, riskRx);
+    const u = { src: isAgy ? 'agy' : 'main', backend: bk, sid: s.sid, cls: c.cls, exp: expectedMode(c.cls, c.risk, pol), act: isAgy ? bk : 'main', eff: isAgy && !s.eff_tokens ? null : (s.eff_tokens || 0), wall: s.wall_ms || null, fail: c.fail, calls: c.calls, miss: null, unknown: false, problem: s.problem || null, start: s.start_ts, end: s.end_ts, write: evsU.some((e) => e.event === 'PostToolUse' && WRITE.has(e.tool)), model: x.model };
     if (!isAgy) {
-      if (u.exp === 'agy') u.miss = 'missed_agy';
-      else if ((c.reads >= 3 || c.chars > ROUTING.overreadChars) && !x.pre && inHub(evsU)) u.miss = 'main_overread';
+      if (pol.backends[u.exp]) u.miss = `missed_${u.exp}`;
+      else if ((c.reads >= 3 || c.chars > pol.thresholds.overreadChars) && !x.pre && inHub(evsU)) u.miss = 'main_overread';
       else if (c.legacy) u.unknown = true;
     }
     units.push(u);
@@ -158,8 +165,10 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
   for (const u of known) {
     if (!u.miss) continue;
     cnt[u.miss]++;
+    const isBk = u.miss.startsWith('missed_') && pol.backends[u.miss.slice(7)];
+    if (isBk) cnt.missed_external++;
     let ex = 0, ub = 0;
-    if (u.miss === 'missed_agy') ub = u.eff || 0; // can tren (khong tach duoc token cua luot web): rieng, KHONG cong vao excess_cost_share
+    if (isBk) ub = u.eff || 0; // can tren (khong tach duoc token cua luot web): rieng, KHONG cong vao excess_cost_share
     else if (u.miss === 'main_overread') { const p = price(u.model); ex = p ? (u.eff * (p - 1)) / p : 0; }
     else if (u.src === 'dispatch' && u.miss !== 'builder_over_turns') { const pa = price(u.act), pe = price(u.exp); ex = pa && pe && u.eff != null ? Math.max(0, (u.eff * (pa - pe)) / pa) : 0; } // under_model (re hon) = rui ro chat luong, khong phai chi phi thua
     excess += ex; upper += ub;
@@ -190,7 +199,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
   const cpp = (arr) => { const m = arr.filter((u) => u.eff != null); const p = probs(m); return p ? m.reduce((a, u) => a + u.eff, 0) / p : null; };
   const claudeSegs = units.filter((u) => u.src === 'main' && !u.unknown);
   const withProb = agyU.filter((u) => u.problem);
-  const redo = withProb.filter((a) => claudeSegs.some((c) => c.problem === a.problem && c.write && Date.parse(c.start) > Date.parse(a.end) && Date.parse(c.start) - Date.parse(a.end) <= ROUTING.redoMs));
+  const redo = withProb.filter((a) => claudeSegs.some((c) => c.problem === a.problem && c.write && Date.parse(c.start) > Date.parse(a.end) && Date.parse(c.start) - Date.parse(a.end) <= pol.thresholds.redoMs));
   const err = (arr) => rate(arr.reduce((a, u) => a + u.fail, 0), arr.reduce((a, u) => a + u.calls, 0));
   const agy = [
     { k: 'share', v: rate(agyU.length, agyU.length + claudeU.length) },
@@ -200,7 +209,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
     { k: 'claude_cost_per_problem', v: cpp(claudeSegs) },
     { k: 'claude_error_rate', v: err(claudeU) },
   ];
-  return { rows, agy, misses, byClass, unit: 'eff_tokens', rawDispatch: known.filter((u) => u.src === 'dispatch' && u.eff == null).length, unmatchedStarts, units: units.length, unknown: units.filter((u) => u.src !== 'agy' && u.unknown).length, agyNote: 'agy cost: tokens, unpriced', truncated };
+  return { rows, agy, misses, byClass, unit: 'eff_tokens', rawDispatch: known.filter((u) => u.src === 'dispatch' && u.eff == null).length, unmatchedStarts, units: units.length, unknown: units.filter((u) => u.src !== 'agy' && u.unknown).length, agyNote: 'external backend cost: tokens, unpriced', policySource, truncated };
 }
 
 // Cache theo (from,to) trong a.memo: 3 section dung chung 1 lan tinh.
@@ -209,13 +218,14 @@ const calc = (a) => {
   if (a.memo && a.memo[k]) return a.memo[k];
   if (a.deadline && Date.now() > a.deadline) return { rows: [], agy: [], misses: [], truncated: 'timeout' };
   const segments = a.getSegments ? a.getSegments({ from: a.from, to: a.to }) : [];
-  const r = routing({ events: a.events || [], segments, from: a.from, to: a.to, deadline: a.deadline, hubDir: a.projectDir });
+  const { policy, source } = loadRoutingPolicy({ projectDir: a.projectDir });
+  const r = routing({ events: a.events || [], segments, from: a.from, to: a.to, deadline: a.deadline, hubDir: a.projectDir, policy, policySource: source });
   if (a.memo) a.memo[k] = r;
   return r;
 };
 
 export const derive = {
-  routing_kpi: (a) => { const r = calc(a); return { rows: r.rows, truncated: r.truncated }; },
+  routing_kpi: (a) => { const r = calc(a); return { rows: r.rows, note: r.policySource ? `routing policy: ${r.policySource}` : undefined, truncated: r.truncated }; },
   agy_kpi: (a) => { const r = calc(a); return { rows: r.agy, truncated: r.truncated }; },
   routing_misses: (a) => {
     const r = calc(a); const g = new Map();

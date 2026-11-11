@@ -1,5 +1,6 @@
 // Hop dong chung cho do hao token theo van de (T2-T9): hang so, hinh dang Segment, ham thuan dung chung.
-// Khong I/O, khong phu thuoc. Hinh dang suy ra tu cac truong audit.mjs thuc su ghi (envelope v2):
+import { DEFAULT_POLICY } from './routing-policy.mjs';
+// Khong I/O (tru import mac dinh dinh tuyen thuan du lieu). Hinh dang suy ra tu cac truong audit.mjs thuc su ghi (envelope v2):
 //   envelope: {ts ISO, type ('prompt'|'tool'|'stop'|'session'|... ; 'prompt' cat doan), event (UserPromptSubmit|PostToolUse|
 //     PostToolUseFailure|Stop|SubagentStart|SubagentStop), sid, agent_id|null, agent_type|null, actor, cwd, tool, target,
 //     ok, turns, tokens_in (= input + cache_creation), tokens_out, origin ('noise'|'dispatch'|...), data}
@@ -61,13 +62,11 @@ export function median(arr) {
 }
 
 /** Dinh tuyen (T13): gia TUONG DOI (haiku 1, sonnet 3, opus 5). agy KHONG co gia (quota rieng, khong ep 0): chi do token, nhan "tokens, unpriced". */
+/** Alias tuong thich cua mac dinh trong routing-policy.mjs (chinh sach la du lieu; ghi de bang <du an>/.harness/routing.json). */
 export const ROUTING = Object.freeze({
-  priceRel: Object.freeze({ haiku: 1, sonnet: 3, opus: 5 }),
-  largeReadChars: 400000, // ~100k token
-  builderTurns: 25,
-  riskRe: /(^|\/)(auth|perm|permission|permissions|guard|deploy|secret|secrets|migrate|migration|migrations|security)(\/|\.|$)/i,
-  overreadChars: 20000, // ~5k token: main doc tong out_len > nguong => main_overread
-  redoMs: 24 * 3600 * 1000,
+  priceRel: DEFAULT_POLICY.prices,
+  ...DEFAULT_POLICY.thresholds,
+  riskRe: new RegExp(DEFAULT_POLICY.riskRe, 'i'),
 });
 
 /** lowercase, d-gach -> d, NFD bo dau, gop khoang trang, trim. */

@@ -2,6 +2,10 @@ import { test, expect } from 'bun:test';
 import { routing, derive } from './routing.mjs';
 import { segment } from './problems.mjs';
 import { ROUTING } from './cost-contract.mjs';
+import { resolvePolicy } from './routing-policy.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
 let n = 0;
 const T = (m = 0) => new Date(Date.UTC(2026, 10, 10, 0, 0, 0) + m * 60000 + (n++)).toISOString();
@@ -10,7 +14,10 @@ const prompt = (sid, m, extra = {}) => ev({ sid, m, type: 'prompt', event: 'User
 const stop = (sid, m, input = 1000, extra = {}) => ev({ sid, m, type: 'stop', event: 'Stop', model: 'claude-opus-4', data: { usage: { input, output: 0, cache_read: 0, cache_creation: 0, msgs: 1 } }, ...extra });
 const post = (sid, m, tool, o = {}) => ev({ sid, m, event: 'PostToolUse', tool, ok: true, ...o });
 const rd = (sid, m, len = 10) => post(sid, m, 'Read', { data: { out_len: len } });
-const run = (events, opts = {}) => routing({ events, segments: segment(events), hubDir: '/hub', ...opts });
+// chinh sach hub (backends.agy) tiem vao: core mac dinh trung tinh, hanh vi cu = policy hub
+const HUB_JSON = JSON.parse(fs.readFileSync(path.join(import.meta.dir, 'examples/hub-routing.json'), 'utf8'));
+const HUB = resolvePolicy(HUB_JSON).policy;
+const run = (events, opts = {}) => routing({ events, segments: segment(events), hubDir: '/hub', policy: HUB, ...opts });
 const val = (r, k) => r.rows.find((x) => x.k === k)?.v;
 // dispatch: Pre -> SubagentStart -> (tool events cua sub) -> SubagentStop
 const dispatch = (sid, m, type, id, { model, turns = 5, tools = [], reqModel, cache = 0 } = {}) => [
@@ -134,7 +141,8 @@ test('output khong chua prompt/target day du: chi sid 8 ky tu', () => {
 test('derive: 3 ten, rows {k,v}; routing_misses nhom theo loai:lop', () => {
   expect(Object.keys(derive).sort()).toEqual(['agy_kpi', 'routing_kpi', 'routing_misses']);
   const events = [prompt('s', 0), post('s', 1, 'WebSearch', { data: { out_len: 1 } }), stop('s', 2)];
-  const a = { events, from: 0, to: 0, getSegments: () => segment(events) };
+  const pd = fs.mkdtempSync(path.join(os.tmpdir(), 'rt-')); fs.mkdirSync(path.join(pd, '.harness')); fs.writeFileSync(path.join(pd, '.harness', 'routing.json'), JSON.stringify(HUB_JSON));
+  const a = { events, from: 0, to: 0, projectDir: pd, getSegments: () => segment(events) };
   expect(derive.routing_kpi(a).rows.find((x) => x.k === 'missed_agy').v).toBe(1);
   expect(derive.routing_misses(a).rows[0]).toMatchObject({ k: 'missed_agy:web_lookup', n: 1 });
   expect(derive.agy_kpi(a).rows.map((x) => x.k)).toContain('share');
