@@ -14,7 +14,19 @@ test('promptTrace: hash 12 + toi da 8 tu khoa, khong nguyen van', () => {
 test('promptSignal: correction', () => {
   for (const s of ['sai rồi', 'Không phải vậy', 'ko phải vậy', 'ko phải file này', 'làm lại đi', 'that is wrong', "that's wrong", 'undo that', 'undo it', 'Làm sai rồi, không đúng']) expect(promptSignal(s)).toBe('correction');
   for (const s of ['saigon map', 'hãy làm tiếp', 'rewrite the doc', 'Sài Gòn', 'tính sai số', 'sai lệch dữ liệu', 'không phải lo', 'sửa lại README', 'add an undo button', 'revert feature', 'please revert']) expect(promptSignal(s)).toBeNull();
-  expect(promptSignal('sai rồi ' + 'x'.repeat(130))).toBeNull(); // prompt dai khong phai sua loi
+  expect(promptSignal('sai rồi ' + 'x'.repeat(130))).toBe('correction'); // chi xet 300 ky tu dau (khong con bo prompt dai)
+});
+test('promptSignal: boc channel + cum sua loi tieng Viet', () => {
+  const wrapped = `<channel source="plugin:telegram">${'noi dung '.repeat(20)} sai rồi, làm lại</channel>`;
+  expect(wrapped.length).toBeGreaterThan(120);
+  expect(promptSignal(`<channel source="plugin:telegram">sai rồi</channel><system-reminder>${'x'.repeat(500)}</system-reminder>`)).toBe('correction');
+  expect(promptSignal(wrapped)).toBe('correction');
+  for (const s of ['tôi đã nói là dùng bun', 'sao lại sửa file đó', 'từ giờ đừng làm vậy']) expect(promptSignal(s)).toBe('correction');
+  for (const s of ['đừng cho test', 'dừng lại file cũ', 'Sai Gon', 'từ giờ đến mai', 'sửa lại README', 'abc '.repeat(500)]) expect(promptSignal(s)).toBeNull();
+});
+test('promptSignal: bo dau phan biet dung/dung, khong duoc, nhieu dong', () => {
+  for (const s of ['đừng có sửa file đó', 'từ giờ đừng dùng mock', 'ok\nkhông được làm vậy', 'xong rồi.\nkhông phải vậy']) expect(promptSignal(s)).toBe('correction');
+  for (const s of ['dùng cơ chế cache X', 'dùng cờ --force', 'đúng cơ', 'từ giờ dùng bun bản mới', 'login không được', 'build không được']) expect(promptSignal(s)).toBeNull();
 });
 test('bashSignal: revert / task_status', () => {
   expect(bashSignal('git revert HEAD')).toBe('revert');
