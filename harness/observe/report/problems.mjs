@@ -9,8 +9,40 @@ const WT_RE = /\/\.worktrees\/([^/]+)/;
 const AGENT_WT = /^agent-[0-9a-f]{6,}$/;
 const GIT_B_RE = /\bgit\s+(?:checkout\s+-b|switch\s+-c)\s+(\S+)|\bgit\s+worktree\s+add\b[^\n]*?\s-b\s+(\S+)/;
 const GIT_WRITE_RE = /\bgit\s+(?:commit|worktree\s+add|checkout\s+-b|switch\s+-c)\b/;
-const KGET_RE = /\bharness\s+knowledge\s+get\s+([\w.-]+)/;
-const KSEARCH_RE = /\bharness\s+knowledge\s+search\b/;
+const KCMD_RE = /\bharness\s+knowledge\s+(get|search)\b(.*)$/;
+const TARGET_CUT = 160; // audit cat target o 160 ky tu: id o cuoi chuoi bi cat la id cut -> bo
+const VALUE_FLAGS = new Set(['--budget', '--limit', '--section', '--max']);
+/**
+ * Parser chung cho `harness knowledge get|search` trong target Bash (problems + knowledge-roi).
+ * Tach lenh noi bang && || ; | newline; get: bo co (--budget N), id = tu dau tien khong co, ho tro `web:<id>`, bo `#anchor`.
+ * @returns {{kind:'get'|'search', id?:string|null, budget?:number|null}[]}
+ */
+export function parseKnowledgeCmds(target) {
+  const t = typeof target === 'string' ? target.trim() : '';
+  const out = [];
+  const parts = t.split(/&&|\|\||[;|\n]/);
+  parts.forEach((part, pi) => {
+    const m = KCMD_RE.exec(part);
+    if (!m) return;
+    if (m[1] === 'search') { out.push({ kind: 'search' }); return; }
+    const toks = m[2].trim().split(/\s+/).filter(Boolean);
+    let id = null, budget = null;
+    for (let i = 0; i < toks.length; i++) {
+      const k = toks[i];
+      if (k.startsWith('--')) {
+        const [name, val] = k.split('=');
+        if (name === '--budget') budget = Number(val != null ? val : toks[i + 1]);
+        if (val == null && VALUE_FLAGS.has(name)) i++;
+        continue;
+      }
+      if (id == null) id = k.replace(/#.*$/, '');
+    }
+    const last = toks.length ? toks[toks.length - 1].replace(/#.*$/, '') : null;
+    const cutId = t.length >= TARGET_CUT && pi === parts.length - 1 && id != null && last === id;
+    out.push({ kind: 'get', id: id && !cutId && /^[\w.:-]+$/.test(id) ? id : null, budget: Number.isFinite(budget) ? budget : null });
+  });
+  return out;
+}
 const WRITE_TOOLS = new Set(['Edit', 'Write', 'MultiEdit', 'NotebookEdit']);
 // Tu chung chung (prompt_kw da fold/bo dau): khong du de lam khoa van de.
 const GENERIC_KW = new Set(['tiep', 'tuc', 'lam', 'ok', 'oke', 'okay', 'di', 'xong', 'continue', 'go', 'proceed', 'yes', 'no', 'y', 'n', 'co', 'roi', 'nhe', 'nua', 'cu', 'vay', 'duoc', 'va', 'thanks', 'cam', 'on', 'next', 'done', 'dung', 'khong']);
@@ -119,9 +151,9 @@ export function segment(events, opts = {}) {
     if (e.event === 'PostToolUse' || e.event === 'PostToolUseFailure') {
       seg.tools++;
       const t = typeof e.target === 'string' ? e.target.trim() : '';
-      const g = t.match(KGET_RE);
-      if (g) seg.kfetch.push(g[1]);
-      if (g || KSEARCH_RE.test(t) || t.startsWith('kpi-info-fetch.json')) seg.fetches++;
+      const kc = parseKnowledgeCmds(t);
+      if (e.event === 'PostToolUse') for (const c of kc) if (c.kind === 'get' && c.id) seg.kfetch.push(c.id); // get loi khong tinh
+      if (kc.length || t.startsWith('kpi-info-fetch.json')) seg.fetches++;
     } else if (e.event === 'Stop') {
       const u = d.usage;
       if (u && typeof u === 'object') {

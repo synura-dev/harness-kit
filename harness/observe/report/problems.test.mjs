@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { segment } from './problems.mjs';
+import { segment, parseKnowledgeCmds } from './problems.mjs';
 
 // Fixture theo envelope that cua audit.mjs (v2): ts,type,event,sid,agent_id,tool,target,tokens_in/out,origin,data.
 let n = 0;
@@ -88,6 +88,22 @@ test('fetches + kfetch', () => {
   const s = segment(ev).segments[0];
   assert.equal(s.fetches, 3);
   assert.deepEqual(s.kfetch, ['2026-11-07-agent-allocation']);
+});
+
+test('parseKnowledgeCmds: web:, co truoc id, #anchor, lenh noi, id cut', () => {
+  assert.deepEqual(parseKnowledgeCmds('harness knowledge get web:foo-bar'), [{ kind: 'get', id: 'web:foo-bar', budget: null }]);
+  assert.deepEqual(parseKnowledgeCmds('harness knowledge get --budget 800 doc-a'), [{ kind: 'get', id: 'doc-a', budget: 800 }]);
+  assert.equal(parseKnowledgeCmds('harness knowledge get doc-a#sec-2')[0].id, 'doc-a');
+  const m = parseKnowledgeCmds('harness knowledge get a && harness knowledge get b; harness knowledge search q | head');
+  assert.deepEqual(m.map((c) => c.id || c.kind), ['a', 'b', 'search']);
+  assert.equal(parseKnowledgeCmds('cd x && harness knowledge get ' + 'x'.repeat(160))[0].id, null); // id o cuoi bi cat
+  assert.equal(parseKnowledgeCmds('harness knowledge get ok ' + 'y'.repeat(150) + ' | head')[0].id, 'ok');
+  assert.deepEqual(parseKnowledgeCmds(null), []);
+});
+
+test('kfetch: get loi (PostToolUseFailure) khong tinh', () => {
+  const ev = [prompt(), tool({ event: 'PostToolUseFailure', target: 'harness knowledge get bad-id' }), stop(U(1, 1))];
+  assert.deepEqual(segment(ev).segments[0].kfetch, []);
 });
 
 test('subagent: MAX luy ke theo agent_id, phantom = 0, agent khong co Start bi bo', () => {
