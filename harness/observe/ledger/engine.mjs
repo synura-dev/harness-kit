@@ -149,6 +149,13 @@ export function auditField(rec, field, ctx = {}) {
 const norm = (v, ctx) => (v === '$hub' ? ctx.hubDir : v);
 function matchOne(val, cond, ctx) {
   if (Array.isArray(cond)) return cond.some((c) => matchOne(val, c, ctx)); // thuoc danh sach (in)
+  if (cond && typeof cond === 'object' && Array.isArray(cond.prefix)) { // {prefix:[..]}: dau chuoi hoac ngay sau '&& ', '; ', '| '
+    if (typeof val !== 'string') return false;
+    const v = val.slice(0, 2000);
+    const word = (s) => s === undefined || !/[\w-]/.test(s); // ranh gioi tu: 'git log' khong khop 'git logx'
+    const at = (s, p) => { let i = v.indexOf(s + p); while (i >= 0) { if (word(v[i + s.length + p.length])) return true; i = v.indexOf(s + p, i + 1); } return false; };
+    return cond.prefix.slice(0, 50).some((p) => typeof p === 'string' && p && ((v.startsWith(p) && word(v[p.length])) || ['&& ', '; ', '| '].some((sep) => at(sep, p))));
+  }
   return val === norm(cond, ctx) || (typeof val === 'boolean' ? String(val) === String(cond) : false); // so bang
 }
 
