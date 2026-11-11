@@ -20,7 +20,7 @@ export const CFG = Object.freeze({
 const H = 3600e3, DAY = 86400000;
 
 // ---- phan muc tat dinh ----
-export const LEVEL_BY_KIND = Object.freeze({ rule: 1, inject: 2, skill: 2, code: 2, delete: 2, gate: 2 });
+export const LEVEL_BY_KIND = Object.freeze({ fix: 2, rule: 1, inject: 2, skill: 2, code: 2, delete: 2, gate: 2 });
 // Muc 0: cam tuyet doi (kem ke ca khi nguoi duyet qua hang: nguoi phai tu sua tay).
 const GATE_PATH = /(^|\/)(guard|approval|bash-guard|data-gate|model-policy)(\/|\.|-|$)|^harness\/(constrain|hooks)(\/|$)|^config\/(approval|guard|hub|model-policy|data-gate)/i;
 const FORBIDDEN_KIND = /^(push|deploy|publish|release)$/i;
@@ -40,6 +40,7 @@ function relTarget(t) {
 export function classifyChange(change = {}) {
   const kind = String(change.kind || '');
   if (FORBIDDEN_KIND.test(kind) || FORBIDDEN_TEXT.test(`${kind} ${change.text || ''}`)) return { level: 0, reason: 'cam: push/deploy' };
+  if (kind === 'fix') return { level: 2, reason: 'fix -> cho duyet (khong ghi file)' };
   const rel = relTarget(change.target);
   if (rel == null) return { level: 0, reason: `cam: dich ngoai repo harness (${String(change.target).slice(0, 60)})` };
   if (GATE_PATH.test(rel) || /^evolve\/(autopilot|review-queue)/i.test(rel)) return { level: 0, reason: `cam: cham guard/approval/bash-guard/data-gate/model-policy (${rel})` };
@@ -159,7 +160,7 @@ export async function runAutopilot(o = {}) {
     let auditCache = null; // doc audit MOT lan/lo cho baseline cua moi luat vua ap
     // shortcut: doc MOT lan toi da 1000 de xuat gan nhat (dung cho do + loai fp); vuot tran thi de xuat cu nhat roi khoi pham vi.
     const all = listProposals(o, 1000);
-    const pend = all.filter((p) => p.kind === 'rule' && p.status === 'applied');
+    const pend = all.filter((p) => p.status === 'applied' && (p.kind === 'rule' || p.target_metric)); // kind khac rule: chi do, khong rollback
     const blockOf = (p, effect) => { // ly do khong duoc tu rollback (null = duoc)
       if (!/^[A-Za-z0-9_.-]{1,80}$/.test(String(p.ver))) return 'ver khong hop le';
       const m = readJson(path.join(ctx(o).evo, 'versions', p.ver, 'manifest.json'), null);
@@ -177,13 +178,13 @@ export async function runAutopilot(o = {}) {
       if (wr(pf, { ...fresh, effect: e })) p.effect = e;
     };
     const due = pend.length ? measureDue(pend, nowMs, eo) : [];
-    const retry = pend.filter((p) => p.effect && p.effect.verdict === 'worse' && p.effect.rollback_error && (p.effect.rollback_attempts || 0) < RB_MAX).map((p) => ({ id: p.id, effect: p.effect }));
+    const retry = pend.filter((p) => p.kind === 'rule' && p.effect && p.effect.verdict === 'worse' && p.effect.rollback_error && (p.effect.rollback_attempts || 0) < RB_MAX).map((p) => ({ id: p.id, effect: p.effect }));
     for (const { id, effect } of [...due, ...retry]) {
       if (timeUp()) { res.errors.push('timeout'); break; }
       const p = pend.find((x) => x.id === id);
       const a = st.applied.find((x) => x.pid === id);
       const who = { ver: p.ver, fp: p.evidence && p.evidence.fp };
-      const roll = effect.action === 'rollback';
+      const roll = effect.action === 'rollback' && p.kind === 'rule';
       if (dry) { if (roll) { const why = whyNot(p, effect, a); if (why) res.refused.push({ entry: p.id, reason: why, dry: true }); else res.rolledBack.push({ ...who, reason: effect.reason, verdict: effect.verdict, dry: true }); } else if (effect.action === 'keep') res.kept.push({ ...who, verdict: effect.verdict, dry: true }); continue; }
       if (!record(p, effect)) continue;
       if (effect.action === 'keep') { res.kept.push({ ...who, verdict: effect.verdict }); if (a) a.status = 'kept'; continue; }
@@ -225,9 +226,10 @@ export async function runAutopilot(o = {}) {
     for (const e of todo) {
       if (timeUp()) { res.errors.push('timeout'); break; }
       const kind = e.evolve_kind || 'rule';
-      const target = e.evolve_target || null;
+      const target = kind === 'fix' ? null : (e.evolve_target || null);
+      const fixTarget = kind === 'fix' ? e.evolve_fix_target || null : null;
       const cand = scan.items.find((x) => x.fp === e.fp);
-      const guess = { kind, target: target || (cand ? `evolve/rules/evolve-${cand.id}.json` : 'evolve/rules/x.json'), text: `${e.message || ''}` };
+      const guess = { kind, target: kind === 'fix' ? (fixTarget && fixTarget.path) || null : target || (cand ? `evolve/rules/evolve-${cand.id}.json` : 'evolve/rules/x.json'), text: `${e.message || ''}` };
       const cl = classifyChange(guess);
       if (cl.level === 0) { res.refused.push({ entry: e.id, reason: cl.reason }); notes.set(e.id, { status: 'refused', reason: cl.reason }); continue; }
       const toQueue = cl.level === 2 || cfg.autonomy < 1;
@@ -237,10 +239,10 @@ export async function runAutopilot(o = {}) {
       if (st.week.proposals >= 10 * cfg.maxProposals) break;
       st.week.proposals++;
       let p = null;
-      if (cand && ['rule', 'inject', 'skill'].includes(kind)) {
-        try { p = await propose(cand.id, { ...o, kind, ...(target ? { target } : {}) }); } catch (err) { res.errors.push(`${e.id}: ${err.message}`); continue; }
+      if (cand && ['rule', 'inject', 'skill', 'fix'].includes(kind)) {
+        try { p = await propose(cand.id, { ...o, kind, ...(target ? { target } : {}), ...(fixTarget ? { fixTarget } : {}) }); } catch (err) { res.errors.push(`${e.id}: ${err.message}`); continue; }
         if (p.status === 'blocked') { res.refused.push({ entry: e.id, reason: p.policy.reason }); notes.set(e.id, { status: 'refused', reason: p.policy.reason }); continue; }
-        const ck = check(p.id, o); if (!ck.check.ok) { res.refused.push({ entry: e.id, reason: ck.check.reason }); notes.set(e.id, { status: 'refused', reason: ck.check.reason }); continue; }
+        const ck = kind === 'fix' ? { check: { ok: true } } : check(p.id, o); if (!ck.check.ok) { res.refused.push({ entry: e.id, reason: ck.check.reason }); notes.set(e.id, { status: 'refused', reason: ck.check.reason }); continue; }
       }
       if (!toQueue && p) {
         // Ghi moc 'applying' (fp, dich, count truoc) vao state TRUOC khi apply: crash giua chung van con moc de rollback/hoan tat.
@@ -254,7 +256,7 @@ export async function runAutopilot(o = {}) {
         if (!save()) { res.errors.push(`${p.id}: da ap (ver ${r.ver}) nhung chua luu moc 'applied'; lan chay sau se hoan tat tu moc applying`); }
         res.applied.push({ ...plan, ver: r.ver, target: r.target }); notes.set(e.id, { status: 'applied', ver: r.ver });
       } else {
-        const item = { id: `q_${e.fp.replace(/[^A-Za-z0-9]+/g, '').slice(0, 12)}_${kind}`, pid: p && p.id, fp: e.fp, entry_id: e.id, kind, level: 2, target: p ? p.change.target : target, after_sha: p ? p.change.after_sha : null, reason: cl.reason, ts: new Date(nowMs).toISOString(), status: 'pending' };
+        const item = { id: `q_${e.fp.replace(/[^A-Za-z0-9]+/g, '').slice(0, 12)}_${kind}`, pid: p && p.id, fp: e.fp, entry_id: e.id, kind, level: 2, target: p ? (p.change.target || (p.change.fix_target && p.change.fix_target.path) || null) : target, after_sha: p ? p.change.after_sha : null, reason: cl.reason, ts: new Date(nowMs).toISOString(), status: 'pending' };
         if (queue.length < cfg.maxQueue && !queue.some((q) => q.id === item.id && q.status === 'pending')) queue.push(item);
         res.queued.push({ ...plan, id: item.id }); notes.set(e.id, { status: 'queued', reason: item.reason, queue: item.id });
       }
@@ -312,7 +314,7 @@ export async function queueOp(o = {}) {
   if (!ok) return { code: 1, reason: 'khong dong y' };
   let out = { manual: true };
   if (!isTestEnv() && !(o.isTTY ?? process.stdin.isTTY)) return { code: 2, reason: 'queue --approve: can TTY de ap dung muc 2' };
-  if (q.pid) { const r = apply(q.pid, { ...o, approve: true }); if (!r.ok) return { code: r.code || 1, reason: r.reason }; out = { ver: r.ver, target: r.target }; }
+  if (q.pid && q.kind !== 'fix') { const r = apply(q.pid, { ...o, approve: true }); if (!r.ok) return { code: r.code || 1, reason: r.reason }; out = { ver: r.ver, target: r.target }; }
   q.status = 'approved'; q.decided = new Date().toISOString(); if (out.ver) q.ver = out.ver; save();
   return { code: 0, id, status: 'approved', ...out };
 }

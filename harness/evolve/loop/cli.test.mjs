@@ -84,3 +84,10 @@ test('evolve list co cot verdict (trong neu chua do); evolve log hien dong effec
   expect(g.summary).toMatch(/effect .*worse\/rollback/);
   fs.rmSync(data, { recursive: true, force: true });
 });
+
+test('parseArgs: --manual-done, --fix-target area:path', () => {
+  const o = parseArgs(['propose', 'c1', '--kind', 'fix', '--fix-target', 'brief:.claude/agents/builder.md']);
+  expect(o.fixTarget).toEqual({ area: 'brief', path: '.claude/agents/builder.md' });
+  expect(parseArgs(['apply', 'p1', '--manual-done']).manualDone).toBe(true);
+  expect(() => parseArgs(['propose', 'c1', '--fix-target', 'khongco'])).toThrow();
+});

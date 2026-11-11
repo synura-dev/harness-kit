@@ -395,3 +395,45 @@ test('apply rule chup baseline.effect; kind khac khong co', async () => {
   expect(apply(ps.id, { ...o, approve: true }).ok).toBe(true);
   expect(JSON.parse(fs.readFileSync(pjson(ps.id), 'utf8')).effect).toBeUndefined();
 });
+
+test('kind fix: chi hang doi, khong ghi file, apply can --manual-done', async () => {
+  const cid = await candId('aaaaaaaaaa');
+  const snap = () => fs.readdirSync(tmp, { recursive: true }).filter((n) => !String(n).startsWith('data')).sort();
+  const before = snap();
+  const p = await propose(cid, { ...o, kind: 'fix', fixTarget: { area: 'brief', path: '.claude/agents/builder.md' } });
+  expect(p.status).toBe('proposed');
+  expect(p.change.target).toBeNull();
+  expect(p.change.fix_target).toEqual({ area: 'brief', path: '.claude/agents/builder.md' });
+  expect(p.target_metric.window_days).toBe(7);
+  expect(p.target_metric.fp).toBe(FP.get('aaaaaaaaaa'));
+  const r = apply(p.id, { ...o, approve: true });
+  expect(r.ok).toBe(false);
+  expect(JSON.parse(fs.readFileSync(pjson(p.id), 'utf8')).status).toBe('proposed');
+  expect(fs.existsSync(path.join(hub, '.claude'))).toBe(false);
+  const r2 = apply(p.id, { ...o, manualDone: true });
+  expect(r2.ok).toBe(true);
+  const saved = JSON.parse(fs.readFileSync(pjson(p.id), 'utf8'));
+  expect(saved.status).toBe('applied');
+  expect(saved.applied_at).toBeTruthy();
+  expect(fs.existsSync(path.join(hub, '.claude'))).toBe(false);
+  expect(snap()).toEqual(before);
+  await expect(propose(cid, { ...o, kind: 'fix' })).rejects.toThrow(/fixTarget/);
+});
+
+test('kind fix: da ton tai khong ghi de; manual-done tu choi khi rejected/applied; khong co baseline_value', async () => {
+  const cid = await candId('dddddddddd');
+  const ft = { area: 'hook', path: 'harness/hooks/x.mjs' };
+  const p = await propose(cid, { ...o, kind: 'fix', fixTarget: ft });
+  expect(p.target_metric.baseline_value).toBeUndefined();
+  const f = pjson(p.id);
+  const mt = fs.statSync(f).mtimeMs, txt = fs.readFileSync(f, 'utf8');
+  await expect(propose(cid, { ...o, kind: 'fix', fixTarget: ft })).rejects.toThrow(/ton tai/);
+  expect(fs.readFileSync(f, 'utf8')).toBe(txt);
+  expect(fs.statSync(f).mtimeMs).toBe(mt);
+  const j = JSON.parse(txt); j.status = 'rejected'; fs.writeFileSync(f, JSON.stringify(j));
+  expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(false);
+  expect(JSON.parse(fs.readFileSync(f, 'utf8')).status).toBe('rejected');
+  j.status = 'approved'; fs.writeFileSync(f, JSON.stringify(j));
+  expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(true);
+  expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(false);
+});

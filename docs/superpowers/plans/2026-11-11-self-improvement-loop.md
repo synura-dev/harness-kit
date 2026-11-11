@@ -46,10 +46,10 @@
 
 ### Task 4: Evolve kind `fix` + do hieu qua tong quat (C1) (RED/GREEN)
 **Files:** `harness/evolve/loop/loop.mjs`, `harness/evolve/loop/autopilot.mjs`, `harness/evolve/loop/effect.mjs`, cac `.test.mjs` canh 3 file do.
-- [ ] Test do: `propose(cid, {kind:'fix', fixTarget:{area:'brief', path:'.claude/agents/builder.md'}})` tao proposal `status: proposed`, `change.target: null`, khong ghi file nao, co `target_metric.baseline_value`; `apply` kind fix KHONG ghi dich, chi doi status khi co co `--manual-done`; autopilot xep fix vao review-queue (level 2), khong bao gio auto-apply; `measureDue` do proposal fix applied, verdict ghi vao proposal, khong rollback.
-- [ ] Sua: `KINDS` them `fix`; `buildChange` nhanh fix (khong qua `classifyTarget`, vi khong ghi file); `LEVEL_BY_KIND.fix = 2`; `measureDue` loc `status==='applied' && (kind==='rule' || p.target_metric)`; rollback tu dong van chi cho rule autopilot.
-- [ ] Test cu cua loop/autopilot/effect van xanh.
-- [ ] Commit `evolve: kind fix (chi hang doi) + do hieu qua moi de xuat co target_metric`.
+- [x] Test do: `propose(cid, {kind:'fix', fixTarget:{area:'brief', path:'.claude/agents/builder.md'}})` tao proposal `status: proposed`, `change.target: null`, khong ghi file nao, co `target_metric.baseline_value`; `apply` kind fix KHONG ghi dich, chi doi status khi co co `--manual-done`; autopilot xep fix vao review-queue (level 2), khong bao gio auto-apply; `measureDue` do proposal fix applied, verdict ghi vao proposal, khong rollback.
+- [x] Sua: `KINDS` them `fix`; `buildChange` nhanh fix (khong qua `classifyTarget`, vi khong ghi file); `LEVEL_BY_KIND.fix = 2`; `measureDue` loc `status==='applied' && (kind==='rule' || p.target_metric)`; rollback tu dong van chi cho rule autopilot.
+- [x] Test cu cua loop/autopilot/effect van xanh.
+- [x] Commit `evolve: kind fix (chi hang doi) + do hieu qua moi de xuat co target_metric`.
 **Done-when:** `timeout 180 node --test harness/evolve/loop/loop.test.mjs harness/evolve/loop/autopilot.test.mjs harness/evolve/loop/effect.test.mjs` -> `# fail 0` (builder Glob ten file test thuc neu khac).
 
 ### Task 5: Tu ha cap rule evolve vo ich (C2) (RED/GREEN)
