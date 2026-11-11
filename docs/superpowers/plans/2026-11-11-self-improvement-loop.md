@@ -76,11 +76,11 @@
 
 ### Task 8: `harness evolve retro` + nguong tu kiem (D + F3) (RED/GREEN) - sau T1-T7
 **Files:** tao `harness/evolve/loop/retro.mjs`, `harness/evolve/loop/retro.test.mjs`; sua CLI evolve va `manifest.json` cua domain evolve (builder Glob `harness/evolve/**/cli*.mjs`, `harness/evolve/**/manifest.json`); sua `harness/observe/report/run.mjs` HOAC `harness/observe/ledger/job.mjs` (mot cho kich, guard isoWeek).
-- [ ] Test do (data dir tam): retro ghi `<week>.json|md` + append series; top-3 van de co `key` on dinh; bang hieu qua thay doi; 2 tuan lien selfdev `flat|worse` -> 1 task `[P0] self-improvement stalled: ...` trong ke hoach emit; `--apply` goi runner (stub) toi da 3 + 1 P0/tuan, dedupe qua `emitted.json`; khong `--apply` -> khong goi runner; runner loi/timeout -> van ghi bao cao (fail-open); het `timeoutS` -> `truncated: 'timeout'`.
-- [ ] Viet `retro({ apply, nowMs, dataDir, runner })` theo spec 4.6; runner mac dinh `spawnSync(process.execPath, [cli, 'projects', 'add-task', ...], {timeout: 10000})` va `knowledge add` (co flag thuc kiem bang `harness knowledge --help` neu co, nguoc lai chi in).
-- [ ] CLI `harness evolve retro [--apply] [--json]` + dang ky manifest (limit/timeout, `--raw`).
-- [ ] Kich tu dong 1 lan/isoWeek, KHONG `--apply` tru khi config `retro.autoApply: true`.
-- [ ] Commit `evolve: retro hang tuan, chuoi thoi gian, nguong tu kiem P0`.
+- [x] Test do (data dir tam): retro ghi `<week>.json|md` + append series; top-3 van de co `key` on dinh; bang hieu qua thay doi; 2 tuan lien selfdev `flat|worse` -> 1 task `[P0] self-improvement stalled: ...` trong ke hoach emit; `--apply` goi runner (stub) toi da 3 + 1 P0/tuan, dedupe qua `emitted.json`; khong `--apply` -> khong goi runner; runner loi/timeout -> van ghi bao cao (fail-open); het `timeoutS` -> `truncated: 'timeout'`.
+- [x] Viet `retro({ apply, nowMs, dataDir, runner })` theo spec 4.6; runner mac dinh `spawnSync(process.execPath, [cli, 'projects', 'add-task', ...], {timeout: 10000})` va `knowledge add` (co flag thuc kiem bang `harness knowledge --help` neu co, nguoc lai chi in).
+- [x] CLI `harness evolve retro [--apply] [--json]` + dang ky manifest (limit/timeout, `--raw`).
+- [x] Kich tu dong 1 lan/isoWeek, KHONG `--apply` tru khi config `retro.autoApply: true`.
+- [x] Commit `evolve: retro hang tuan, chuoi thoi gian, nguong tu kiem P0`.
 **Done-when:** `timeout 180 node --test harness/evolve/loop/retro.test.mjs` -> `# fail 0`; `timeout 60 node harness/cli/harness.mjs evolve retro --json` tren data dir tam tra JSON co `kpi`, `trend`, `selfdev`, `issues`.
 
 ### Task 9: Docs + full suite mot lan (sau T8)

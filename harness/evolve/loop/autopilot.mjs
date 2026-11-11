@@ -236,6 +236,13 @@ export async function runAutopilot(o = {}) {
       if (!cand && !target) { res.errors.push(`${e.id}: khong co candidate cho fp (het hieu luc?)`); continue; }
       const plan = { entry: e.id, fp: e.fp, kind, level: toQueue ? 2 : cl.level };
       if (dry) { res.planned.push(plan); continue; }
+      // kind fix: de xuat p_<cid>_fix da ton tai (vd da duyet khoi hang, cho nguoi sua tay) -> khong de xuat lai moi ngay, khong tinh vao tran tuan.
+      const exFix = kind === 'fix' && cand ? all.find((x) => x.id === `p_${cand.id}_fix`) : null;
+      if (exFix) {
+        const rej = exFix.status === 'rejected' || queue.some((q) => q.pid === exFix.id && q.status === 'rejected');
+        notes.set(e.id, rej ? { status: 'refused', reason: `fix ${exFix.id} da bi tu choi` } : { status: 'queued', reason: `fix ${exFix.id} da ton tai, cho nguoi sua tay` });
+        continue;
+      }
       if (st.week.proposals >= 10 * cfg.maxProposals) break;
       st.week.proposals++;
       let p = null;
