@@ -133,6 +133,8 @@ export function segment(events, opts = {}) {
     const e = evs[i];
     let st = cur.get(e.sid);
     if (e.event === 'UserPromptSubmit' || e.type === 'prompt') {
+      // agy ban UserPromptSubmit moi invocation (khong prompt_kw) trong cung luot: chua co Stop thi van la cung doan (khong te vun token)
+      if (st && e.cli === 'agy' && !st.stopTs) { st.hasPrompt = true; st.last = e.ts || st.last; continue; }
       let prev = null, prevEnd = NaN;
       if (st) { close(st); prev = st.carry; prevEnd = st.carryEnd; }
       st = open(e.sid, e, prev, prevEnd, true);
