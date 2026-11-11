@@ -199,4 +199,23 @@ test('derived: derive khong ton tai -> rong + empty_note, khong throw', () => {
 test('derived: derive throw -> fail-open, error derive_failed', () => {
   const r = evaluateSection(dsec, { events: [], derived: { x: () => { throw new Error('boom'); } } }, { nowMs: NOW });
   assert.equal(r.rows.length, 0); assert.equal(r.error, 'derive_failed');
+  assert.match(renderSection(r), /_error: derive_failed_/);
+});
+test('derived: compare prev_window khong goi derive nhieu lan; deadline truyen vao; truncated lan ra', () => {
+  let calls = 0; let seen;
+  const derived = { x: (a) => { calls++; seen = a; return { rows: [{ k: 'a', v: 1 }], truncated: 'timeout' }; } };
+  const r = evaluateSection({ ...dsec, window_days: 7, compare: 'prev_window' }, { events: [ev({})], derived }, { nowMs: NOW });
+  assert.equal(calls, 1); assert.ok(seen.deadline > Date.now() - 1000); assert.equal(r.truncated, 'timeout'); assert.equal(r.prev, null);
+});
+test('derived: Promise bi tu choi ro rang', () => {
+  const r = evaluateSection(dsec, { events: [], derived: { x: async () => [{ k: 'a', v: 1 }] } }, { nowMs: NOW });
+  assert.equal(r.rows.length, 0); assert.equal(r.error, 'derive_async_unsupported');
+});
+test('kpi co group_by in moi dong kem key; sum bo dong v null', () => {
+  const derived = { x: () => [{ k: 'a', v: 2 }, { k: 'b', v: 5 }, { k: 'c', v: null }] };
+  const out = renderSection(evaluateSection(dsec, { events: [], derived }, { nowMs: NOW }));
+  assert.match(out, /a/); assert.match(out, /b/); assert.match(out, /\*\*v\*\*|sum:v/);
+  const r = evaluateSection(dsec, { events: [], derived }, { nowMs: NOW });
+  assert.deepEqual(kpiSnapshot(r), { b: 5, a: 2 });
+  assert.equal(r.rows.find((x) => x.key === 'c'), undefined);
 });

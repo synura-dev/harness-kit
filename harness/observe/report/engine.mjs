@@ -55,7 +55,7 @@ export function loadSections({ defaultsDir = DEFAULTS_DIR, projectDir = null, ti
 
 // ---- ban ghi chuan hoa ----
 const dig = (o, p) => String(p).split('.').reduce((x, k) => (x == null ? undefined : x[k]), o);
-const num = (v) => { const n = Array.isArray(v) ? Number(v[v.length - 1]) : Number(v); return Number.isFinite(n) ? n : null; };
+const num = (v) => { if (v == null) return null; const n = Array.isArray(v) ? Number(v[v.length - 1]) : Number(v); return Number.isFinite(n) ? n : null; };
 /** gia tri so tu danh sach truong 'a|b.c' (lay truong dau co gia tri). */
 // 'a|b' = truong dau co gia tri; 'a+b' = tong cac truong co gia tri (null neu khong co truong nao).
 function numField(get, spec) {
@@ -101,7 +101,7 @@ function colValue(col, A, M, win) {
       return lacking.size ? M.filter((r) => lacking.has(r.sid)).length / lacking.size : null;
     }
     case 'per_1000': return win.events ? (cnt / win.events) * 1000 : null;
-    case 'sum': return M.reduce((s, r) => s + (numField(r.get, arg) || 0), 0);
+    case 'sum': { if (win.derived) { const v = M.map((r) => numField(r.get, arg)).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) : null; } return M.reduce((s, r) => s + (numField(r.get, arg) || 0), 0); }
     case 'last': { let best = null; for (const r of M) { const v = r.get(arg); const x = Array.isArray(v) ? v[v.length - 1] : v; if (x != null && (best == null || String(x) > String(best))) best = x; } return best; }
     case 'task_done_rate': { const t = (win.projTasks || []).filter((x) => x && x.status !== 'cancelled'); return t.length ? t.filter((x) => x.status === 'completed').length / t.length : null; } // task tu ext projects, trong cua so theo modified
     case 'rate': { if (!M.length) return null; return M.filter((r) => matchFilter(r.get, col.rate_filter || {}, win.ctx)).length / M.length; }
@@ -115,7 +115,7 @@ export function computeSection(def, inputs, ctx = {}) {
   const gb = Array.isArray(def.group_by) && def.group_by.length ? def.group_by : null;
   const keyOf = (r) => (gb ? gb.map((k) => String(r.get(k) ?? '-')).join('|') : 'all');
   const events = (inputs.events || []);
-  const win = { audit: def.source === 'audit', ctx, events: events.length,
+  const win = { audit: def.source === 'audit', derived: def.source === 'derived', ctx, events: events.length,
     sessions: new Set(events.map((r) => r && (r.sid || r.session_id)).filter(Boolean)).size,
     tasks: new Set(events.map((r) => r && taskOf(r)).filter(Boolean)).size, projTasks: inputs.projTasks };
   const cols = columns(def);
@@ -130,11 +130,13 @@ export function computeSection(def, inputs, ctx = {}) {
   const rows = [];
   for (const [key, g] of groups) {
     if (!g.M.some((m) => m.length)) continue;
-    rows.push({ key, vals: cols.map((c, i) => colValue(c, g.A, g.M[i], win)) });
+    const vals = cols.map((c, i) => colValue(c, g.A, g.M[i], win));
+    if (win.derived && vals.every((v) => v == null)) continue; // dong thieu gia tri khong tinh thanh 0
+    rows.push({ key, vals });
   }
   const primary = (r) => (typeof r.vals[0] === 'number' ? r.vals[0] : -Infinity);
   rows.sort((a, b) => primary(b) - primary(a) || a.key.localeCompare(b.key));
-  return { cols: cols.map((c) => c.as), rows: rows.slice(0, Math.min(def.limit > 0 ? def.limit : 50, LIMITS.maxRows)), total: rows.length, ...(inputs.derivedError ? { error: inputs.derivedError } : {}) };
+  return { cols: cols.map((c) => c.as), rows: rows.slice(0, Math.min(def.limit > 0 ? def.limit : 50, LIMITS.maxRows)), total: rows.length, ...(inputs.derivedError ? { error: inputs.derivedError } : {}), ...(inputs.derivedTruncated ? { truncated: inputs.derivedTruncated } : {}) };
 }
 
 const inWin = (ts, from, to) => { const t = Date.parse(ts); return Number.isFinite(t) ? t >= from && t < to : false; };
@@ -151,7 +153,14 @@ export function windowInputs(def, all, from, to, nowIso) {
   // derived: producer do all.derived[def.derive] cap; thieu/throw -> rong (fail-open), throw ghi error.
   if (def.source === 'derived') {
     const fn = all.derived && all.derived[def.derive];
-    if (typeof fn === 'function') { try { const r = fn({ events, from, to }); inputs.derivedRows = Array.isArray(r) ? r : []; } catch { inputs.derivedError = 'derive_failed'; } }
+    // fn({events,from,to,deadline}) -> rows | {rows, truncated}; dong bo (Promise bi tu choi); producer tu kiem deadline va tra truncated.
+    if (typeof fn === 'function') {
+      try {
+        const r = fn({ events, from, to, deadline: Date.now() + LIMITS.timeoutMs });
+        if (r && typeof r.then === 'function') { r.then(null, () => {}); inputs.derivedError = 'derive_async_unsupported'; }
+        else { inputs.derivedRows = Array.isArray(r) ? r : r && Array.isArray(r.rows) ? r.rows : []; if (r && r.truncated) inputs.derivedTruncated = r.truncated; }
+      } catch { inputs.derivedError = 'derive_failed'; }
+    }
   }
   return inputs;
 }
@@ -168,7 +177,7 @@ export function evaluateSection(def, all, { nowMs = Date.now(), ctx = {}, avgOf 
   const nowIso = new Date(nowMs).toISOString();
   const cur = computeSection(def, windowInputs(def, all, from, to, nowIso), { ...ctx, nowMs });
   const out = { def, ...cur, prev: null, avg: null, w, k: avgOf, base: null, note: null };
-  if (def.compare === "prev_window" && w && ["all", "prev", "avg"].includes(compare)) {
+  if (def.compare === "prev_window" && w && def.source !== 'derived' && ["all", "prev", "avg"].includes(compare)) {
     // prev = cua so lien truoc; avg = trung binh toi da avgOf cua so truoc. Ky rong / ngoai dai du lieu da doc / gia tri null bi bo khoi mau so.
     const tsList = (all.events || []).map((e) => Date.parse(e && e.ts)).filter(Number.isFinite);
     const dataStart = tsList.length ? tsList.reduce((a, b) => Math.min(a, b)) : null;
@@ -200,6 +209,7 @@ export const kpiSnapshot = (res) => Object.fromEntries(res.rows.filter((r) => ty
 export function renderSection(res) {
   const { def } = res; const fmt = def.format || 'table';
   const L = [`## ${def.title || def.id}`];
+  if (res.error) L.push(`_error: ${res.error}_`);
   if (!res.rows.length) { L.push(`_${res.note}_`, ''); return L.join('\n'); }
   const nm = winNames(res.w || 7, res.n != null && res.n < res.k ? `${res.n}/${res.k}` : res.k);
   if (fmt === 'list') {
@@ -207,8 +217,8 @@ export function renderSection(res) {
     L.push(''); return L.join('\n');
   }
   if (fmt === 'kpi') {
-    const r = res.rows[0];
-    r.vals.forEach((v, i) => L.push(`- **${res.cols[i]}**: ${R(v)}${i === 0 && res.prev ? ` (${nm.prev} ${R(res.prev[r.key])}, ${dlt(v, res.prev[r.key])})` : ''}${i === 0 && res.avg ? ` (${nm.avg} ${R(res.avg[r.key])}, ${dlt(v, res.avg[r.key])})` : ''}${i === 0 && res.base ? ` (baseline ${R(res.base[r.key])}, ${dlt(v, res.base[r.key])})` : ''}`));
+    const gb = Array.isArray(def.group_by) && def.group_by.length;
+    for (const r of gb ? res.rows : [res.rows[0]]) r.vals.forEach((v, i) => L.push(`- ${gb ? r.key + ' ' : ''}**${res.cols[i]}**: ${R(v)}${i === 0 && res.prev ? ` (${nm.prev} ${R(res.prev[r.key])}, ${dlt(v, res.prev[r.key])})` : ''}${i === 0 && res.avg ? ` (${nm.avg} ${R(res.avg[r.key])}, ${dlt(v, res.avg[r.key])})` : ''}${i === 0 && res.base ? ` (baseline ${R(res.base[r.key])}, ${dlt(v, res.base[r.key])})` : ''}`));
     if (res.note) L.push(`_${res.note}_`);
     L.push(''); return L.join('\n');
   }
