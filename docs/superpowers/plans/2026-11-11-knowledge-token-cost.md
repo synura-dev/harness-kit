@@ -50,12 +50,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/observe/report/cost-contract.mjs`
 - Test: `harness/observe/report/cost-contract.test.mjs`
 
-- [ ] Export `LIMITS = {maxEvents: 200000, maxSegments: 5000, maxProblems: 2000, timeoutMs: 15000, lookbackDays: 28, indexTtlDays: 90, cacheReadWeight: 0.1, minSide: 3, maxDupPairs: 50, maxBlocks: 3000}`.
-- [ ] Export `emptySegment()`, `effTokens(t)` = `input + cache_creation + output + cacheReadWeight*cache_read`, `median(arr)` (rỗng -> null), `foldText(s)` (lowercase, `đ->d`, NFD bỏ dấu, gộp khoảng trắng) - dùng chung cho D/E.
-- [ ] Shape Segment (JSDoc): `{sid, start_ts, end_ts, prompt_kw, keys:{task,plan,branch,fp,kw}, problem, precision, family, tokens:{input,output,cache_read,cache_creation}, eff_tokens, turns, tools, fetches, kfetch:[ids], wall_ms, sub_tokens}`.
-- [ ] Test: effTokens, median chẵn/lẻ/rỗng, foldText ("Đường dẫn" -> "duong dan").
-- [ ] Done-when: `timeout 30 bun test harness/observe/report/cost-contract.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Export `LIMITS = {maxEvents: 200000, maxSegments: 5000, maxProblems: 2000, timeoutMs: 15000, lookbackDays: 28, indexTtlDays: 90, cacheReadWeight: 0.1, minSide: 3, maxDupPairs: 50, maxBlocks: 3000}`.
+- [x] Export `emptySegment()`, `effTokens(t)` = `input + cache_creation + output + cacheReadWeight*cache_read`, `median(arr)` (rỗng -> null), `foldText(s)` (lowercase, `đ->d`, NFD bỏ dấu, gộp khoảng trắng) - dùng chung cho D/E.
+- [x] Shape Segment (JSDoc): `{sid, start_ts, end_ts, prompt_kw, keys:{task,plan,branch,fp,kw}, problem, precision, family, tokens:{input,output,cache_read,cache_creation}, eff_tokens, turns, tools, fetches, kfetch:[ids], wall_ms, sub_tokens}`.
+- [x] Test: effTokens, median chẵn/lẻ/rỗng, foldText ("Đường dẫn" -> "duong dan").
+- [x] Done-when: `timeout 30 bun test harness/observe/report/cost-contract.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 2: Engine source `derived`
 
