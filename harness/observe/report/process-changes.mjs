@@ -8,7 +8,7 @@ const DAY = 86400000;
 const REPEAT_DAYS = 14;
 
 /** Tuan ISO 'YYYY-Www' (UTC). */
-export function isoWeek(ms) {
+function weekKey(ms) {
   const d = new Date(ms); d.setUTCHours(0, 0, 0, 0);
   d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay() || 7));
   const y = d.getUTCFullYear();
@@ -32,7 +32,7 @@ export function processChanges({ projectDir, sinceDays = 28, paths, timeoutMs = 
   let out;
   try {
     const since = new Date(nowMs - sinceDays * DAY).toISOString();
-    const r = spawnSync('git', ['-c', `safe.directory=${projectDir}`, '-C', projectDir, 'log', `--since=${since}`, '-n', String(maxCommits + 1), '--name-only', '--format=%x01%H%x09%cI'], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
+    const r = spawnSync('git', ['-c', `safe.directory=${projectDir}`, '-c', 'core.quotePath=false', '-C', projectDir, 'log', `--since=${since}`, '-n', String(maxCommits + 1), '--name-only', '--format=%x01%H%x09%cI', '--', ...want], { encoding: 'utf8', timeout: timeoutMs, maxBuffer: 4 * 1024 * 1024, windowsHide: true });
     if (r.error || r.status !== 0) return none;
     out = r.stdout;
   } catch { return none; }
@@ -47,8 +47,8 @@ export function processChanges({ projectDir, sinceDays = 28, paths, timeoutMs = 
   for (const c of commits) {
     const fs_ = c.files.filter((f) => inPaths(f, want));
     if (!fs_.length) continue;
-    const wk = weeks.get(isoWeek(c.ts)) || { changes: 0, files: new Set() };
-    wk.changes++; fs_.forEach((f) => wk.files.add(f)); weeks.set(isoWeek(c.ts), wk);
+    const wk = weeks.get(weekKey(c.ts)) || { changes: 0, files: new Set() };
+    wk.changes++; fs_.forEach((f) => wk.files.add(f)); weeks.set(weekKey(c.ts), wk);
     for (const f of fs_) { const e = files.get(f) || { path: f, edits: 0, last_ts: 0, recent: 0 }; e.edits++; e.last_ts = Math.max(e.last_ts, c.ts); if (c.ts >= nowMs - REPEAT_DAYS * DAY) e.recent++; files.set(f, e); }
   }
   return {
@@ -62,5 +62,6 @@ export function processChanges({ projectDir, sinceDays = 28, paths, timeoutMs = 
 /** Hang cho report engine (nguon `process`): changes/tuan + file sua lap. */
 export function processRows(pc) {
   if (!pc) return undefined;
-  return [...(pc.weeks || []).map((w) => ({ label: `thay doi ${w.week}`, n: w.changes })), ...(pc.repeat || []).map((r) => ({ label: `lap ${r.path}`, n: r.edits }))];
+  const note = pc.truncated && pc.truncated !== 'no_git' ? [{ label: `(cat: ${pc.truncated})`, n: 0 }] : [];
+  return [...note, ...(pc.weeks || []).map((w) => ({ label: `thay doi ${w.week}`, n: w.changes })), ...(pc.repeat || []).map((r) => ({ label: `lap ${r.path}`, n: r.edits }))];
 }
