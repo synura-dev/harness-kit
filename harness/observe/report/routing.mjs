@@ -36,7 +36,7 @@ function classify(evs, agentType, pol, riskRx) {
       if (e.tool === 'Write' && ft.some((f) => PLAN_RE.test(f))) plan = true;
     }
     if (e.tool === 'Bash' && TEST_RE.test(String(e.target || ''))) test = true;
-    if (ft.some((f) => riskRx.test(f))) risk = true;
+    if (ft.some((f) => riskRx.test(f.slice(0, 512)))) risk = true;
   }
   const webMain = web >= 3 || (posts.length > 0 && web / posts.length > 0.5);
   let cls = 'read_small';
@@ -54,14 +54,14 @@ function classify(evs, agentType, pol, riskRx) {
 const expectedMode = (cls, risk, pol) => {
   for (const [name, b] of Object.entries(pol.backends)) if (b.classes.includes(cls)) return name;
   const k = cls === 'review' && risk ? 'review_risk' : cls;
-  return k in pol.expected ? pol.expected[k] : 'haiku';
+  return Object.hasOwn(pol.expected, k) ? pol.expected[k] : 'haiku';
 };
 
 /** Loai lech chinh (1 / don vi) cho mode thuc te `act` (haiku|sonnet|opus) so voi ky vong `exp`; null = dung. */
 function modelMiss(exp, act, cls, pol) {
   if (exp == null) return null;
-  if (pol.backends[exp]) return `missed_${exp}`;
-  const price = (f) => pol.prices[f] ?? null;
+  if (Object.hasOwn(pol.backends, exp)) return `missed_${exp}`;
+  const price = (f) => (Object.hasOwn(pol.prices, f) ? pol.prices[f] : null);
   if (act === 'opus' && cls === 'review') return null; // opus la mac dinh an toan cho review (cuoi dot): bao trung tinh review_opus_share
   if (act === 'opus' && exp !== 'opus') return 'overuse_opus';
   if (exp === 'haiku' && act === 'sonnet') return 'underuse_haiku';
@@ -75,7 +75,7 @@ function modelMiss(exp, act, cls, pol) {
  */
 export function routing({ events = [], segments = [], from = 0, to = 0, deadline, limits, hubDir = null, policy = DEFAULT_POLICY, policySource = 'default' } = {}) {
   const pol = policy, riskRx = new RegExp(pol.riskRe, 'i');
-  const price = (f) => pol.prices[f] ?? null;
+  const price = (f) => (Object.hasOwn(pol.prices, f) ? pol.prices[f] : null);
   const bnames = Object.keys(pol.backends);
   const MISS_ORDER = ['missed_external', ...bnames.map((b) => `missed_${b}`), ...MISS_REST];
   // backend ngoai cua mot segment: audit cli thuoc policy.backends (khac claude), du phong tien to sid `<cli>-`
@@ -151,7 +151,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
     const c = classify(evsU, null, pol, riskRx);
     const u = { src: isAgy ? 'agy' : 'main', backend: bk, sid: s.sid, cls: c.cls, exp: expectedMode(c.cls, c.risk, pol), act: isAgy ? bk : 'main', eff: isAgy && !s.eff_tokens ? null : (s.eff_tokens || 0), wall: s.wall_ms || null, fail: c.fail, calls: c.calls, miss: null, unknown: false, problem: s.problem || null, start: s.start_ts, end: s.end_ts, write: evsU.some((e) => e.event === 'PostToolUse' && WRITE.has(e.tool)), model: x.model };
     if (!isAgy) {
-      if (pol.backends[u.exp]) u.miss = `missed_${u.exp}`;
+      if (Object.hasOwn(pol.backends, u.exp)) u.miss = `missed_${u.exp}`;
       else if ((c.reads >= 3 || c.chars > pol.thresholds.overreadChars) && !x.pre && inHub(evsU)) u.miss = 'main_overread';
       else if (c.legacy) u.unknown = true;
     }
@@ -165,7 +165,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
   for (const u of known) {
     if (!u.miss) continue;
     cnt[u.miss]++;
-    const isBk = u.miss.startsWith('missed_') && pol.backends[u.miss.slice(7)];
+    const isBk = u.miss.startsWith("missed_") && Object.hasOwn(pol.backends, u.miss.slice(7));
     if (isBk) cnt.missed_external++;
     let ex = 0, ub = 0;
     if (isBk) ub = u.eff || 0; // can tren (khong tach duoc token cua luot web): rieng, KHONG cong vao excess_cost_share
@@ -209,7 +209,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
     { k: 'claude_cost_per_problem', v: cpp(claudeSegs) },
     { k: 'claude_error_rate', v: err(claudeU) },
   ];
-  return { rows, agy, misses, byClass, unit: 'eff_tokens', rawDispatch: known.filter((u) => u.src === 'dispatch' && u.eff == null).length, unmatchedStarts, units: units.length, unknown: units.filter((u) => u.src !== 'agy' && u.unknown).length, agyNote: 'external backend cost: tokens, unpriced', policySource, truncated };
+  return { rows, agy, misses, byClass, unit: 'eff_tokens', rawDispatch: known.filter((u) => u.src === 'dispatch' && u.eff == null).length, unmatchedStarts, units: units.length, unknown: units.filter((u) => u.src !== 'agy' && u.unknown).length, agyNote: 'external backend cost: tokens, unpriced', policySource, backendLabels: bnames.map((b) => `${b}=${pol.backends[b].label}`).join(", "), truncated };
 }
 
 // Cache theo (from,to) trong a.memo: 3 section dung chung 1 lan tinh.
@@ -225,7 +225,7 @@ const calc = (a) => {
 };
 
 export const derive = {
-  routing_kpi: (a) => { const r = calc(a); return { rows: r.rows, note: r.policySource ? `routing policy: ${r.policySource}` : undefined, truncated: r.truncated }; },
+  routing_kpi: (a) => { const r = calc(a); return { rows: r.rows, note: r.policySource ? `routing policy: ${r.policySource}${r.backendLabels ? "; backends: " + r.backendLabels : ""}` : undefined, truncated: r.truncated }; },
   agy_kpi: (a) => { const r = calc(a); return { rows: r.agy, truncated: r.truncated }; },
   routing_misses: (a) => {
     const r = calc(a); const g = new Map();

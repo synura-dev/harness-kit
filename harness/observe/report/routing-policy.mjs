@@ -30,23 +30,23 @@ export function resolvePolicy(over) {
   let riskRe = DEFAULT_POLICY.riskRe;
   if (o.expected !== undefined) {
     if (!isObj(o.expected)) errors.push('expected: phai la object');
-    else for (const [c, m] of Object.entries(o.expected)) { if (m === null || typeof m === 'string') expected[c] = m; else errors.push(`expected.${c}: null|string`); }
+    else for (const [c, m] of Object.entries(o.expected)) { if (!(c in Object.prototype) && (m === null || typeof m === "string")) expected[c] = m; else errors.push(`expected.${c}: null|string`); }
   }
   if (o.prices !== undefined) {
     if (!isObj(o.prices)) errors.push('prices: phai la object');
-    else for (const [f, p] of Object.entries(o.prices)) { if (posNum(p)) prices[f] = p; else errors.push(`prices.${f}: so duong`); }
+    else for (const [f, p] of Object.entries(o.prices)) { if (!(f in Object.prototype) && posNum(p)) prices[f] = p; else errors.push(`prices.${f}: so duong`); }
   }
   if (o.thresholds !== undefined) {
     if (!isObj(o.thresholds)) errors.push('thresholds: phai la object');
-    else for (const [t, v] of Object.entries(o.thresholds)) { if (t in thresholds && posNum(v)) thresholds[t] = v; else errors.push(`thresholds.${t}: khoa/so duong khong hop le`); }
+    else for (const [t, v] of Object.entries(o.thresholds)) { if (Object.hasOwn(thresholds, t) && posNum(v)) thresholds[t] = v; else errors.push(`thresholds.${t}: khoa/so duong khong hop le`); }
   }
   if (o.riskRe !== undefined) {
-    try { if (typeof o.riskRe !== 'string') throw new Error('x'); new RegExp(o.riskRe, 'i'); riskRe = o.riskRe; } catch { errors.push('riskRe: regex string khong hop le'); }
+    try { if (typeof o.riskRe !== 'string' || o.riskRe.length > 200) throw new Error('x'); new RegExp(o.riskRe, 'i'); riskRe = o.riskRe; } catch { errors.push('riskRe: regex string khong hop le'); }
   }
   if (o.backends !== undefined) {
     if (!isObj(o.backends)) errors.push('backends: phai la object');
     else for (const [name, b] of Object.entries(o.backends)) {
-      if (!/^[a-z][a-z0-9_-]*$/.test(name) || name === 'claude') { errors.push(`backends.${name}: ten khong hop le`); continue; }
+      if (!/^[a-z][a-z0-9_-]*$/.test(name) || name === "claude" || name in Object.prototype) { errors.push(`backends.${name}: ten khong hop le`); continue; }
       if (!isObj(b) || !Array.isArray(b.classes) || !b.classes.every((c) => typeof c === 'string') || (b.label !== undefined && typeof b.label !== 'string')) { errors.push(`backends.${name}: {classes:[str], label?:str}`); continue; }
       backends[name] = { classes: [...b.classes], label: b.label || name };
     }
@@ -61,11 +61,13 @@ export function loadRoutingPolicy({ projectDir } = {}) {
   const f = path.join(projectDir, '.harness', 'routing.json');
   let raw;
   try {
-    const st = fs.statSync(f);
-    if (!st.isFile()) return { policy: DEFAULT_POLICY, source: 'default' };
-    if (st.size > MAX_BYTES) return { policy: DEFAULT_POLICY, source: 'default(invalid project)' };
-    raw = fs.readFileSync(f, 'utf8');
-  } catch { return { policy: DEFAULT_POLICY, source: 'default' }; }
+    if (!fs.existsSync(f)) return { policy: DEFAULT_POLICY, source: 'default' }; // khong co file (ke ca symlink treo) = mac dinh
+    const real = fs.realpathSync(f), root = fs.realpathSync(projectDir);
+    if (!real.startsWith(root + path.sep)) return { policy: DEFAULT_POLICY, source: 'default(invalid project)' }; // symlink ra ngoai projectDir
+    const st = fs.statSync(real);
+    if (!st.isFile() || st.size > MAX_BYTES) return { policy: DEFAULT_POLICY, source: 'default(invalid project)' };
+    raw = fs.readFileSync(real, 'utf8');
+  } catch { return { policy: DEFAULT_POLICY, source: 'default(unreadable project)' }; }
   let j;
   try { j = JSON.parse(raw); } catch { return { policy: DEFAULT_POLICY, source: 'default(invalid project)' }; }
   const r = resolvePolicy(j);

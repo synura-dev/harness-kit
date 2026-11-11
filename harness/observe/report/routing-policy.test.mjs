@@ -80,3 +80,43 @@ test('file vi du hub hop le va dung luat hub', () => {
   expect(r.errors).toEqual([]);
   expect(r.policy.backends.agy.classes.sort()).toEqual(['large_read', 'web_lookup']);
 });
+
+const reviewer = (file) => [prompt('s', 0),
+  ev({ sid: 's', m: 1, event: 'PreToolUse', tool: 'Agent', target: 'reviewer', data: {} }),
+  ev({ sid: 's', m: 1, event: 'SubagentStart', type: 'session', agent_id: 'r', agent_type: 'reviewer' }),
+  ev({ sid: 's', m: 1, event: 'PostToolUse', tool: 'Read', ok: true, data: { out_len: 5, files_touched: [file] }, agent_id: 'r', agent_type: 'reviewer' }),
+  ev({ sid: 's', m: 2, event: 'SubagentStop', type: 'stop', agent_id: 'r', agent_type: 'reviewer', model: 'claude-sonnet-5', turns: 3, tokens_in: 1, tokens_out: 1, data: { tokens_cache: 0 } }),
+  stop('s', 3)];
+
+test('riskRe > 200 ky tu -> invalid; path cat 512 ky tu truoc khi test (ReDoS)', () => {
+  expect(resolvePolicy({ riskRe: 'a'.repeat(201) }).errors.length).toBe(1);
+  expect(resolvePolicy({ riskRe: 'a'.repeat(200) }).errors).toEqual([]);
+  const pol = resolvePolicy({ riskRe: 'ZZZ$' }).policy;
+  expect(val(run(reviewer('x'.repeat(600) + 'ZZZ'), pol), 'under_model')).toBe(0); // bi cat -> khong khop
+  expect(val(run(reviewer('x'.repeat(100) + 'ZZZ'), pol), 'under_model')).toBe(1); // khop -> review rui ro, sonnet < opus
+});
+
+test('loader: symlink ra ngoai projectDir -> khong theo; loi doc -> default(unreadable project)', () => {
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'rout-'));
+  fs.writeFileSync(path.join(outside, 'r.json'), JSON.stringify({ backends: { agy: { classes: ['web_lookup'] } } }));
+  const d = tmpProject(null);
+  fs.mkdirSync(path.join(d, '.harness'));
+  fs.symlinkSync(path.join(outside, 'r.json'), path.join(d, '.harness', 'routing.json'));
+  const r = loadRoutingPolicy({ projectDir: d });
+  expect(r.source).toBe('default(invalid project)');
+  expect(r.policy.backends).toEqual({});
+  const d3 = tmpProject({ prices: {} });
+  fs.chmodSync(path.join(d3, '.harness', 'routing.json'), 0);
+  if (process.getuid && process.getuid() !== 0) expect(loadRoutingPolicy({ projectDir: d3 }).source).toBe('default(unreadable project)');
+});
+
+test('khoa ke thua (toString/constructor) khong lot qua', () => {
+  expect(resolvePolicy({ thresholds: { constructor: 5 } }).errors.length).toBe(1);
+  expect(resolvePolicy({ backends: { constructor: { classes: [] } } }).errors.length).toBe(1);
+  expect(resolvePolicy({ backends: { toString: { classes: [] } } }).errors.length).toBe(1);
+  const pol = resolvePolicy({}).policy;
+  expect(Object.hasOwn(pol.backends, 'toString')).toBe(false);
+  // lop 'constructor' khong lay mode ke thua: roi ve haiku
+  const evs = [prompt('s', 0), web('s', 1), stop('s', 2)];
+  expect(() => run(evs, pol)).not.toThrow();
+});
