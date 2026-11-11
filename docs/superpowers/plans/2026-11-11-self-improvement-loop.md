@@ -54,10 +54,10 @@
 
 ### Task 5: Tu ha cap rule evolve vo ich (C2) (RED/GREEN)
 **Files:** tao `harness/evolve/loop/demote.mjs`, `harness/evolve/loop/demote.test.mjs`; sua `harness/observe/ledger/job.mjs` (chi 1 cho goi, sau autopilot).
-- [ ] Test do: rule origin evolve, autopilot-applied, 14 ngay warned 6 / acted 0 / ignored 4 -> goi rollback (stub); rule khong do autopilot -> chi ghi `demote_suggested`; rule protected / mac dinh plugin / `<project>/.harness/rules` -> bo qua; warned 4 -> khong lam gi; tran 10 rule/lan; guard 24h.
-- [ ] Viet `demoteRules({ledgerEntries, rules, nowMs, cfg})` thuan + wrapper I/O co timeout 10s.
-- [ ] `job.mjs`: goi sau autopilot trong try/catch (fail-open).
-- [ ] Commit `evolve: tu ha cap rule evolve khong hieu qua`.
+- [x] Test do: rule origin evolve, autopilot-applied, 14 ngay warned 6 / acted 0 / ignored 4 -> goi rollback (stub); rule khong do autopilot -> chi ghi `demote_suggested`; rule protected / mac dinh plugin / `<project>/.harness/rules` -> bo qua; warned 4 -> khong lam gi; tran 10 rule/lan; guard 24h.
+- [x] Viet `demoteRules({ledgerEntries, rules, nowMs, cfg})` thuan + wrapper I/O co timeout 10s.
+- [x] `job.mjs`: goi sau autopilot trong try/catch (fail-open).
+- [x] Commit `evolve: tu ha cap rule evolve khong hieu qua`.
 **Done-when:** `timeout 120 node --test harness/evolve/loop/demote.test.mjs` -> `# fail 0`.
 
 ### Task 6: Chuoi thoi gian KPI append-only (F1) (RED/GREEN)
