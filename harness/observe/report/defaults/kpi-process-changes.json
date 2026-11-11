@@ -1,0 +1,1 @@
+{"order":11,"id":"kpi-process-changes","title":"KPI 6: thay doi quy trinh (so lan sua file quy tac/tuan, file sua lap)","source":"process","group_by":["label"],"metric":"count","window_days":0,"format":"table","limit":12,"empty_note":"khong co git/thay doi quy trinh - bo qua"}

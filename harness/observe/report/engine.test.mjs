@@ -10,10 +10,10 @@ const NOW = Date.parse('2026-11-05T12:00:00Z');
 const ago = (d) => new Date(NOW - d * 86400000).toISOString();
 const ev = (o) => ({ ts: ago(1), sid: 's1', event: 'PostToolUse', tool: 'Bash', ...o });
 
-test('defaults nap du 12 muc, hop le, co thu tu', () => {
+test('defaults nap du 13 muc, hop le, co thu tu', () => {
   const r = loadSections({ projectDir: null });
   assert.deepEqual(r.errors, []);
-  assert.equal(r.sections.length, 12);
+  assert.equal(r.sections.length, 13);
   assert.equal(r.sections[0].id, 'kpi-info-fetch');
 });
 
@@ -24,7 +24,7 @@ test('ghi de du an: tron nong + tat enabled:false + muc moi', () => {
   fs.writeFileSync(path.join(d, 'moi.json'), '{"source":"audit","format":"kpi"}');
   fs.writeFileSync(path.join(d, 'hong.json'), '{xx');
   const r = loadSections({ projectDir: p });
-  assert.equal(r.sections.length, 12); // -guard +moi
+  assert.equal(r.sections.length, 13); // -guard +moi
   assert.ok(!r.sections.find((s) => s.id === 'guard'));
   const k = r.sections.find((s) => s.id === 'kpi-repeats');
   assert.equal(k.title, 'X'); assert.equal(k.source, 'candidates'); assert.equal(k.window_days, 3);

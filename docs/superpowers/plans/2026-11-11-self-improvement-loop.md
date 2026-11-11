@@ -37,11 +37,11 @@
 
 ### Task 3: Chi so thay doi quy trinh tu git (A1) (RED/GREEN)
 **Files:** tao `harness/observe/report/process-changes.mjs`, `harness/observe/report/process-changes.test.mjs`, `harness/observe/report/defaults/kpi-process-changes.json`; sua `harness/observe/report/run.mjs` (chi phan nap input).
-- [ ] Test do (repo git tam qua `git init` trong `mkdtemp`, commit gia voi `GIT_COMMITTER_DATE`): dem theo tuan, `repeat` khi >= 2 lan sua cung file trong 14 ngay, bo file ngoai `paths`, thu muc khong phai repo -> `truncated: 'no_git'`, `maxCommits` cat -> `truncated: 'max_commits'`.
-- [ ] Viet `processChanges({projectDir, sinceDays, paths, timeoutMs, maxCommits, nowMs})` theo spec 4.2 (`spawnSync` co `timeout`, `maxBuffer` 4 MB; them `-c safe.directory=<dir>` cho NTFS).
-- [ ] `run.mjs`: nap ket qua giong `loadTasks` (fail-open), dua vao report qua nguon `process` (hoac rows inventory neu engine khong mo rong nguon - chon cach it dung engine nhat, ghi ly do trong commit).
-- [ ] Section `kpi-process-changes.json`: changes/tuan, so file sua lap.
-- [ ] Commit `report: chi so thay doi quy trinh tu git log`.
+- [x] Test do (repo git tam qua `git init` trong `mkdtemp`, commit gia voi `GIT_COMMITTER_DATE`): dem theo tuan, `repeat` khi >= 2 lan sua cung file trong 14 ngay, bo file ngoai `paths`, thu muc khong phai repo -> `truncated: 'no_git'`, `maxCommits` cat -> `truncated: 'max_commits'`.
+- [x] Viet `processChanges({projectDir, sinceDays, paths, timeoutMs, maxCommits, nowMs})` theo spec 4.2 (`spawnSync` co `timeout`, `maxBuffer` 4 MB; them `-c safe.directory=<dir>` cho NTFS).
+- [x] `run.mjs`: nap ket qua giong `loadTasks` (fail-open), dua vao report qua nguon `process` (hoac rows inventory neu engine khong mo rong nguon - chon cach it dung engine nhat, ghi ly do trong commit).
+- [x] Section `kpi-process-changes.json`: changes/tuan, so file sua lap.
+- [x] Commit `report: chi so thay doi quy trinh tu git log`.
 **Done-when:** `timeout 120 node --test harness/observe/report/process-changes.test.mjs` -> `# fail 0`.
 
 ### Task 4: Evolve kind `fix` + do hieu qua tong quat (C1) (RED/GREEN)
