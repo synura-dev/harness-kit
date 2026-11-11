@@ -10,10 +10,11 @@ import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { detectPatterns } from '../../evolve/loop/patterns.mjs';
 import { readEvents } from '../ledger/job.mjs';
 import { processChanges, processRows } from './process-changes.mjs';
+import { segment } from './problems.mjs';
+import { isHookRun } from '../../core/audit/signals.mjs';
 import { listRegistered } from '../../core/ext/ext-trust.mjs';
 import { registeredExtRoots } from '../ledger/sources.mjs';
 import { readLedger, ledgerFile, ledgerDir } from '../ledger/ledger.mjs';
-import { loadDocIds } from './knowledge-roi.mjs';
 import { AVG_WINDOWS, loadSections, evaluateSection, renderReport, kpiSnapshot } from './engine.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -84,7 +85,7 @@ const safeRoot = () => { try { return workspaceRoot(); } catch { return ''; } };
 
 /** Module cung cap derive: moi module export `derive = {ten: ({events,from,to,deadline}) => rows | {rows, truncated}}` (DONG BO; producer kiem deadline, qua han thi tra truncated).
  *  Cac Task tiep theo (producer cost-*) them ten module vao day. Module chua co -> bo qua; loi import khac / ten derive trung -> errors[]. */
-export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs', './knowledge-roi.mjs']);
+export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs', './context-tax.mjs', './knowledge-roi.mjs']);
 export async function loadDerived(modules = DERIVED_MODULES) {
   const map = {}; const errors = [];
   for (const f of modules) {
@@ -119,19 +120,29 @@ export async function buildReport(opts = {}) {
   // thay doi quy trinh tu git (fail-open): chi chay khi co muc nguon process
   let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
   const dl = opts.derived !== undefined ? { map: opts.derived, errors: [] } : sections.some((d) => d.source === 'derived') ? await loadDerived() : { map: undefined, errors: [] };
+  const ledger = opts.ledger || readLedger(ledgerFile(opts.dataOpts)); // doc 1 lan / buildReport
+  // getSegments({from,to}): segment() tren su kien cua so, cache theo (from,to) -> cac derive cung cua so (cost-*, T5/T6) dung chung 1 lan tinh.
+  const segCache = new Map();
+  const getSegments = ({ from, to }) => {
+    const k = `${from}|${to}`;
+    if (!segCache.has(k)) {
+      if (opts.onSegment) opts.onSegment(k);
+      const t = (e) => { const x = Date.parse(e && e.ts); return Number.isFinite(x) && x >= from && x < to; };
+      segCache.set(k, segment(ev.events.filter((e) => e && !isHookRun(e) && (!(to > 0) || t(e))), { ledger }));
+    }
+    return segCache.get(k);
+  };
+  const deriveErrors = [];
   const derived = dl.map;
-  // derive dong bo nen danh sach id tri thuc (cho 'chua tung lay') lay o day, chi khi co muc knowledge_*; loi -> bo danh sach, ghi ly do
-  if (opts.derived === undefined && sections.some((d) => d.source === 'derived' && /^knowledge_/.test(d.derive || ''))) {
-    const l = opts.docIds !== undefined ? { ids: opts.docIds } : loadDocIds({ cwd: hubDir });
-    for (const k of Object.keys(derived)) if (/^knowledge_/.test(k)) { const fn = derived[k]; derived[k] = (a) => fn({ ...a, docIds: l.ids, docIdsReason: l.unavailable, idsTruncated: l.truncated }); }
-  }
-  const all = { tasks, process: proc, derived, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
+  // derivedCtx: MOT ctx / buildReport, engine spread vao arg moi derive (T4/T5/T6 dung chung): memo, projectDir, getSegments, ledger, persist, now, dataOpts, onError
+  const derivedCtx = { projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, memo: {}, docIds: opts.docIds, listIds: opts.listIds, getSegments, ledger, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, onError: (m) => { if (!deriveErrors.includes(m)) deriveErrors.push(m); } };
+  const all = { tasks, process: proc, derived, derivedCtx, events: ev.events, ledger, inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };
   const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx, avgOf: cfg.avgOf, compare: cfg.compare })), has);
   const truncated = ev.truncated || loaded.truncated || (tl && tl.truncated) || (results.find((r) => r.truncated) || {}).truncated || null;
-  const errors = [...loaded.errors, ...dl.errors, ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
+  const errors = [...loaded.errors, ...dl.errors, ...deriveErrors.map((m) => `cost-repeat: ${m}`), ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
   const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors });
   return { markdown, results, truncated, errors, nowMs };
 }

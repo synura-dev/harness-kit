@@ -79,6 +79,23 @@ for(let i=0;i<300;i++)writeEnvelope(e,c,process.env.CLAUDE_AUDIT_DIR);`;
   const lines = walk(root).filter((x) => x.endsWith('.jsonl')).flatMap((x) => fs.readFileSync(x, 'utf8').split('\n').filter(Boolean));
   expect(lines.length).toBe(600);
   for (const l of lines) JSON.parse(l);
+}, 20000);
+
+test('T12: out_len_truncated khi mang >64 (uoc luong) hoac object >64 khoa / >64 nut', () => {
+  const post = (tool_response) => buildEnvelope({ hook_event_name: 'PostToolUse', session_id: 't12', tool_name: 'Glob', tool_input: {}, tool_response }, cfg);
+  const a = post({ filenames: Array.from({ length: 100 }, () => 'abcd') });
+  expect(a.data.out_len).toBe(400); expect(a.data.out_len_truncated).toBe(true);
+  const o = {}; for (let i = 0; i < 100; i++) o['k' + i] = 'x';
+  expect(post(o).data.out_len_truncated).toBe(true);
+  expect(post(o).data.out_len).toBeLessThanOrEqual(64);
+  expect('out_len_truncated' in post({ filenames: ['a'] }).data).toBe(false);
+});
+
+test('T12: Stop dung model mac dinh opts.usage.model khi payload khong co model', () => {
+  const sum = () => ({ usage: null, reason: 'no_usage' });
+  const e = (inp) => buildEnvelope({ hook_event_name: 'Stop', session_id: 't12m', ...inp }, cfg, new Date(), { usage: { sum, model: 'dflt' } });
+  expect(e({}).model).toBe('dflt');
+  expect(e({ model: 'real' }).model).toBe('real');
 });
 
 // --- config layering: must work with missing / broken / partial audit.config.json ---
@@ -168,4 +185,19 @@ test('PostToolUse Bash: data.out_len tu stdout+stderr, khong luu noi dung', () =
   expect(JSON.stringify(a)).not.toContain('abc');
   expect(mkr('hello').data.out_len).toBe(5);
   expect('out_len' in mkr(undefined).data).toBe(false);
+});
+
+test('T12: Agent/Task ghi data.model + run_in_background (envelope model khong doi); doc tool ghi out_len', () => {
+  const pre = buildEnvelope({ hook_event_name: 'PreToolUse', session_id: 't12', model: 'opus-real', tool_name: 'Agent', tool_input: { subagent_type: 'scout', model: 'haiku', run_in_background: true, prompt: 'x' } }, cfg);
+  expect(pre.data.model).toBe('haiku'); expect(pre.data.run_in_background).toBe(true); expect(pre.model).toBe('opus-real');
+  expect(buildEnvelope({ hook_event_name: 'PreToolUse', session_id: 't12', tool_name: 'Task', tool_input: { subagent_type: 's', model: 'sonnet' } }, cfg).data.model).toBe('sonnet');
+  const post = (tool_name, tool_response) => buildEnvelope({ hook_event_name: 'PostToolUse', session_id: 't12', tool_name, tool_input: {}, tool_response }, cfg);
+  const r = post('Read', { type: 'text', file: { filePath: '/a', content: 'SECRETBODY', numLines: 1 } });
+  expect(r.data.out_len).toBeGreaterThan(10); expect(JSON.stringify(r)).not.toContain('SECRETBODY');
+  expect(post('Grep', { filenames: ['a', 'bb'], content: 'xyz' }).data.out_len).toBe(6);
+  expect(post('Glob', { filenames: ['abc'] }).data.out_len).toBe(3);
+  expect(post('WebFetch', { result: 'hello', bytes: 5 }).data.out_len).toBe(5);
+  expect(post('WebSearch', { results: [{ title: 'ab', content: [{ url: 'cd' }] }] }).data.out_len).toBe(4);
+  expect(post('Read', 'str').data.out_len).toBe(3);
+  expect('out_len' in post('Read', undefined).data).toBe(false);
 });

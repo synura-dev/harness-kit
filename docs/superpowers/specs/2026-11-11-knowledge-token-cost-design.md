@@ -76,6 +76,31 @@ Chia khối theo heading/bullet; chuẩn hoá như D; 5-shingle từ; chỉ mụ
 - Hiệu quả proposal theo metric: `metricVerdict(series, kpi, appliedWeek, better)` (tuần apply vs 2 tuần sau; better nếu <= 0.95x, worse >= 1.05x, còn lại unchanged; thiếu điểm -> insufficient).
 - Issue mới (dedupe theo key qua map `best` sẵn có): `context:growth` khi `static_tokens` vs_prev > +5%; `knowledge:retire-candidates`.
 
+### G. Đo mức dùng mode / tuân thủ định tuyến (Claude haiku/sonnet/opus, main, agy)
+Yêu cầu bổ sung: "đo mức độ sử dụng mode, ví dụ trong 1 phiên hoặc công việc cần agy nhưng không xài đến...; để tối ưu và đo được mức tối ưu cho cả agy". Luật chuẩn = hub AGENTS.md mục Subagent: haiku chạy/đọc/test/ops; sonnet builder + review thường; opus planner, review rủi ro, review cuối đợt; agy tra web, đọc rất lớn (> 100k token), ý kiến thứ hai; main tự làm khi <= 2 lệnh đọc; builder ~25 lượt.
+
+Dữ kiện audit (đã xác minh):
+- Agent tool: `target = subagent_type`, `data.isolation`, `data.prompt_len` (harness/core/config/audit-config.mjs:57); Task tool: `subagent_type`, `prompt_len` (:58). KHÔNG ghi `model` yêu cầu khi dispatch (không có trong `data` của rule; audit.mjs:270 còn loại khoá `model` khỏi event_data).
+- Model THỰC TẾ: trường `model` ở Stop/SubagentStop lấy từ transcript (audit.mjs:287, 307, 315); phantom SubagentStop (~81%) không có.
+- `agent_type` ở SubagentStart/Stop (audit.mjs:289-295); `turns` lũy kế ở SubagentStop.
+- WebSearch/WebFetch có record riêng (audit-config.mjs:55-56). Read chỉ ghi `offset/limit` (:48), KHÔNG có kích thước nội dung; `data.out_len` hiện chỉ cho Bash (audit.mjs:254-258, Task 0 đã có).
+- agy: adapter `harness/observe/audit/adapters/agy.mjs` đặt `cli='agy'` (:131), `model` từ `modelName` (:133), suy `UserPromptSubmit`/`Stop`/`PostToolUse` (:158-176), map tool về Bash/Read/Write/Edit (:182-200), usage qua `agy-usage.mjs` (`sumAgyUsage`). => Segment/khoá vấn đề của Task 3 áp dụng được cho phiên agy (cùng envelope).
+
+Thiết kế (`harness/observe/report/routing.mjs`, source `derived`):
+1. Đơn vị = (a) mỗi dispatch subagent (Agent/Task PreToolUse ghép SubagentStart/Stop cùng sid theo thứ tự + agent_type), (b) mỗi Segment main (Task 3), (c) mỗi Segment phiên `cli=agy`.
+2. Lớp việc tất định (ưu tiên trên xuống): `web_lookup` (có WebSearch/WebFetch) > `large_read` (tổng `out_len` Read/Grep/Glob/Bash >= 400k ký tự, xấp xỉ 100k token) > `plan` (agent_type planner hoặc Write `docs/superpowers/plans|specs`) > `code_edit` (Edit/Write) > `review` (agent_type reviewer) > `test_run` (Bash khớp `bun test|npm test|tsc`) > `read_small`.
+3. Mode kỳ vọng: web_lookup/large_read -> agy; plan -> opus; review -> opus nếu rủi ro (plan slug/files_touched khớp `/auth|perm|guard|deploy|secret|migrat|security/i`), còn lại sonnet; code_edit -> sonnet; test_run/read_small trong subagent -> haiku; Segment main <= 2 lệnh đọc không dispatch -> main (đúng); >= 3 lệnh đọc không dispatch -> lệch `main_overread`.
+4. Mode thực tế: `cli=agy` -> agy; còn lại họ model (haiku|sonnet|opus) từ `model` ở Stop/SubagentStop; thiếu (phantom) -> `unknown`, loại khỏi mẫu số, báo `unknown_share`.
+5. Lệch: `missed_agy` (kỳ vọng agy, thực tế Claude, gồm main tự WebSearch/WebFetch), `overuse_opus`, `underuse_haiku` (sonnet/opus khi kỳ vọng haiku), `under_model` (thấp hơn kỳ vọng opus/sonnet), `builder_over_turns` (> 25; > 40 đếm riêng), `main_overread`. Chi phí chênh ước = eff_tokens x (giá(thực) - giá(kỳ vọng)) / giá(thực), bảng giá TƯƠNG ĐỐI hằng số trong LIMITS (`{haiku:1, sonnet:3, opus:5, agy:0}`; agy = 0 vì quota riêng - giả định, nhãn "ước").
+6. agy vs Claude theo lớp việc: n, median eff_tokens, median wall_ms, error_rate (PostToolUseFailure / tool call), `redo_rate` (khoá vấn đề của Segment agy xuất hiện lại trong Segment Claude <= 24h sau có Edit/Write hoặc dispatch lại cùng lớp), `cost_per_problem`.
+7. Liên kết lần gọi agy từ Claude: Bash `cmd_head` = `agy` trong Segment Claude -> `delegated_agy`; phiên agy cùng khoá vấn đề hoặc bắt đầu trong khung Segment đó -> cùng occurrence; có `data.task_id` (HUB_TASK_ID, audit.mjs:161) thì ưu tiên.
+
+Bổ sung audit (Task 12, cộng thêm, chỉ số): `data.model` + `data.run_in_background` cho Agent tool_input (model YÊU CẦU, chuỗi ngắn); `data.out_len` cho PostToolUse Read/Grep/Glob/WebFetch/WebSearch (độ dài, không nội dung; hình `tool_response` từng tool CHƯA xác minh - builder kiểm trên payload thật); agy: kiểm Stop agy có `model` + usage (agy.test.mjs, agy-usage.test.mjs), thiếu thì thêm ở adapter.
+
+KPI (section `kpi-routing`, `kpi-agy`; khoá series = `<section>.<k>`): `kpi-routing.compliance_rate` (up), `.missed_agy`, `.overuse_opus`, `.underuse_haiku`, `.main_overread`, `.builder_over_turns`, `.excess_cost_share`, `.unknown_share` (down), `.under_model` (down, chất lượng); `kpi-agy.share` (trung tính, không vào selfdev), `.cost_per_problem`, `.redo_rate`, `.error_rate` (down). Retro: top-3 ca lệch, khoá ổn định `routing:<loại lệch>:<lớp việc>`, thành issue; thay luật định tuyến (AGENTS.md/agent .md) qua `proposeMetricFix` với `target_metric {kpi:'kpi-routing.<x>', better}` để `metricVerdict` đo tác dụng.
+
+Không đo được (ghi rõ trong báo cáo): "ý kiến thứ hai" (không có tín hiệu tất định); review cuối đợt vs thường; model yêu cầu khi dispatch trước Task 12; ~81% subagent phantom không có model thực tế; `large_read` trước Task 12 chỉ tính Bash.
+
 ## Rủi ro bắt buộc
 - Quyền phía server: không có server; lệnh mới chỉ đọc, trừ ghi `problems-index.json` và file proposal (đã có cơ chế). `harness evolve dupes --propose` không áp dụng; apply/retire vẫn TTY.
 - Thao tác lên chính mình: báo cáo đọc audit có sự kiện của chính lần chạy report/retro - lọc `origin noise`/HookRun như engine (engine.mjs:145).

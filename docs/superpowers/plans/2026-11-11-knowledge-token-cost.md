@@ -25,7 +25,9 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Nhóm 3: Task 3 (cần 2) -> Task 4 (cần 3).
 - Nhóm 4 (song song, cần 2; Task 5 cần 3): Task 5, Task 6, Task 7.
 - Nhóm 5 (song song): Task 8 (cần 7), Task 9 (cần 4, 6).
-- Nhóm 6: Task 10 kiểm dữ liệu thật (haiku) -> Task 11 full suite một lần.
+- Nhóm 4b (song song với nhóm 4): Task 12 (audit, không phụ thuộc; chạy ngay được).
+- Nhóm 5b: Task 13 (cần 2, 3; dùng trường Task 12 nếu có, fail-open) -> Task 14 (cần 13, 8, 9).
+- Nhóm 6: Task 10 kiểm dữ liệu thật (haiku, gồm routing) -> Task 11 full suite một lần.
 
 ---
 
@@ -93,12 +95,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Modify: `harness/observe/report/run.mjs` (cờ `persistIndex` khi `--weekly`; `--bootstrap-days N`)
 - Test: `harness/observe/report/cost-repeat.test.mjs`
 
-- [ ] `costRepeat({events, from, to, index, persist, now})` -> rows `{k, v}`: `repeat_vs_first_ratio`, `tokens_per_problem`, `problems`, `repeat_share`, `key_coverage`, `cache_read_share`; `byFamily` rows cho bảng.
-- [ ] Index `problems-index.json` trong thư mục dữ liệu report (dùng helper đường dẫn sẵn có của report, không hardcode): trần 2000, TTL 90 ngày, ghi atomic (temp + rename), chỉ khi `persist`.
-- [ ] Test: khoá xuất hiện phiên 1 (1000 eff) và phiên 2,3 (400, 600) -> ratio 0.5; lần đầu nằm trong index cũ -> phiên trong cửa sổ đều là lặp; `persist:false` không tạo file (tmp dir); chỉ khoá high|mid vào ratio.
-- [ ] Grep + cập nhật test số section (run/noext/engine).
-- [ ] Done-when: `timeout 60 bun test harness/observe/report/cost-repeat.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] `costRepeat({events, from, to, index, persist, now})` -> rows `{k, v}`: `repeat_vs_first_ratio`, `tokens_per_problem`, `problems`, `repeat_share`, `key_coverage`, `cache_read_share`; `byFamily` rows cho bảng.
+- [x] Index `problems-index.json` trong thư mục dữ liệu report (dùng helper đường dẫn sẵn có của report, không hardcode): trần 2000, TTL 90 ngày, ghi atomic (temp + rename), chỉ khi `persist`.
+- [x] Test: khoá xuất hiện phiên 1 (1000 eff) và phiên 2,3 (400, 600) -> ratio 0.5; lần đầu nằm trong index cũ -> phiên trong cửa sổ đều là lặp; `persist:false` không tạo file (tmp dir); chỉ khoá high|mid vào ratio.
+- [x] Grep + cập nhật test số section (run/noext/engine).
+- [x] Done-when: `timeout 60 bun test harness/observe/report/cost-repeat.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 5: ROI tri thức `knowledge-roi.mjs` + section
 
@@ -119,13 +121,13 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/observe/report/context-tax.mjs`, `harness/observe/report/defaults/kpi-context-tax.json`, `harness/observe/report/defaults/context-dupes.json` (list)
 - Test: `harness/observe/report/context-tax.test.mjs`
 
-- [ ] Tĩnh (theo quy ước, không config): CLAUDE.md + `@import` một cấp; `.claude/memory/MEMORY.md` 200 dòng đầu (thiếu -> `memory: not_found`); mô tả skill qua `inventorySkills` (evolve/loop/prune.mjs:101); role mỗi agent qua `harness knowledge role <agent>` (proc.mjs, timeout, cắt 3072 byte, fail-open) x số SubagentStart cửa sổ.
-- [ ] Đo thực: median `data.usage.first_ctx` Stop đầu mỗi sid main; `calibration = first_ctx/static`.
-- [ ] Trùng dòng: băm `foldText` dòng >= 30 ký tự qua CLAUDE.md, AGENTS.md, MEMORY.md, `.claude/memory/*.md`, `.claude/agents/*.md`, `.agents/agents/*.md`; xuất `file:dòng` (không nội dung).
-- [ ] KPI khoá: `static_tokens`, `rules_tokens`, `memory_index_tokens`, `skills_desc_tokens`, `role_tokens_per_subagent`, `first_ctx_tokens`, `dup_lines`.
-- [ ] Test trên thư mục tạm: 2 file chung 1 dòng dài -> dup_lines 1, output không chứa nội dung dòng; tiếng Việt có/không dấu cùng nhóm.
-- [ ] Done-when: `timeout 30 bun test harness/observe/report/context-tax.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Tĩnh (theo quy ước, không config): CLAUDE.md + `@import` một cấp; `.claude/memory/MEMORY.md` 200 dòng đầu (thiếu -> `memory: not_found`); mô tả skill qua `inventorySkills` (evolve/loop/prune.mjs:101); role mỗi agent qua `harness knowledge role <agent>` (proc.mjs, timeout, cắt 3072 byte, fail-open) x số SubagentStart cửa sổ.
+- [x] Đo thực: median `data.usage.first_ctx` Stop đầu mỗi sid main; `calibration = first_ctx/static`.
+- [x] Trùng dòng: băm `foldText` dòng >= 30 ký tự qua CLAUDE.md, AGENTS.md, MEMORY.md, `.claude/memory/*.md`, `.claude/agents/*.md`, `.agents/agents/*.md`; xuất `file:dòng` (không nội dung).
+- [x] KPI khoá: `static_tokens`, `rules_tokens`, `memory_index_tokens`, `skills_desc_tokens`, `role_tokens_per_subagent`, `first_ctx_tokens`, `dup_lines`.
+- [x] Test trên thư mục tạm: 2 file chung 1 dòng dài -> dup_lines 1, output không chứa nội dung dòng; tiếng Việt có/không dấu cùng nhóm.
+- [x] Done-when: `timeout 30 bun test harness/observe/report/context-tax.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 7: Trùng gần đúng nội dung `content-dupes.mjs`
 
@@ -177,7 +179,55 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - [ ] Done-when: `timeout 30 bun test hub/knowledge/export-cmd.test.mjs` -> 0 fail.
 - [ ] Commit. Sau merge: NGƯỜI DÙNG chạy approve hash ext trong terminal riêng (TTY).
 
+### Task 12: Audit ghi model dispatch + `out_len` tool đọc (chỉ số) + kiểm agy
+
+**Files:**
+- Modify: `harness/core/config/audit-config.mjs` (:57 rule Agent thêm `"data":["isolation","model","run_in_background"]`; :58 Task thêm `"data":["model"]`)
+- Modify: `harness/observe/audit/audit.mjs` (:254-258 mở rộng `out_len` cho Read/Grep/Glob/WebFetch/WebSearch)
+- Modify (chỉ khi thiếu): `harness/observe/audit/adapters/agy.mjs`
+- Test: `harness/observe/audit/audit.test.mjs`, `harness/observe/audit/adapters/agy.test.mjs`
+- Modify: `harness/observe/README.md` (trường mới)
+
+- [x] Chú ý: audit.mjs:270 loại khoá `model` khỏi event_data (tránh đè model thực tế) - rule tool `data` ở :251 KHÔNG bị loại, ghi vào `data.model` (khác trường envelope `model`); test assert envelope `model` của PreToolUse không đổi.
+- [x] Hình `tool_response` của Read/Grep/Glob/WebFetch/WebSearch CHƯA xác minh: lấy payload thật (fixture hook thật trong repo nếu có, hoặc transcript `toolUseResult` mẫu) trước khi code; tính độ dài = tổng độ dài chuỗi lá (string) có trần duyệt 64 nút, không lưu chuỗi.
+- [x] Test đỏ: Agent PreToolUse `{subagent_type:'scout', model:'haiku'}` -> `data.model==='haiku'`; Read PostToolUse -> `data.out_len > 0`, record không chứa nội dung file.
+- [x] agy: kiểm `agy.test.mjs`/`agy-usage.test.mjs` rằng Stop agy có `model` và token; thiếu -> test đỏ + sửa adapter.
+- [x] Done-when: `timeout 60 bun test harness/observe/audit/audit.test.mjs harness/observe/audit/adapters/agy.test.mjs harness/observe/audit/adapters/agy-usage.test.mjs` -> 0 fail.
+- [x] Commit `audit: ghi model dispatch, out_len tool doc`.
+
+### Task 13: `routing.mjs` - tuân thủ định tuyến + agy vs Claude
+
+**Files:**
+- Create: `harness/observe/report/routing.mjs`, `harness/observe/report/routing.test.mjs`
+- Create: `harness/observe/report/defaults/kpi-routing.json`, `harness/observe/report/defaults/kpi-agy.json` (kpi, `group_by ["k"]`, `sum:v`), `harness/observe/report/defaults/routing-misses.json` (table top 10: loại lệch, lớp việc, n, chi phí chênh ước)
+- Modify: `harness/observe/report/run.mjs` (đăng ký derive `routing`), `harness/observe/report/cost-contract.mjs` (LIMITS `priceRel {haiku:1,sonnet:3,opus:5,agy:0}`, `largeReadChars 400000`, `builderTurns 25`, `riskRe`)
+
+- [ ] Hàm thuần `routing({events, segments, from, to})` theo spec mục G bước 1-7; dùng `segment()` của Task 3; đọc luật từ hằng số (không parse AGENTS.md).
+- [ ] Ghép dispatch: Agent/Task PreToolUse (target = subagent_type, `data.model` nếu có) -> SubagentStart kế tiếp cùng sid + agent_type -> SubagentStop cùng agent_id (model thực tế, turns). Không ghép được -> `unknown`.
+- [ ] Họ model: regex `/haiku|sonnet|opus/` trên chuỗi model; `cli==='agy'` -> agy.
+- [ ] Fixture dựng theo field thật (audit.mjs:287-335, agy.mjs:131-200): (1) main WebSearch -> missed_agy web_lookup; (2) scout chạy model opus -> overuse_opus + underuse_haiku tính 1 lần (chọn loại lệch chính theo thứ tự cố định); (3) builder turns 41 -> builder_over_turns; (4) main 3 Read không dispatch -> main_overread; (5) phiên agy web_lookup rồi Segment Claude cùng khoá có Edit trong 24h -> redo; (6) phantom -> unknown, không vào mẫu số; (7) vượt maxEvents -> `truncated`.
+- [ ] Output không có prompt/target đầy đủ: ca lệch chỉ kèm sid rút gọn 8 ký tự, lớp việc, số.
+- [ ] Grep + cập nhật test số section (run/noext/engine).
+- [ ] Done-when: `timeout 60 bun test harness/observe/report/routing.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
+- [ ] Commit.
+
+### Task 14: Retro issue routing + đề xuất đổi luật đo bằng metric
+
+**Files:**
+- Modify: `harness/evolve/loop/retro.mjs` (issues, map `best`), `harness/evolve/loop/selfdev.mjs`
+- Modify: `harness/evolve/loop/loop.mjs` (`proposeMetricFix` Task 8 nhận `kpi`/`better` tuỳ ý, area `doc`, path AGENTS.md hoặc `.claude/agents/<x>.md`)
+- Test: `harness/evolve/loop/retro.test.mjs`, `harness/evolve/loop/selfdev.test.mjs`, `harness/evolve/loop/loop.test.mjs`
+
+- [ ] selfdev thêm `routing_compliance` (up) và `missed_agy` (down); `kpi-agy.share` KHÔNG vào selfdev.
+- [ ] Retro: top-3 ca lệch theo chi phí chênh -> issue khoá `routing:<loại lệch>:<lớp việc>` (không tuần/đường dẫn), dedupe qua `best`; giữ cap task apply.
+- [ ] `proposeMetricFix({kpi:'kpi-routing.missed_agy', better:'down', path})` -> id ổn định `p_route_<sha8(kpi|path)>_fix`; không sửa file đích; `metricVerdict` (Task 9) đo.
+- [ ] Đếm lại test số đếm retro sau khi thêm khoá.
+- [ ] Done-when: `timeout 60 bun test harness/evolve/loop/retro.test.mjs harness/evolve/loop/selfdev.test.mjs harness/evolve/loop/loop.test.mjs` -> 0 fail.
+- [ ] Commit.
+
 ### Task 10: Kiểm trên dữ liệu thật hub (haiku, chỉ chạy, không sửa)
+
+- [ ] (thêm cho Task 12-14) Report có `kpi-routing`, `kpi-agy`, `routing-misses`; retro có khoá `kpi-routing.compliance_rate`; báo compliance_rate, unknown_share, top-3 lệch, agy share.
 
 - [ ] `CLAUDE_PROJECT_DIR="/media/networld/11. Agents" timeout 120 harness observe report --days 7 --dry-run --out - > /tmp/kc-report.md 2>&1`; có các mục cost-repeat, knowledge-roi, context-tax; không mục nào `derive_failed`.
 - [ ] `CLAUDE_PROJECT_DIR="/media/networld/11. Agents" timeout 120 harness evolve retro --json > /tmp/kc-retro.json` (dry-run); có khoá `kpi-cost-repeat.repeat_vs_first_ratio`, `kpi-context-tax.static_tokens`; không có `problems-index.json` mới (dry-run).
