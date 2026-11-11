@@ -9,6 +9,7 @@ import { guardWrite } from '../../core/io/storage.mjs';
 import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { detectPatterns } from '../../evolve/loop/patterns.mjs';
 import { readEvents } from '../ledger/job.mjs';
+import { processChanges, processRows } from './process-changes.mjs';
 import { listRegistered } from '../../core/ext/ext-trust.mjs';
 import { registeredExtRoots } from '../ledger/sources.mjs';
 import { readLedger, ledgerFile, ledgerDir } from '../ledger/ledger.mjs';
@@ -97,7 +98,9 @@ export async function buildReport(opts = {}) {
   const needTasks = sections.some((d) => JSON.stringify(d.metric ?? "").includes('task_done_rate'));
   const tl = opts.tasks !== undefined ? { tasks: opts.tasks, truncated: opts.tasksTruncated || null } : needTasks && has('ext', 'projects') ? loadTasks(hubDir, { run: opts.runTasks || spawnSync, timeoutMs: opts.timeoutMs }) : undefined;
   const tasks = tl ? tl.tasks : undefined;
-  const all = { tasks, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
+  // thay doi quy trinh tu git (fail-open): chi chay khi co muc nguon process
+  let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
+  const all = { tasks, process: proc, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };

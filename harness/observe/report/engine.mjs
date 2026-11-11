@@ -9,7 +9,7 @@ import { isHookRun } from '../../core/audit/signals.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS_DIR = path.join(HERE, 'defaults');
 export const LIMITS = Object.freeze({ timeoutMs: 5000, maxDefs: 50, maxFileBytes: 32768, maxRows: 200 });
-export const SOURCES = Object.freeze(['audit', 'candidates', 'ledger', 'inventory']);
+export const SOURCES = Object.freeze(['audit', 'candidates', 'ledger', 'inventory', 'process']);
 export const AVG_WINDOWS = 7;
 export const FORMATS = Object.freeze(['table', 'kpi', 'list']);
 const DAY = 86400000;
@@ -74,6 +74,7 @@ function toRecs(source, inputs, ctx) {
   if (source === 'audit') return (inputs.events || []).map((r) => ({ get: (k) => (k.includes('.') ? dig(r, k) : auditField(r, k, ctx)), sid: r.sid || r.session_id || null, task: taskOf(r), ts: r.ts, n: 1 }));
   if (source === 'candidates') return (inputs.candidates || []).map((c) => ({ get: (k) => c[k], sid: null, task: null, ts: c.last_ts, n: c.count || 0, sess: c.sessions || 0 }));
   if (source === 'ledger') return (inputs.ledger || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: e.last_seen, n: 1, e }));
+  if (source === 'process') return (inputs.process || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: null, n: e.n ?? 1, e }));
   if (source === 'inventory') return (inputs.inventory || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: null, n: e.count ?? 1, e }));
   return [];
 }
@@ -142,7 +143,7 @@ export function windowInputs(def, all, from, to, nowIso) {
   const days0 = !(def.window_days > 0);
   // HookRun khong phai tool call: bo khoi moi so lieu (ke ca mau so per_1000).
   const events = (days0 ? (all.events || []) : (all.events || []).filter((e) => e && inWin(e.ts, from, to))).filter((e) => !isHookRun(e));
-  const inputs = { events, inventory: all.inventory };
+  const inputs = { events, inventory: all.inventory, process: all.process };
   if (all.tasks) inputs.projTasks = days0 ? all.tasks : all.tasks.filter((t) => inWin(t && t.modified, from, to));
   if (def.source === 'candidates') inputs.candidates = all.candidatesFn ? all.candidatesFn(events, nowIso) : (all.candidates || []).filter((c) => days0 || inWin(c.last_ts, from, to));
   if (def.source === 'ledger') inputs.ledger = days0 ? all.ledger || [] : (all.ledger || []).filter((e) => inWin(e.last_seen, from, to));
