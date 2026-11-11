@@ -538,6 +538,17 @@ test('fix da co de xuat p_<cid>_fix (da duyet): khong dem vao st.week.proposals,
   expect(readQueue(o).filter((x) => x.status === 'pending').length).toBe(0);
 });
 
+test('fix p_<cid>_fix da bi tu choi (queue reject): note refused, khong ket o queued', async () => {
+  const e = entry(FP, { evolve_kind: 'fix', evolve_fix_target: { area: 'brief', path: '.claude/agents/builder.md' } });
+  await runAutopilot({ ...o, ledgerEntries: [e] });
+  const q = readQueue(o)[0];
+  await queueOp({ ...o, reject: q.id });
+  fs.writeFileSync(o.ledgerFile, JSON.stringify(e) + '\n');
+  await runAutopilot({ ...o, ledgerEntries: [e], force: true });
+  const led = JSON.parse(fs.readFileSync(o.ledgerFile, 'utf8').split('\n')[0]);
+  expect(led.evolve.status).toBe('refused');
+});
+
 test('fix applied duoc do qua autopilot: verdict ghi vao proposal, khong rollback', async () => {
   const pid = 'p_fix_x';
   fs.mkdirSync(path.join(o.dataRoot, 'proposals'), { recursive: true });

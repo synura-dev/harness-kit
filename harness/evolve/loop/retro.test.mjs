@@ -2,13 +2,15 @@ import { test, expect, beforeEach, afterEach } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { retro, retroAuto } from './retro.mjs';
+import { retro, retroAuto, signalsFrom, pickKpi } from './retro.mjs';
+import { kpiSnapshot } from '../../observe/report/engine.mjs';
+import { workspaceRoot } from '../../core/io/paths.mjs';
 import { appendSnapshot, isoWeek } from './series.mjs';
 
 const NOW = Date.parse('2026-11-11T10:00:00Z');
 const WEEK = 7 * 86400000;
 let tmp, base;
-beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'retro-')); base = { dataDir: tmp, nowMs: NOW, kpi: { 'kpi-x.a': 5 }, baseline: { 'kpi-x.a': 10 }, processChanges: null, appliedLog: [], proposals: [], ledgerEntries: [] }; });
+beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'retro-')); base = { dataDir: tmp, nowMs: NOW, current: true, kpi: { 'kpi-x.a': 5 }, baseline: { 'kpi-x.a': 10 }, processChanges: null, appliedLog: [], proposals: [], ledgerEntries: [] }; });
 afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
 const ledger = (n) => Array.from({ length: n }, (_, i) => ({ id: `e${i}`, fp: `fp${i}`, status: 'open', count: 10 + i, message: `loi ${i}` }));
@@ -32,7 +34,7 @@ test('2 tuan lien selfdev flat -> task P0 "self-improvement stalled" trong ke ho
   const r = await retro(base);
   expect(r.stalled).toBe(true);
   expect(r.plan.tasks[0]).toMatchObject({ priority: 0 });
-  expect(r.plan.tasks[0].summary.startsWith('self-improvement stalled:')).toBe(true);
+  expect(r.plan.tasks[0].summary.startsWith('[P0] self-improvement stalled:')).toBe(true);
 });
 
 test('khong du lich su -> khong bao stalled gia', async () => {
@@ -96,6 +98,73 @@ test('apply: ghi kho tri thuc qua runner knowledge add (1 lan/tuan), loi runner 
   expect(calls.filter(([c]) => c === 'knowledge').length).toBe(1); // dedupe theo tuan
   const r = await retro({ ...base, nowMs: NOW + WEEK, runner: (c) => { if (c === 'knowledge') throw new Error('kb down'); return { ok: true }; }, apply: true });
   expect(r.errors.join(' ')).toContain('kb down');
+});
+
+test('mac dinh tinh TUAN VUA XONG (nhan tuan truoc, cua so tuan truoc); current:true tinh tuan dang chay', async () => {
+  const appliedLog = [{ ts: new Date(NOW - 5 * 86400000).toISOString(), op: 'apply', ok: true, id: 'x' }]; // 2026-11-06, tuan truoc
+  const prev = await retro({ ...base, current: false, appliedLog });
+  expect(prev.week).toBe(isoWeek(NOW - WEEK));
+  expect(prev.selfdev.self_initiated_rate).toBe(1);
+  const cur = await retro({ ...base, current: true, appliedLog });
+  expect(cur.week).toBe(isoWeek(NOW));
+  expect(cur.selfdev.self_initiated_rate).toBeNull();
+});
+
+test('dedupe task theo key van de (khong gan tuan): van de da tao task khong tao lai, chi lay van de MOI', async () => {
+  const calls = [];
+  const runner = (c, a) => { if (c === 'projects') calls.push(a[a.indexOf('--summary') + 1]); return { ok: true }; };
+  await retro({ ...base, ledgerEntries: ledger(3), runner, apply: true });
+  expect(calls.length).toBe(3);
+  const more = [...ledger(3), { id: 'n', fp: 'fpNew', status: 'open', count: 1, message: 'loi moi' }];
+  const r = await retro({ ...base, nowMs: NOW + WEEK, ledgerEntries: more, runner, apply: true });
+  expect(r.issues.map((i) => i.key)).toEqual(['ledger:fpNew']);
+  expect(calls.length).toBe(4);
+});
+
+test('marker <week>.auto.json chi sau apply thanh cong; xem truoc khong chan; loi -> thu lai', async () => {
+  const week = isoWeek(NOW);
+  const marker = path.join(tmp, 'retro', `${week}.auto.json`);
+  await retro({ ...base, ledgerEntries: ledger(1) }); // xem truoc
+  expect(fs.existsSync(marker)).toBe(false);
+  let fail = true; const calls = [];
+  const runner = (c, a) => { calls.push(c); return fail && c === 'projects' ? { ok: false, err: 'x' } : { ok: true }; };
+  const a = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
+  expect(a.errors.length).toBeGreaterThan(0);
+  expect(fs.existsSync(marker)).toBe(false);
+  fail = false;
+  const b = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
+  expect(b.skipped).toBeUndefined();
+  expect(fs.existsSync(marker)).toBe(true);
+  expect((await retroAuto({ ...base, ledgerEntries: ledger(1), runner })).skipped).toBeTruthy();
+});
+
+test('emitted.json ghi ngay sau MOI spawn thanh cong', async () => {
+  const seen = [];
+  const runner = (c) => { seen.push(fs.existsSync(path.join(tmp, 'retro', 'emitted.json')) ? Object.keys(JSON.parse(fs.readFileSync(path.join(tmp, 'retro', 'emitted.json'), 'utf8'))).length : 0); return { ok: true }; };
+  await retro({ ...base, ledgerEntries: ledger(3), runner, apply: true });
+  expect(seen.slice(0, 4)).toEqual([0, 1, 2, 3]);
+});
+
+test('summary task + body knowledge qua redact (token, email, duong dan)', async () => {
+  const hubPath = path.join(workspaceRoot(), 'secret', 'x.md');
+  const msg = `loi sk-abcdef1234567890XYZ user a.b@example.com file ${hubPath}`;
+  const calls = [];
+  const runner = (c, a) => { calls.push([c, a]); return { ok: true }; };
+  await retro({ ...base, ledgerEntries: [{ id: 'e', fp: 'f', status: 'open', count: 3, message: msg }], runner, apply: true });
+  const sum = calls.find(([c]) => c === 'projects')[1].join(' ');
+  const kb = calls.find(([c]) => c === 'knowledge')[1];
+  const body = fs.readFileSync(kb[kb.indexOf('--body-file') + 1], 'utf8');
+  for (const t of [sum, body]) { expect(t).not.toContain('sk-abcdef1234567890XYZ'); expect(t).not.toContain('a.b@example.com'); expect(t).not.toContain(hubPath); }
+});
+
+test('KPI series chi lay section kpi-* (allowlist)', () => {
+  const mk = (id, key) => ({ def: { id }, rows: [{ key, vals: [3] }] });
+  expect(pickKpi([mk('kpi-size', 'skill'), mk('cost-session', 'sid123'), mk('subagent-vs-main', 'actor')], kpiSnapshot)).toEqual({ 'kpi-size.skill': 3 });
+});
+
+test('signalsFrom bo HookRun nhu engine report', () => {
+  const s = signalsFrom([{ sid: 'a', type: 'hook', signal: 'correction' }, { sid: 'h', event: 'HookRun' }, { sid: 'a', signal: 'correction' }]);
+  expect(s).toEqual({ sessions: 1, corrections: 1, interrupts: 0 });
 });
 
 test('retroAuto: 1 lan/isoWeek; autoApply mac dinh bat, tat duoc', async () => {

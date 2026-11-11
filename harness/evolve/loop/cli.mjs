@@ -8,7 +8,7 @@ import { findPatterns } from './patterns.mjs';
 import { runAutopilot, queueOp, confirmTty } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] [--fix-target <area>:<path>] | check <pid> | apply <pid> --approve (fix: --manual-done) | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | retro [--apply]';
+const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] [--fix-target <area>:<path>] | check <pid> | apply <pid> --approve (fix: --manual-done) | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | retro [--apply] [--current]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -23,6 +23,7 @@ export function parseArgs(argv) {
     else if (k === '--sessions') o.sessions = posInt(val());
     else if (k === '--record') o.record = true;
     else if (k === '--apply') o.apply = true;
+    else if (k === '--current') o.current = true;
     else if (k === '--reject') o.reject = true;
     else if (k === '--dry-run') o.dryRun = true;
     else if (k === '--limit') o.limit = posInt(val());
@@ -75,7 +76,7 @@ export async function render(o) {
   }
   if (o.cmd === 'retro') {
     const { retro, renderRetro } = await import('./retro.mjs');
-    const r = await retro({ apply: o.apply, timeoutS: o.timeoutMs ? o.timeoutMs / 1000 : undefined });
+    const r = await retro({ apply: o.apply, current: o.current, timeoutS: o.timeoutMs ? o.timeoutMs / 1000 : undefined });
     const extra = [`ke hoach: ${r.plan.tasks.length} task${o.apply ? `, da tao ${r.emitted.length}` : ' (khong --apply: chi in)'}`, ...(o.apply ? [] : r.plan.tasks.map((t) => `  [P${t.priority}] ${t.summary}`)), `knowledge: ${r.plan.knowledge}`, ...r.errors.map((e) => `loi: ${e}`)];
     return { code: 0, summary: capLines([...renderRetro(r).split('\n'), ...extra], 80).join('\n'), data: r, truncated: r.truncated };
   }
