@@ -62,9 +62,9 @@
 
 ### Task 6: Chuoi thoi gian KPI append-only (F1) (RED/GREEN)
 **Files:** tao `harness/evolve/loop/series.mjs`, `harness/evolve/loop/series.test.mjs`.
-- [ ] Test do: `appendSnapshot(file, {week, kpi, selfdev})` chi append, cung tuan -> `rev+1`; `readSeries` lay dong cuoi moi tuan, bo dong hong, tran 200 dong / 2 MB -> `truncated`; `trend(series, key, 8)` cho spark dung do dai, `slope` OLS, `vs_prev_pct`, `vs_baseline_pct`, `direction` flat khi |slope| < 5% trung binh; null an toan.
-- [ ] Viet module theo spec 4.4 (ham `isoWeek(date)` dung chung, export).
-- [ ] Commit `evolve: chuoi KPI theo tuan + trend`.
+- [x] Test do: `appendSnapshot(file, {week, kpi, selfdev})` chi append, cung tuan -> `rev+1`; `readSeries` lay dong cuoi moi tuan, bo dong hong, tran 200 dong / 2 MB -> `truncated`; `trend(series, key, 8)` cho spark dung do dai, `slope` OLS, `vs_prev_pct`, `vs_baseline_pct`, `direction` flat khi |slope| < 5% trung binh; null an toan.
+- [x] Viet module theo spec 4.4 (ham `isoWeek(date)` dung chung, export).
+- [x] Commit `evolve: chuoi KPI theo tuan + trend`.
 **Done-when:** `timeout 120 node --test harness/evolve/loop/series.test.mjs` -> `# fail 0`.
 
 ### Task 7: Chi so kha nang tu phat trien (F2) (RED/GREEN)
