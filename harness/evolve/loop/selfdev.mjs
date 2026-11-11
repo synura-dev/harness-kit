@@ -5,7 +5,7 @@
 // signals {sessions, corrections, interrupts}. Moi chi so lay theo cua so tuan [weekStartMs, weekEndMs) de chuoi tuan khong tron so tich luy.
 const FINAL = new Set(['better', 'worse', 'unchanged', 'inconclusive', 'improved', 'no_effect']);
 // chi so tu kpi retro (khoa series on dinh): [ten selfdev, khoa kpi, better]; thieu so -> bo qua (khong flat gia)
-const KPI_METRICS = [['repeat_vs_first_ratio', 'kpi-cost-repeat.repeat_vs_first_ratio', 'down'], ['eff_tokens_per_problem', 'kpi-cost-repeat.eff_tokens_per_problem', 'down'], ['static_tokens', 'kpi-context-tax.static_tokens', 'down'], ['dup_lines', 'kpi-context-tax.dup_lines', 'down'], ['roi_saved_tokens', 'kpi-knowledge.roi_saved_tokens', 'up'], ['key_coverage', 'kpi-cost-repeat.key_coverage', 'up']];
+const KPI_METRICS = [['repeat_vs_first_ratio', 'kpi-cost-repeat.repeat_vs_first_ratio', 'down'], ['eff_tokens_per_problem', 'kpi-cost-repeat.eff_tokens_per_problem', 'down'], ['static_tokens', 'kpi-context-tax.static_tokens', 'down'], ['dup_lines', 'kpi-context-tax.dup_lines', 'down'], ['roi_saved_tokens', 'kpi-knowledge.roi_saved_tokens', 'up'], ['key_coverage', 'kpi-cost-repeat.key_coverage', 'up'], ['routing_compliance', 'kpi-routing.compliance_rate', 'up'], ['missed_agy', 'kpi-routing.missed_agy', 'down'], ['excess_cost_share', 'kpi-routing.excess_cost_share', 'down']];
 const HOUR = 3600e3, DAY = 24 * HOUR;
 const ms = (t) => (typeof t === 'number' ? t : Date.parse(t));
 const ratio = (n, d) => (d > 0 ? n / d : null);

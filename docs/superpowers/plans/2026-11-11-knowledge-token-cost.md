@@ -219,12 +219,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Modify: `harness/evolve/loop/loop.mjs` (`proposeMetricFix` Task 8 nhận `kpi`/`better` tuỳ ý, area `doc`, path AGENTS.md hoặc `.claude/agents/<x>.md`)
 - Test: `harness/evolve/loop/retro.test.mjs`, `harness/evolve/loop/selfdev.test.mjs`, `harness/evolve/loop/loop.test.mjs`
 
-- [ ] selfdev thêm `routing_compliance` (up) và `missed_agy` (down); `kpi-agy.share` KHÔNG vào selfdev.
-- [ ] Retro: top-3 ca lệch theo chi phí chênh -> issue khoá `routing:<loại lệch>:<lớp việc>` (không tuần/đường dẫn), dedupe qua `best`; giữ cap task apply.
-- [ ] `proposeMetricFix({kpi:'kpi-routing.missed_agy', better:'down', path})` -> id ổn định `p_route_<sha8(kpi|path)>_fix`; không sửa file đích; `metricVerdict` (Task 9) đo.
-- [ ] Đếm lại test số đếm retro sau khi thêm khoá.
-- [ ] Done-when: `timeout 60 bun test harness/evolve/loop/retro.test.mjs harness/evolve/loop/selfdev.test.mjs harness/evolve/loop/loop.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] selfdev thêm `routing_compliance` (up) và `missed_agy` (down); `kpi-agy.share` KHÔNG vào selfdev.
+- [x] Retro: top-3 ca lệch theo chi phí chênh -> issue khoá `routing:<loại lệch>:<lớp việc>` (không tuần/đường dẫn), dedupe qua `best`; giữ cap task apply.
+- [x] `proposeMetricFix({kpi:'kpi-routing.missed_agy', better:'down', path})` -> id ổn định `p_route_<sha8(kpi|path)>_fix`; không sửa file đích; `metricVerdict` (Task 9) đo.
+- [x] Đếm lại test số đếm retro sau khi thêm khoá.
+- [x] Done-when: `timeout 60 bun test harness/evolve/loop/retro.test.mjs harness/evolve/loop/selfdev.test.mjs harness/evolve/loop/loop.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 10: Kiểm trên dữ liệu thật hub (haiku, chỉ chạy, không sửa)
 
