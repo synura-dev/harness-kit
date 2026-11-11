@@ -181,3 +181,9 @@ test('buildEnvelope Stop: model parser thang usage.model; parser thieu truong kh
   expect(e2.model).toBe('dflt'); expect(e2.tokens_in).toBe(0); expect(e2.tokens_out).toBe(2);
   fs.rmSync(d, { recursive: true, force: true });
 });
+
+test('sumUsage: first_ctx = input+cache_creation+cache_read cua message dau; rong -> khong co', () => {
+  const r = sumUsage(line('a', 3) + line('b', 4, { input_tokens: 99 }));
+  expect(r.first_ctx).toBe(115);
+  expect('first_ctx' in sumUsage('')).toBe(false);
+});
