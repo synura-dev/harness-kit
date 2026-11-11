@@ -142,7 +142,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
     const evsU = isAgy ? x.all : x.main;
     if (!evsU.some((e) => e.event === 'PostToolUse')) continue;
     const c = classify(evsU, null);
-    const u = { src: isAgy ? 'agy' : 'main', sid: s.sid, cls: c.cls, exp: expectedMode(c.cls, c.risk), act: isAgy ? 'agy' : 'main', eff: s.eff_tokens || 0, wall: s.wall_ms || null, fail: c.fail, calls: c.calls, miss: null, unknown: false, problem: s.problem || null, start: s.start_ts, end: s.end_ts, write: evsU.some((e) => e.event === 'PostToolUse' && WRITE.has(e.tool)), model: x.model };
+    const u = { src: isAgy ? 'agy' : 'main', sid: s.sid, cls: c.cls, exp: expectedMode(c.cls, c.risk), act: isAgy ? 'agy' : 'main', eff: isAgy && !s.eff_tokens ? null : (s.eff_tokens || 0), wall: s.wall_ms || null, fail: c.fail, calls: c.calls, miss: null, unknown: false, problem: s.problem || null, start: s.start_ts, end: s.end_ts, write: evsU.some((e) => e.event === 'PostToolUse' && WRITE.has(e.tool)), model: x.model };
     if (!isAgy) {
       if (u.exp === 'agy') u.miss = 'missed_agy';
       else if ((c.reads >= 3 || c.chars > ROUTING.overreadChars) && !x.pre && inHub(evsU)) u.miss = 'main_overread';
@@ -161,7 +161,7 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
     let ex = 0, ub = 0;
     if (u.miss === 'missed_agy') ub = u.eff || 0; // can tren (khong tach duoc token cua luot web): rieng, KHONG cong vao excess_cost_share
     else if (u.miss === 'main_overread') { const p = price(u.model); ex = p ? (u.eff * (p - 1)) / p : 0; }
-    else if (u.src === 'dispatch' && u.miss !== 'builder_over_turns') { const pa = price(u.act), pe = price(u.exp); ex = pa && pe && u.eff != null ? (u.eff * (pa - pe)) / pa : 0; }
+    else if (u.src === 'dispatch' && u.miss !== 'builder_over_turns') { const pa = price(u.act), pe = price(u.exp); ex = pa && pe && u.eff != null ? Math.max(0, (u.eff * (pa - pe)) / pa) : 0; } // under_model (re hon) = rui ro chat luong, khong phai chi phi thua
     excess += ex; upper += ub;
     misses.push({ type: u.miss, cls: u.cls, sid: String(u.sid).slice(0, 8), excess: ex, upper: ub });
   }
@@ -186,7 +186,8 @@ export function routing({ events = [], segments = [], from = 0, to = 0, deadline
   const stat = (arr) => ({ n: arr.length, median_eff: median(arr.map((u) => u.eff).filter((x) => x != null)), median_wall_ms: median(arr.map((u) => u.wall).filter((w) => w > 0)), error_rate: rate(arr.reduce((a, u) => a + u.fail, 0), arr.reduce((a, u) => a + u.calls, 0)) });
   for (const cls of new Set([...agyU, ...claudeU].map((u) => u.cls))) byClass[cls] = { agy: stat(agyU.filter((u) => u.cls === cls)), claude: stat(claudeU.filter((u) => u.cls === cls)) };
   const probs = (arr) => new Set(arr.map((u) => u.problem).filter(Boolean)).size;
-  const cpp = (arr) => { const p = probs(arr); return p ? arr.reduce((a, u) => a + (u.eff || 0), 0) / p : null; };
+  // eff null (agy khong do duoc token) khong tinh: khong co doan do duoc -> null, khong phai 0
+  const cpp = (arr) => { const m = arr.filter((u) => u.eff != null); const p = probs(m); return p ? m.reduce((a, u) => a + u.eff, 0) / p : null; };
   const claudeSegs = units.filter((u) => u.src === 'main' && !u.unknown);
   const withProb = agyU.filter((u) => u.problem);
   const redo = withProb.filter((a) => claudeSegs.some((c) => c.problem === a.problem && c.write && Date.parse(c.start) > Date.parse(a.end) && Date.parse(c.start) - Date.parse(a.end) <= ROUTING.redoMs));
