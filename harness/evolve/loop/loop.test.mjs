@@ -437,3 +437,22 @@ test('kind fix: da ton tai khong ghi de; manual-done tu choi khi rejected/applie
   expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(true);
   expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(false);
 });
+
+// ---- proposeMetricFix (kt T8) ----
+import { proposeMetricFix } from './loop.mjs';
+test('proposeMetricFix: kind fix, target_metric theo khoa series, baseline tu series, dedupe, khong ghi file dich', () => {
+  const dr = path.join(tmp, 'data-mf');
+  fs.mkdirSync(path.join(dr, 'retro'), { recursive: true });
+  fs.writeFileSync(path.join(dr, 'retro', 'series.jsonl'), [{ week: '2026-W44', kpi: { 'kpi-context-tax.dup_lines': 9 } }, { week: '2026-W45', kpi: { 'kpi-context-tax.dup_lines': 7 } }].map((r) => JSON.stringify(r)).join('\n') + '\n');
+  const om = { ...o, dataRoot: dr };
+  const pair = { a: { file: 'CLAUDE.md', line: 3, loc: 'CLAUDE.md:3' }, b: { file: 'AGENTS.md', line: 8, loc: 'AGENTS.md:8' }, score: 0.8, text: 'BLOCKSECRETTEXT' };
+  const p = proposeMetricFix(pair, om);
+  expect(p.kind).toBe('fix');
+  expect(p.id).toMatch(/^p_dup_[0-9a-f]{8}_fix$/);
+  expect(p.target_metric).toEqual({ kpi: 'kpi-context-tax.dup_lines', better: 'down', baseline: 7 });
+  expect(p.change.target).toBeNull();
+  expect(p.change.fix_target.area).toBe('doc');
+  expect(JSON.stringify(p)).not.toContain('BLOCKSECRETTEXT');
+  expect(proposeMetricFix(pair, om)).toBeNull(); // trung id -> bo qua
+  expect(fs.readdirSync(path.join(dr, 'proposals'))).toHaveLength(1);
+});

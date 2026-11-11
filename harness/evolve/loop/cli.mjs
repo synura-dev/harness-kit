@@ -8,7 +8,7 @@ import { findPatterns } from './patterns.mjs';
 import { runAutopilot, queueOp, confirmTty } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] [--fix-target <area>:<path>] | check <pid> | apply <pid> --approve (fix: --manual-done) | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | retro [--apply] [--current]';
+const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] [--fix-target <area>:<path>] | check <pid> | apply <pid> --approve (fix: --manual-done) | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>] | retro [--apply] [--current] | dupes-content [--json] [--propose] [--threshold 0.6] [--limit N]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -19,7 +19,8 @@ export function parseArgs(argv) {
     const [k, inline] = a.startsWith('--') && a.includes('=') ? [a.slice(0, a.indexOf('=')), a.slice(a.indexOf('=') + 1)] : [a, null];
     const val = () => (inline !== null ? inline : r[++i]);
     if (k === '--days') o.days = posInt(val());
-    else if (k === '--threshold') o.threshold = posInt(val());
+    else if (k === '--threshold') { const v = val(); o.threshold = posInt(v); const f = Number(v); if (f > 0 && f <= 1) o.thresholdF = f; }
+    else if (k === '--propose') o.propose = true;
     else if (k === '--sessions') o.sessions = posInt(val());
     else if (k === '--record') o.record = true;
     else if (k === '--apply') o.apply = true;
@@ -73,6 +74,9 @@ export async function render(o) {
       `ap dung ${r.applied.length} | xep hang ${r.queued.length} | ke hoach ${r.planned.length} | tu choi ${r.refused.length} | rollback ${r.rolledBack.length} | giu ${r.kept.length} | loi ${r.errors.length}`,
       ...L('ap', r.applied), ...L('hang', r.queued), ...L('ke hoach', r.planned), ...L('cam', r.refused), ...L('rollback', r.rolledBack), ...r.errors.map((e) => `  loi: ${e}`)];
     return { code: r.errors.length ? 1 : 0, summary: capLines(lines, 40).join('\n'), data: r };
+  }
+  if (o.cmd === 'dupes-content') {
+    return import('./dupes-cli.mjs').then((m) => m.runDupes(o));
   }
   if (o.cmd === 'retro') {
     const { retro, renderRetro } = await import('./retro.mjs');

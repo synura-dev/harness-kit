@@ -149,11 +149,11 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Modify: `harness/evolve/manifest.json` (commands/files nếu liệt kê)
 - Test: `harness/evolve/loop/loop.test.mjs` (hoặc test cli hiện có)
 
-- [ ] `dupes-content [--project P] [--threshold 0.6] [--limit 20] [--propose] [--json] [--timeout-s 20]`.
-- [ ] `proposeMetricFix({a,b,score})` -> proposal `kind:'fix'`, area `doc`, id `p_dup_<sha8(a|b)>_fix`, `target_metric:{kpi:'kpi-context-tax.static_tokens', better:'down'}`; trùng id -> bỏ qua; không ghi file đích, không xoá.
-- [ ] Test: propose 2 lần cùng cặp -> 1 proposal; không có nội dung khối trong proposal JSON.
-- [ ] Done-when: `timeout 60 bun test harness/evolve/loop/loop.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] `dupes-content [--project P] [--threshold 0.6] [--limit 20] [--propose] [--json] [--timeout-s 20]`.
+- [x] `proposeMetricFix({a,b,score})` -> proposal `kind:'fix'`, area `doc`, id `p_dup_<sha8(a|b)>_fix`, `target_metric:{kpi:'kpi-context-tax.static_tokens', better:'down'}`; trùng id -> bỏ qua; không ghi file đích, không xoá.
+- [x] Test: propose 2 lần cùng cặp -> 1 proposal; không có nội dung khối trong proposal JSON.
+- [x] Done-when: `timeout 60 bun test harness/evolve/loop/loop.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 9: Retro, selfdev, hiệu quả theo metric
 

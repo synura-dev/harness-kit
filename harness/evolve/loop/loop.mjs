@@ -11,6 +11,7 @@ import { collectJsonlFiles, readAuditEvents } from '../../core/audit/scan.mjs';
 import { repeatedFailureCandidates } from '../../core/audit/candidates.mjs';
 import { extractErrorDetails, sanitizeHintPath } from '../../core/audit/signature.mjs';
 import { maskSecrets } from '../../core/audit/gate-event.mjs';
+import { readSeries } from './series.mjs';
 
 export const LIMITS = Object.freeze({
   days: 7, threshold: 3, scanTimeoutMs: 20000, scanMaxBytes: 128 * 1048576, listLimit: 20,
@@ -193,6 +194,28 @@ function proposeFix(cid, cand, scan, o, c) {
   };
   saveProposal(p, o);
   appendLog(c, { op: 'propose', id, kind: 'fix', target: null, fix_target });
+  return p;
+}
+
+// kind fix theo chi so (khong theo fp ledger): cap trung noi dung -> de xuat gop tay. KHONG ghi/xoa file, KHONG chua noi dung khoi (chi loc+diem).
+// target_metric.kpi = khoa series (retro do sau, T9 metricVerdict); baseline = gia tri moi nhat trong series. Trung id -> null (bo qua).
+export const DUP_KPI = 'kpi-context-tax.dup_lines';
+export function proposeMetricFix(pair, o = {}) {
+  const c = ctx(o);
+  const key = `${pair.a.loc}|${pair.b.loc}`;
+  const id = assertSafeId(`p_dup_${crypto.createHash('sha256').update(key).digest('hex').slice(0, 8)}_fix`);
+  if (fs.existsSync(pFile(c, id))) return null;
+  const vals = readSeries(path.join(c.evo, 'retro', 'series.jsonl')).series.map((s) => s?.kpi?.[DUP_KPI]).filter((v) => typeof v === 'number' && Number.isFinite(v));
+  const after = `Sua tay (doc): gop khoi trung noi dung ${pair.a.loc} <-> ${pair.b.loc} (do tuong dong ${pair.score}). Giu mot ban, tro ban kia ve ban giu.\n`;
+  const p = {
+    id, candidate: id, kind: 'fix', created: new Date().toISOString(), status: 'proposed',
+    evidence: { dup: { a: pair.a.loc, b: pair.b.loc, score: pair.score } },
+    change: { target: null, fix_target: { area: 'doc', path: toPosix(pair.a.file).slice(0, 300) }, after, after_sha: sha(Buffer.from(after, 'utf8')) },
+    target_metric: { kpi: DUP_KPI, better: 'down', baseline: vals.length ? vals.at(-1) : null },
+    policy: { ok: true, forbidden: false, reason: 'fix: khong ghi file' }, check: null, ver: null,
+  };
+  saveProposal(p, o);
+  appendLog(c, { op: 'propose', id, kind: 'fix', target: null, metric: DUP_KPI });
   return p;
 }
 
