@@ -10,6 +10,8 @@ import { failureCandidates } from '../../core/audit/candidate-shape.mjs';
 import { detectPatterns } from '../../evolve/loop/patterns.mjs';
 import { readEvents } from '../ledger/job.mjs';
 import { processChanges, processRows } from './process-changes.mjs';
+import { segment } from './problems.mjs';
+import { isHookRun } from '../../core/audit/signals.mjs';
 import { listRegistered } from '../../core/ext/ext-trust.mjs';
 import { registeredExtRoots } from '../ledger/sources.mjs';
 import { readLedger, ledgerFile, ledgerDir } from '../ledger/ledger.mjs';
@@ -118,15 +120,28 @@ export async function buildReport(opts = {}) {
   // thay doi quy trinh tu git (fail-open): chi chay khi co muc nguon process
   let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
   const dl = opts.derived !== undefined ? { map: opts.derived, errors: [] } : sections.some((d) => d.source === 'derived') ? await loadDerived() : { map: undefined, errors: [] };
-  // producer nhan them ngu canh ghi index (--weekly) + ledger; opts.derived tiem tay thi giu nguyen
-  const derived = opts.derived !== undefined || !dl.map ? dl.map : Object.fromEntries(Object.entries(dl.map).map(([k, fn]) => [k, (a) => fn({ ...a, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)) })]));
-  const all = { tasks, process: proc, derived, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
+  const ledger = opts.ledger || readLedger(ledgerFile(opts.dataOpts)); // doc 1 lan / buildReport
+  // getSegments({from,to}): segment() tren su kien cua so, cache theo (from,to) -> cac derive cung cua so (cost-*, T5/T6) dung chung 1 lan tinh.
+  const segCache = new Map();
+  const getSegments = ({ from, to }) => {
+    const k = `${from}|${to}`;
+    if (!segCache.has(k)) {
+      if (opts.onSegment) opts.onSegment(k);
+      const t = (e) => { const x = Date.parse(e && e.ts); return Number.isFinite(x) && x >= from && x < to; };
+      segCache.set(k, segment(ev.events.filter((e) => e && !isHookRun(e) && (!(to > 0) || t(e))), { ledger }));
+    }
+    return segCache.get(k);
+  };
+  const deriveErrors = [];
+  // producer nhan them ngu canh: persist (--weekly), getSegments, ledger, onError; opts.derived tiem tay thi giu nguyen
+  const derived = opts.derived !== undefined || !dl.map ? dl.map : Object.fromEntries(Object.entries(dl.map).map(([k, fn]) => [k, (a) => fn({ ...a, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, ledger, getSegments, onError: (m) => { if (!deriveErrors.includes(m)) deriveErrors.push(m); } })]));
+  const all = { tasks, process: proc, derived, events: ev.events, ledger, inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };
   const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx, avgOf: cfg.avgOf, compare: cfg.compare })), has);
   const truncated = ev.truncated || loaded.truncated || (tl && tl.truncated) || (results.find((r) => r.truncated) || {}).truncated || null;
-  const errors = [...loaded.errors, ...dl.errors, ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
+  const errors = [...loaded.errors, ...dl.errors, ...deriveErrors.map((m) => `cost-repeat: ${m}`), ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
   const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors });
   return { markdown, results, truncated, errors, nowMs };
 }

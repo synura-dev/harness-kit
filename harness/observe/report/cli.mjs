@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// harness observe report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]
+// harness observe report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--bootstrap-days N] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt } from '../../core/io/out.mjs';
@@ -8,7 +8,7 @@ import { readEvents } from '../ledger/job.mjs';
 import { bootstrapIndex } from './cost-repeat.mjs';
 import { buildReport, saveBaseline, putObsidian, markRun, writeReportFile, REPORT } from './run.mjs';
 
-const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]';
+const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--bootstrap-days N] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -22,7 +22,7 @@ export function parseArgs(argv) {
     else if (k === '--out') { o.out = val(); if (!['-', 'obsidian'].includes(o.out)) throw new Error('out phai la - hoac obsidian'); }
     else if (k === '--avg-of') o.avgOf = posInt(val()) || null;
     else if (k === '--compare') { o.compare = val(); if (!['all', 'prev', 'avg', 'baseline'].includes(o.compare)) throw new Error('compare phai la all|prev|avg|baseline'); }
-    else if (k === '--bootstrap-days') o.bootstrapDays = posInt(val()) || null;
+    else if (k === '--bootstrap-days') { const b = Number(val()); if (!Number.isInteger(b) || b < 1 || b > 90) throw new Error('--bootstrap-days phai la so nguyen 1..90 (TTL index)'); o.bootstrapDays = b; }
     else if (k === '--dry-run') o.dryRun = true;
     else if (k === '--baseline') o.baseline = true;
     else if (k === '--weekly') { o.weekly = true; o.out = 'obsidian'; }
@@ -37,9 +37,10 @@ export async function main(argv = process.argv.slice(2)) {
     const o = parseArgs(argv);
     if (o.bootstrapDays) { // nap index khoa van de tu lich su dai, khong dung bao cao
       const ev = await readEvents({ days: o.bootstrapDays, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
-      const n = o.dryRun ? null : bootstrapIndex({ events: ev.events });
-      emit({ summary: `bootstrap ${o.bootstrapDays} ngay: ${n == null ? 'dry-run, khong ghi' : n + ' khoa trong index'}`, data: { keys: n, truncated: ev.truncated }, truncated: ev.truncated }, { json: o.json, raw: o.raw, maxBytes: o.maxBytes });
-      return 0;
+      const b = o.dryRun ? null : bootstrapIndex({ events: ev.events });
+      const fail = b && !b.ok;
+      emit({ summary: fail ? `bootstrap ${o.bootstrapDays} ngay: LOI khong ghi duoc index` : `bootstrap ${o.bootstrapDays} ngay: ${b ? b.keys + ' khoa trong index' : 'dry-run, khong ghi'}`, data: { keys: b ? b.keys : null, ok: !fail, truncated: ev.truncated }, truncated: ev.truncated }, { json: o.json, raw: o.raw, maxBytes: o.maxBytes });
+      return fail ? 1 : 0;
     }
     const res = await buildReport({ persistIndex: o.weekly && !o.dryRun, days: o.days, avgOf: o.avgOf, compare: o.compare, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
     const notes = [];
@@ -56,7 +57,7 @@ export async function main(argv = process.argv.slice(2)) {
     if (o.weekly && !o.dryRun) markRun(undefined, Date.now(), file ? null : 'khong ghi duoc file bao cao'); // loi van backoff 7 ngay, khong spawn lai moi 10 phut
     const summary = [md, notes.length && `ghi chu: ${notes.join('; ')}`].filter(Boolean).join('\n');
     emit({ summary, data: { markdown: res.markdown, notes, truncated: res.truncated, errors: res.errors }, truncated: res.truncated, raw: md ?? '' }, { json: o.json, raw: o.raw, maxBytes: o.maxBytes });
-    return 0;
+    return o.weekly && !o.dryRun && res.errors.some((e) => /index_write_failed/.test(e)) ? 1 : 0; // --weekly: index khong ghi duoc = loi, khong bao thanh cong
   } catch (e) { console.error('report: ' + e.message + '\n' + USAGE); return 2; }
 }
 

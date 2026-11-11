@@ -30,12 +30,13 @@ export function writeIndex(file, keys, nowMs, lim = LIMITS) {
 }
 
 /** @returns {{rows:{k:string,v:number|null}[], byFamily:object[], truncated:string|null}} */
-export function costRepeat({ events = [], index, persist = false, now = Date.now(), ledger, dataOpts, deadline } = {}) {
-  const seg = segment(events, { ledger });
+export function costRepeat({ events = [], segs: pre, index, persist = false, now = Date.now(), ledger, dataOpts, deadline } = {}) {
+  const seg = pre || segment(events, { ledger }); // pre = {segments, truncated} da tinh san (getSegments cua run.mjs)
   let truncated = seg.truncated;
   const segs = seg.segments;
   const idx = index || readIndex(indexFile(dataOpts));
-  const good = segs.filter((s) => s.problem && (s.precision === 'high' || s.precision === 'mid'));
+  const found = segs.filter((s) => s.problem && (s.precision === 'high' || s.precision === 'mid'));
+  const good = found.filter((s) => s.precision === 'high'); // chi high vao ty le/index; mid (vd plan chi doc) chi vao key_coverage
   const keys = new Map(); // khoa -> {family, sess: Map sid -> {eff, start, sub}}
   for (const s of good) {
     let g = keys.get(s.problem); if (!g) { g = { family: s.family || s.problem, sess: new Map() }; keys.set(s.problem, g); }
@@ -66,9 +67,11 @@ export function costRepeat({ events = [], index, persist = false, now = Date.now
     { k: 'eff_tokens_per_problem', v: n ? totalEff / n : null },
     { k: 'problems', v: n || null },
     { k: 'repeat_share', v: totalEff ? repeatEff / totalEff : null },
-    { k: 'key_coverage', v: segs.length ? good.length / segs.length : null },
+    { k: 'key_coverage', v: segs.length ? found.length / segs.length : null },
+    { k: 'ratio_coverage', v: segs.length ? good.length / segs.length : null },
     { k: 'cache_read_share', v: ctx ? cr / ctx : null },
   ];
+  let indexWritten = null;
   if (persist && good.length) {
     const next = { ...idx };
     for (const [key, g] of keys) {
@@ -78,29 +81,29 @@ export function costRepeat({ events = [], index, persist = false, now = Date.now
       const o = next[key];
       next[key] = { first_ts: o && o.first_ts < starts[0] ? o.first_ts : starts[0], last_ts: o && o.last_ts > lastTs ? o.last_ts : lastTs };
     }
-    writeIndex(indexFile(dataOpts), next, now);
+    indexWritten = writeIndex(indexFile(dataOpts), next, now);
   }
   const byFamily = [...fam.values()].sort((a, b) => (b.first_eff + b.repeat_eff) - (a.first_eff + a.repeat_eff)).slice(0, 50);
-  return { rows, byFamily, truncated };
+  return { rows, byFamily, truncated, indexWritten };
 }
 
-/** Nap index tu lich su dai (--bootstrap-days): tinh va ghi index, tra so khoa trong index. */
+/** Nap index tu lich su dai (--bootstrap-days): tinh va ghi index -> {ok, keys}; ghi loi -> ok:false. */
 export function bootstrapIndex({ events, now = Date.now(), ledger, dataOpts } = {}) {
-  costRepeat({ events, persist: true, now, ledger, dataOpts });
-  return Object.keys(readIndex(indexFile(dataOpts))).length;
+  const r = costRepeat({ events, persist: true, now, ledger, dataOpts });
+  return { ok: r.indexWritten !== false, keys: Object.keys(readIndex(indexFile(dataOpts))).length };
 }
 
-// Memo theo mang events (2 section cung cua so chia nhau 1 lan segment); persist chi chay trong lan tinh dau.
-const memo = new WeakMap();
-function shared(a) {
-  const ev = a.events || [];
+// a.getSegments({from,to}) do run.mjs cap (tinh 1 lan / cua so, T5/T6 dung lai); thieu -> tu segment events (test).
+// Chi cost_repeat ghi index (persist), cost_by_family khong; ghi loi -> a.onError('index_write_failed').
+const run = (a, persist) => {
   if (a.deadline && Date.now() > a.deadline) return { rows: [], byFamily: [], truncated: 'timeout' };
-  let r = memo.get(ev);
-  if (!r) { r = costRepeat({ events: ev, persist: !!a.persist, now: a.now, ledger: a.ledger, dataOpts: a.dataOpts, deadline: a.deadline }); memo.set(ev, r); }
+  const segs = a.getSegments ? a.getSegments({ from: a.from, to: a.to }) : undefined;
+  const r = costRepeat({ events: a.events || [], segs, persist, now: a.now, ledger: a.ledger, dataOpts: a.dataOpts, deadline: a.deadline });
+  if (r.indexWritten === false && a.onError) a.onError('index_write_failed');
   return r;
-}
+};
 
 export const derive = {
-  cost_repeat: (a) => { const r = shared(a); return { rows: r.rows, truncated: r.truncated }; },
-  cost_by_family: (a) => { const r = shared(a); return { rows: r.byFamily, truncated: r.truncated }; },
+  cost_repeat: (a) => { const r = run(a, !!a.persist); return { rows: r.rows, truncated: r.truncated }; },
+  cost_by_family: (a) => { const r = run(a, false); return { rows: r.byFamily, truncated: r.truncated }; },
 };
