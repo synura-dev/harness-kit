@@ -74,6 +74,11 @@ test('cham maxBytes -> truncated max_bytes', () => {
   expect(contextTax({ projectDir: p }).truncated).toBe('max_bytes');
 });
 
+test('SKILL.md > 8KB chi doc phan dau (mo ta), khong bao truncated', () => {
+  const p = mk(); w(p, '.claude/skills/big/SKILL.md', `---\nname: big\ndescription: mo ta ngan\n---\n${'x'.repeat(20000)}\n`);
+  expect(contextTax({ projectDir: p }).truncated).toBeNull();
+});
+
 test('projectDir tu tham so thang env; memo dung chung cho 2 derive', () => {
   const p = mk(); const q = mk(); w(p, 'CLAUDE.md', 'a'.repeat(400)); w(q, 'CLAUDE.md', 'b'.repeat(40000));
   const old = process.env.CLAUDE_PROJECT_DIR; process.env.CLAUDE_PROJECT_DIR = q;

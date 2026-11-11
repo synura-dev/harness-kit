@@ -57,7 +57,8 @@ export function scanLoaded({ projectDir, deadline = Infinity } = {}) {
   if (!root) return res;
   const trunc = (why) => { res.truncated = res.truncated || why; };
   let reads = 0;
-  const rd = (r, f, max) => { if (++reads > CTX.maxFiles) { trunc('max_files'); return null; } const x = readIn(r, f, max); if (x && x.cut) trunc('max_bytes'); return x; };
+  // partial: chi can phan dau (SKILL.md: mo ta o frontmatter) -> cat khong tinh la truncated
+  const rd = (r, f, max, partial) => { if (++reads > CTX.maxFiles) { trunc('max_files'); return null; } const x = readIn(r, f, max); if (x && x.cut && !partial) trunc('max_bytes'); return x; };
   const files = [];
   const claude = rd(root, path.join(root, 'CLAUDE.md'));
   if (claude) {
@@ -79,7 +80,7 @@ export function scanLoaded({ projectDir, deadline = Infinity } = {}) {
     const br = realOf(base);
     for (const d of lsDirs(base)) {
       if (Date.now() > deadline) { trunc('timeout'); break; }
-      const t = rd(br, path.join(base, d, 'SKILL.md'), 8192);
+      const t = rd(br, path.join(base, d, 'SKILL.md'), 8192, true);
       if (!t) continue;
       const desc = skillDesc(t.text);
       skillBytes += Buffer.byteLength(d) + Buffer.byteLength(desc);

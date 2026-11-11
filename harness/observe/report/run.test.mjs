@@ -10,7 +10,7 @@ const NOW = Date.parse('2026-11-05T12:00:00Z');
 const ev = { ts: new Date(NOW - 86400000).toISOString(), sid: 's1', event: 'PostToolUse', tool: 'Bash', target: 'harness tasks' };
 
 test('buildReport tren du lieu tiem vao: du muc, khong loi, baseline null', async () => {
-  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null });
+  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, docIds: [] });
   assert.equal(r.results.length, 23); assert.deepEqual(r.errors, []);
   assert.match(r.markdown, /# Bao cao harness tuan 2026-11-05/);
   assert.match(r.markdown, /chua chot/);
@@ -25,7 +25,7 @@ test('onError cua derive: tien to = ten derive, khong cung cost-repeat', async (
 
 test('saveBaseline: dry-run khong ghi; that thi ghi va doc lai', async () => {
   const d = mk(); const o = { dataOpts: { env: { HUB_DATA_DIR: d } } };
-  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null });
+  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, docIds: [] });
   assert.equal(saveBaseline(r, { ...o, dryRun: true }).ok, false);
   assert.equal(fs.existsSync(baselineFile(o.dataOpts)), false);
   const b = saveBaseline(r, o);
@@ -56,7 +56,7 @@ test('kickReport: toi da 1 lan/7 ngay + khoa', () => {
 test('KPI2: co dong pattern (findPatterns) ben canh loi lap', async () => {
   const evs = [];
   for (let i = 0; i < 12; i++) for (const [j, t] of ['bun run build:all', 'git add .', 'git commit -m x'].entries()) evs.push({ ts: new Date(NOW - 3600000 * (i + 1) + j * 1000).toISOString(), sid: 's' + (i % 4), event: 'PostToolUse', tool: 'Bash', ok: true, dur_ms: 5, target: t });
-  const r = await buildReport({ nowMs: NOW, events: evs, ledger: [], baseline: null, process: [], inventory: undefined });
+  const r = await buildReport({ nowMs: NOW, events: evs, ledger: [], baseline: null, process: [], inventory: undefined, docIds: [] });
   const k2 = r.results.find((x) => x.def.id === 'kpi-repeats');
   assert.ok(k2.rows.some((x) => x.key === 'pattern'), JSON.stringify(k2.rows));
 });
@@ -72,7 +72,7 @@ test('writeReportFile: days=1 ghi harness-daily-YYYY-MM-DD, khong de len file tu
 });
 
 test('buildReport: task tu ext projects (tiem), thieu ext -> khong co nguon', async () => {
-  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir() };
+  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir(), docIds: [] };
   const tasks = [{ status: 'completed', modified: new Date(NOW - 3600e3).toISOString() }, { status: 'needs-action', modified: new Date(NOW - 3600e3).toISOString() }];
   const ok = await buildReport({ ...base, tasks, has: () => true });
   assert.match(ok.markdown, /task done\*\*: 0\.50/);
@@ -98,7 +98,7 @@ test('cli: --avg-of / --compare parse, compare sai -> loi', () => {
 });
 
 test('buildReport: --compare prev chi cot truoc, --avg-of doi nhan', async () => {
-  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir(), days: 1, has: () => true, tasks: [] };
+  const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir(), days: 1, has: () => true, tasks: [], docIds: [] };
   const prev = await buildReport({ ...base, compare: 'prev' });
   assert.match(prev.markdown, /hom qua/); assert.doesNotMatch(prev.markdown, /tb \d+ ngay truoc/);
   const avg = await buildReport({ ...base, compare: 'avg', avgOf: 3 });
@@ -121,8 +121,16 @@ test('loadTasks cham tran limit -> truncated, hien trong bao cao', async () => {
   const many = JSON.stringify(Array.from({ length: TASK_LIMIT }, () => ({ status: 'completed', modified: new Date(NOW - 3600e3).toISOString() })));
   const run = () => ({ status: 0, stdout: many });
   assert.equal(loadTasks('.', { run }).truncated, 'tasks_limit');
-  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir(), has: () => true, runTasks: run });
+  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir(), has: () => true, runTasks: run, docIds: [] });
   assert.equal(r.truncated, 'tasks_limit'); assert.match(r.markdown, /truncated: tasks_limit/);
+});
+
+test('truncated o dau bao cao goi ten nguon: <muc>:<ly do>, khong trung', async () => {
+  const mkS = (id) => ({ order: 1, id, title: id, source: 'derived', derive: 'd_' + id, group_by: ['k'], metric: 'sum:v', window_days: 7, format: 'list', limit: 5 });
+  const derived = { d_a: () => ({ rows: [], truncated: 'max_bytes' }), d_b: () => ({ rows: [], truncated: 'max_bytes' }) };
+  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], sections: [mkS('a'), mkS('b')], derived });
+  assert.equal(r.truncated, 'a:max_bytes, b:max_bytes');
+  assert.match(r.markdown, /truncated: a:max_bytes, b:max_bytes/);
 });
 
 test('buildReport khong spawn task khi khong co muc task_done_rate', async () => {

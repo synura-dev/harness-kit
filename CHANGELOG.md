@@ -2,6 +2,12 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.8
+### Added
+- Report chi phi/ngu canh/tri thuc/dinh tuyen: muc `kpi-cost-repeat`, `cost-by-family`, `kpi-context-tax`, `context-dupes`, `kpi-knowledge` (+roi/retire), `kpi-routing`, `kpi-agy`, `routing-misses`; `evolve dupes-content`, `evolve propose-metric`; `observe report --bootstrap-days N`.
+### Fixed
+- Dong `truncated:` dau bao cao ghi ten nguon (`<muc>:<ly do>`); context-tax khong coi SKILL.md > 8KB la bi cat; test report khong spawn CLI that (tiem `docIds`).
+
 ## 0.4.7
 ### Added
 - Vong tu cai tien: evolve kind `fix` (`--fix-target`, `apply --manual-done`, chi hang doi, do hieu qua qua `target_metric`); demote rule evolve vo ich; `evolve retro [--apply] [--json] [--current]` hang tuan (series KPI, chi so selfdev, task `[P0]` khi dung yen 2 tuan, `retro.autoApply` mac dinh true); nguon report `process` (git log).

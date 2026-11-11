@@ -61,6 +61,12 @@ Chỉ cho đề xuất `kind: rule` đã apply. `apply` chụp **baseline** ngay
 - `propose <cid> --kind fix --fix-target <area>:<path>` (area: hook|script|brief|doc|config): đề xuất sửa quy trình; `change.target: null`, không ghi file, có `target_metric.baseline_value`. Autopilot xếp vào review-queue (mức 2), không bao giờ auto-apply.
 - `apply <pid> --approve --manual-done`: người đã sửa tay xong; chỉ đổi status sang applied để bắt đầu đo. Thiếu `--manual-done` -> từ chối. `measureDue` đo mọi đề xuất applied có `target_metric` (không chỉ rule), ghi verdict vào proposal, không rollback (rollback tự động vẫn chỉ cho rule do autopilot áp).
 
+### Công cụ chi phí (0.4.8)
+
+- `evolve dupes-content [--json] [--propose] [--threshold 0.6] [--limit N]`: khối trùng nội dung giữa CLAUDE/AGENTS/agents/memory/kho tri thức; `--propose` tối đa 3 đề xuất `kind fix`, không sửa file.
+- `evolve propose-metric --kpi kpi-routing.<khóa>|kpi-agy.<khóa> --better up|down`: xem mục Retro (đề xuất `fix` kèm baseline từ series).
+- Các mục report tương ứng: `kpi-cost-repeat`, `cost-by-family`, `kpi-context-tax`, `context-dupes`, `kpi-knowledge`, `kpi-routing`, `kpi-agy`, `routing-misses` (xem `observe/report/README.md`).
+
 ### Demote (tự hạ cấp rule vô ích)
 
 `demote.mjs`, gọi từ ledger job sau autopilot (guard 24h, tối đa 10 rule/lần, timeout 10s). Rule `evolve-*.json` trong 14 ngày warned >= 5 mà ignored >= 50% (acted 0): do autopilot áp -> rollback; áp tay -> chỉ log `demote_suggested`. Bỏ qua rule protected, mặc định plugin, `<project>/.harness/rules`.
