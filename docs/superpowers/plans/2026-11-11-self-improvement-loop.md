@@ -27,12 +27,12 @@
 
 ### Task 2: Toan tu filter `prefix` + sua KPI1, ms/session, nhan fp (B) (RED/GREEN)
 **Files:** `harness/observe/ledger/engine.mjs`, test engine ledger canh no (builder Glob `harness/observe/ledger/*.test.mjs`, them vao file test engine hien co hoac tao `engine.test.mjs`), `harness/observe/report/defaults/kpi-info-fetch.json`, `harness/observe/report/defaults/cost-session.json`, `harness/observe/report/defaults/warnings.json`, test report engine canh `harness/observe/report/engine.mjs`.
-- [ ] Test do `matchOne`: `{prefix:['git status']}` khop `git status --short`, `cd x && git status`, khong khop `xgit status`; regression: chuoi bang tuyet doi, list, null giu nguyen ket qua cu.
-- [ ] Sua `matchOne` (~L150-159): nhanh object co `prefix` (mang chuoi, tran 50 phan tu, so sanh tren 2000 ky tu dau).
-- [ ] Test report: fixture audit Bash `git status --short` -> KPI1 > 0; fixture co PostToolUse `dur_ms` + Stop cumulative -> ms/session > 0 va token khong doi so voi truoc.
-- [ ] `kpi-info-fetch.json`: target -> `{"prefix": [...]}`. `cost-session.json`: filter cumulative chuyen vao tung cot token; cot ms co filter su kien tool. Neu token cumulative bi cong trung (nhieu Stop cung sid): ghi `shortcut:` va mo ta trong commit (khong mo rong pham vi).
-- [ ] `warnings.json`: cot "fp" doi nhan "fingerprints"; them cot `ignored`/`acted` neu ledger rows co `status` (count + filter).
-- [ ] Commit `observe: filter prefix, sua KPI1/ms per session, doi nhan fingerprints`.
+- [x] Test do `matchOne`: `{prefix:['git status']}` khop `git status --short`, `cd x && git status`, khong khop `xgit status`; regression: chuoi bang tuyet doi, list, null giu nguyen ket qua cu.
+- [x] Sua `matchOne` (~L150-159): nhanh object co `prefix` (mang chuoi, tran 50 phan tu, so sanh tren 2000 ky tu dau).
+- [x] Test report: fixture audit Bash `git status --short` -> KPI1 > 0; fixture co PostToolUse `dur_ms` + Stop cumulative -> ms/session > 0 va token khong doi so voi truoc.
+- [x] `kpi-info-fetch.json`: target -> `{"prefix": [...]}`. `cost-session.json`: filter cumulative chuyen vao tung cot token; cot ms co filter su kien tool. Neu token cumulative bi cong trung (nhieu Stop cung sid): ghi `shortcut:` va mo ta trong commit (khong mo rong pham vi).
+- [x] `warnings.json`: cot "fp" doi nhan "fingerprints"; them cot `ignored`/`acted` neu ledger rows co `status` (count + filter).
+- [x] Commit `observe: filter prefix, sua KPI1/ms per session, doi nhan fingerprints`.
 **Done-when:** `timeout 120 node --test harness/observe/ledger/ harness/observe/report/` -> `# fail 0`.
 
 ### Task 3: Chi so thay doi quy trinh tu git (A1) (RED/GREEN)

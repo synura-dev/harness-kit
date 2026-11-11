@@ -110,3 +110,31 @@ test('luat protected: propose-fix protected; ghi de chi doi message/cooldown(>=)
   }
   fs.rmSync(proj, { recursive: true, force: true });
 });
+
+test('matchFilter prefix: khop dau lenh va sau && ; |, khong khop giua chuoi', () => {
+  const m = (v, c) => matchFilter(() => v, { f: c }, ctx);
+  const p = { prefix: ['git status'] };
+  assert.equal(m('git status --short', p), true);
+  assert.equal(m('cd x && git status', p), true);
+  assert.equal(m('a; git status', p), true);
+  assert.equal(m('a | git status', p), true);
+  assert.equal(m('xgit status', p), false);
+  assert.equal(m('echo git status', p), false);
+  assert.equal(m(null, p), false);
+  assert.equal(m('git log', { prefix: ['git status', 'git log'] }), true);
+});
+
+test('matchFilter hoi quy: chuoi/list/null/boolean/$hub giu nghia cu', () => {
+  const m = (v, c) => matchFilter(() => v, { f: c }, ctx);
+  assert.equal(m('git status', 'git status'), true);
+  assert.equal(m('git status --short', 'git status'), false);
+  assert.equal(m('a', ['b', 'a']), true);
+  assert.equal(m('c', ['b', 'a']), false);
+  assert.equal(m(true, 'true'), true);
+  assert.equal(m(false, 'true'), false);
+  assert.equal(m(HUB, '$hub'), true);
+  assert.equal(m('x', null), false);
+  assert.equal(m(null, null), true);
+  assert.equal(matchFilter(() => 'x', null, ctx), true);
+  assert.equal(matchFilter(() => 'x', {}, ctx), true);
+});

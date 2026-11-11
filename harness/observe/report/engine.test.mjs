@@ -161,3 +161,22 @@ test('avg: ky giua rong (khong su kien) khong keo trung binh ve 0', () => {
   const r = evaluateSection(def, { events }, { nowMs: NOW, avgOf: 5 });
   assert.equal(r.n, 2); assert.equal(r.avg.all, 2);
 });
+
+test('KPI1 defaults: Bash "git status --short" duoc dem (prefix)', () => {
+  const def = loadSections({ projectDir: null }).sections.find((s) => s.id === 'kpi-info-fetch');
+  const r = evaluateSection(def, { events: [ev({ target: 'git status --short', actor: 'main' })] }, { nowMs: NOW });
+  assert.ok(r.rows.length > 0 && r.rows[0].vals[0] > 0);
+});
+
+test('cost-session defaults: ms/session > 0 tu dur_ms, token khong doi', () => {
+  const def = loadSections({ projectDir: null }).sections.find((s) => s.id === 'cost-session');
+  const events = [ev({ dur_ms: 500 }), ev({ dur_ms: 250 }),
+    ev({ event: 'Stop', tool: undefined, data: { usage_mode: 'cumulative', usage: { input: 100, output: 20 } } })];
+  const r = evaluateSection(def, { events }, { nowMs: NOW });
+  assert.deepEqual(r.rows[0].vals.slice(1), [100, 20, 750]);
+});
+
+test('warnings defaults: nhan fingerprints', () => {
+  const def = loadSections({ projectDir: null }).sections.find((s) => s.id === 'warnings');
+  assert.ok(def.metric.some((c) => c.as === 'fingerprints') && !def.metric.some((c) => c.as === 'fp'));
+});
