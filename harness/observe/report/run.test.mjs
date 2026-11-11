@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { buildReport, saveBaseline, putObsidian, kickReport, markRun, baselineFile } from './run.mjs';
+import { loadDerived, buildReport, saveBaseline, putObsidian, kickReport, markRun, baselineFile } from './run.mjs';
 
 const mk = () => fs.mkdtempSync(path.join(os.tmpdir(), 'rrun-'));
 const NOW = Date.parse('2026-11-05T12:00:00Z');
@@ -158,4 +158,35 @@ test('avg n=0 ky hop le: nhan tb 0/K, gia tri -, khong NaN', async () => {
   const base = { nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], projectDir: null, hubDir: os.tmpdir(), days: 1, has: () => true, tasks: [], compare: 'avg', avgOf: 3 };
   const r = await buildReport(base);
   assert.match(r.markdown, /tb 0\/3 ngay truoc/); assert.doesNotMatch(r.markdown, /NaN/);
+});
+
+test('buildReport: source derived dung opts.derived; khong co muc derived thi khong goi', async () => {
+  let calls = 0;
+  const derived = { x: () => { calls++; return [{ k: 'a', v: 3 }]; } };
+  const ds = { id: 'd', source: 'derived', derive: 'x', group_by: ['k'], metric: 'sum:v', window_days: 7, format: 'kpi' };
+  const au = { id: 'x', source: 'audit', metric: 'count', window_days: 7, format: 'kpi' };
+  const o = { events: [], ledger: [], inventory: [], baseline: null, derived, hubDir: os.tmpdir() };
+  const r = await buildReport({ ...o, sections: [ds] });
+  assert.equal(r.results[0].rows[0].vals[0], 3);
+  const before = calls;
+  await buildReport({ ...o, sections: [au] });
+  assert.equal(calls, before);
+});
+
+test('buildReport: derive_failed vao errors[] va markdown', async () => {
+  const derived = { x: () => { throw new Error('boom'); } };
+  const ds = { id: 'd', source: 'derived', derive: 'x', group_by: ['k'], metric: 'sum:v', window_days: 7, format: 'kpi' };
+  const r = await buildReport({ events: [], ledger: [], inventory: [], baseline: null, derived, hubDir: os.tmpdir(), sections: [ds] });
+  assert.ok(r.errors.some((e) => /d: derive_failed/.test(e)));
+  assert.match(r.markdown, /_error: derive_failed_/);
+});
+
+test('loadDerived: tren trung giua module canh bao; loi import that ghi nhan, thieu module thi bo qua', async () => {
+  const d = mk(); const w = (n, s) => fs.writeFileSync(path.join(d, n), s);
+  w('a.mjs', 'export const derive = { x: () => [] };'); w('b.mjs', 'export const derive = { x: () => [] };'); w('c.mjs', 'throw new Error("hong");');
+  const r = await loadDerived(['file://' + path.join(d, 'a.mjs'), 'file://' + path.join(d, 'b.mjs'), 'file://' + path.join(d, 'c.mjs'), 'file://' + path.join(d, 'nope.mjs')]);
+  assert.ok(typeof r.map.x === 'function');
+  assert.ok(r.errors.some((e) => /trung ten derive x/.test(e)));
+  assert.ok(r.errors.some((e) => /c\.mjs/.test(e)));
+  assert.equal(r.errors.filter((e) => /nope/.test(e)).length, 0);
 });

@@ -81,6 +81,23 @@ export function loadTasks(hubDir, { run = spawnSync, cli = path.join(REPO_DIR, '
 }
 const safeRoot = () => { try { return workspaceRoot(); } catch { return ''; } };
 
+/** Module cung cap derive: moi module export `derive = {ten: ({events,from,to,deadline}) => rows | {rows, truncated}}` (DONG BO; producer kiem deadline, qua han thi tra truncated).
+ *  Cac Task tiep theo (producer cost-*) them ten module vao day. Module chua co -> bo qua; loi import khac / ten derive trung -> errors[]. */
+export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs']);
+export async function loadDerived(modules = DERIVED_MODULES) {
+  const map = {}; const errors = [];
+  for (const f of modules) {
+    try {
+      const d = (await import(f)).derive || {};
+      for (const [k, fn] of Object.entries(d)) { if (k in map) errors.push(`derive: trung ten derive ${k} (${f})`); else map[k] = fn; }
+    } catch (e) {
+      const missing = e && (e.code === 'ERR_MODULE_NOT_FOUND' || e.code === 'MODULE_NOT_FOUND' || /Cannot find module/.test(String(e.message))) && String(e.message).includes(path.basename(String(f)));
+      if (!missing) errors.push(`derive: import ${path.basename(String(f))} loi: ${String(e && e.message).slice(0, 120)}`);
+    }
+  }
+  return { map, errors };
+}
+
 /** Dung bao cao. opts: {days, nowMs, events, ledger, inventory, baseline, sections, projectDir, timeoutMs, dataOpts, defaultsDir}. */
 export async function buildReport(opts = {}) {
   const nowMs = opts.nowMs || Date.now();
@@ -100,14 +117,17 @@ export async function buildReport(opts = {}) {
   const tasks = tl ? tl.tasks : undefined;
   // thay doi quy trinh tu git (fail-open): chi chay khi co muc nguon process
   let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
-  const all = { tasks, process: proc, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
+  const dl = opts.derived !== undefined ? { map: opts.derived, errors: [] } : sections.some((d) => d.source === 'derived') ? await loadDerived() : { map: undefined, errors: [] };
+  const derived = dl.map;
+  const all = { tasks, process: proc, derived, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };
   const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx, avgOf: cfg.avgOf, compare: cfg.compare })), has);
-  const truncated = ev.truncated || loaded.truncated || (tl && tl.truncated) || null;
-  const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors: loaded.errors });
-  return { markdown, results, truncated, errors: loaded.errors, nowMs };
+  const truncated = ev.truncated || loaded.truncated || (tl && tl.truncated) || (results.find((r) => r.truncated) || {}).truncated || null;
+  const errors = [...loaded.errors, ...dl.errors, ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
+  const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors });
+  return { markdown, results, truncated, errors, nowMs };
 }
 
 /** Chot baseline tu ket qua (ghi state, tru dry-run). */
