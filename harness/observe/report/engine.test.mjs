@@ -181,3 +181,22 @@ test('warnings defaults: nhan fingerprints', () => {
   const def = loadSections({ projectDir: null }).sections.find((s) => s.id === 'warnings');
   assert.ok(def.metric.some((c) => c.as === 'fingerprints') && !def.metric.some((c) => c.as === 'fp'));
 });
+
+const dsec = { id: 'd', source: 'derived', derive: 'x', group_by: ['k'], metric: 'sum:v', format: 'kpi', empty_note: 'trong' };
+test('derived: hang tu derive, kpiSnapshot ra <key>', () => {
+  let seen;
+  const derived = { x: (a) => { seen = a; return [{ k: 'a', v: 2 }]; } };
+  const r = evaluateSection(dsec, { events: [ev({})], derived }, { nowMs: NOW });
+  assert.deepEqual(r.rows.map((x) => [x.key, x.vals[0]]), [['a', 2]]);
+  assert.ok(Array.isArray(seen.events) && 'from' in seen && 'to' in seen);
+  assert.deepEqual(kpiSnapshot(r), { a: 2 });
+});
+test('derived: derive khong ton tai -> rong + empty_note, khong throw', () => {
+  const r = evaluateSection(dsec, { events: [], derived: {} }, { nowMs: NOW });
+  assert.equal(r.rows.length, 0); assert.equal(r.note, 'trong');
+  assert.equal(evaluateSection(dsec, { events: [] }, { nowMs: NOW }).rows.length, 0);
+});
+test('derived: derive throw -> fail-open, error derive_failed', () => {
+  const r = evaluateSection(dsec, { events: [], derived: { x: () => { throw new Error('boom'); } } }, { nowMs: NOW });
+  assert.equal(r.rows.length, 0); assert.equal(r.error, 'derive_failed');
+});

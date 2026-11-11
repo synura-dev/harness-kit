@@ -159,3 +159,16 @@ test('avg n=0 ky hop le: nhan tb 0/K, gia tri -, khong NaN', async () => {
   const r = await buildReport(base);
   assert.match(r.markdown, /tb 0\/3 ngay truoc/); assert.doesNotMatch(r.markdown, /NaN/);
 });
+
+test('buildReport: source derived dung opts.derived; khong co muc derived thi khong goi', async () => {
+  let calls = 0;
+  const derived = { x: () => { calls++; return [{ k: 'a', v: 3 }]; } };
+  const ds = { id: 'd', source: 'derived', derive: 'x', group_by: ['k'], metric: 'sum:v', window_days: 7, format: 'kpi' };
+  const au = { id: 'x', source: 'audit', metric: 'count', window_days: 7, format: 'kpi' };
+  const o = { events: [], ledger: [], inventory: [], baseline: null, derived, hubDir: os.tmpdir() };
+  const r = await buildReport({ ...o, sections: [ds] });
+  assert.equal(r.results[0].rows[0].vals[0], 3);
+  const before = calls;
+  await buildReport({ ...o, sections: [au] });
+  assert.equal(calls, before);
+});

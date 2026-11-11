@@ -81,6 +81,14 @@ export function loadTasks(hubDir, { run = spawnSync, cli = path.join(REPO_DIR, '
 }
 const safeRoot = () => { try { return workspaceRoot(); } catch { return ''; } };
 
+/** Module cung cap derive (moi module export `derive = {ten: ({events,from,to}) => rows}`). T4/T6/T7 them vao day; thieu module -> bo qua. */
+export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs']);
+async function loadDerived() {
+  const m = {};
+  for (const f of DERIVED_MODULES) { try { Object.assign(m, (await import(f)).derive || {}); } catch { /* fail-open */ } }
+  return m;
+}
+
 /** Dung bao cao. opts: {days, nowMs, events, ledger, inventory, baseline, sections, projectDir, timeoutMs, dataOpts, defaultsDir}. */
 export async function buildReport(opts = {}) {
   const nowMs = opts.nowMs || Date.now();
@@ -100,7 +108,8 @@ export async function buildReport(opts = {}) {
   const tasks = tl ? tl.tasks : undefined;
   // thay doi quy trinh tu git (fail-open): chi chay khi co muc nguon process
   let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
-  const all = { tasks, process: proc, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
+  const derived = opts.derived !== undefined ? opts.derived : sections.some((d) => d.source === 'derived') ? await loadDerived() : undefined;
+  const all = { tasks, process: proc, derived, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };

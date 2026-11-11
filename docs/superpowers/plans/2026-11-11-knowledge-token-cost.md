@@ -65,12 +65,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Modify: `harness/observe/report/README.md` (mô tả source `derived`, `derive`)
 - Test: `harness/observe/report/engine.test.mjs`, `harness/observe/report/run.test.mjs`
 
-- [ ] Test đỏ: section `{source:'derived', derive:'x', group_by:['k'], metric:'sum:v', format:'kpi'}` với `opts.derived = {x: ({events,from,to}) => [{k:'a',v:2}]}` -> hàng key `a` giá trị 2; derive không tồn tại -> section rỗng + `empty_note`, không throw; hàm throw -> fail-open, ghi `error: derive_failed`.
-- [ ] Test: `kpiSnapshot` cho section này ra khoá `<id>.a`.
-- [ ] Code engine + run (`opts.derived` cho phép test tiêm; mặc định import lazy 3 module Task 4/6/7 - module chưa có thì bỏ qua, fail-open).
-- [ ] Grep test số đếm SOURCES/section; cập nhật.
-- [ ] Done-when: `timeout 60 bun test harness/observe/report/engine.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Test đỏ: section `{source:'derived', derive:'x', group_by:['k'], metric:'sum:v', format:'kpi'}` với `opts.derived = {x: ({events,from,to}) => [{k:'a',v:2}]}` -> hàng key `a` giá trị 2; derive không tồn tại -> section rỗng + `empty_note`, không throw; hàm throw -> fail-open, ghi `error: derive_failed`.
+- [x] Test: `kpiSnapshot` cho section này ra khoá `<id>.a`.
+- [x] Code engine + run (`opts.derived` cho phép test tiêm; mặc định import lazy 3 module Task 4/6/7 - module chưa có thì bỏ qua, fail-open).
+- [x] Grep test số đếm SOURCES/section; cập nhật.
+- [x] Done-when: `timeout 60 bun test harness/observe/report/engine.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 3: Khoá vấn đề `problems.mjs`
 

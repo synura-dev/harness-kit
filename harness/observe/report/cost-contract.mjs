@@ -6,7 +6,7 @@
 //   data (khi co): task_id, error_fp, files_touched[], prompt_kw[<=8 tu chuan hoa], prompt_hash, tokens_cache (cache_read, cumulative),
 //     usage {input, output, cache_creation, cache_read, msgs, first_ctx} (delta moi Stop; first_ctx = input+cache_creation+cache_read
 //     cua message dau trong delta), out_len (Bash: do dai stdout+stderr, KHONG noi dung), phantom, run_kind, run_id.
-//   Luu y: Stop ghi tokens theo `data.usage` (delta) - cong cac Stop trong doan; SubagentStop ghi tokens_in/tokens_out LUY KE theo agent_id.
+//   Luu y: CONG `data.usage` (delta) cua cac Stop trong doan; KHONG cong `tokens_in` cua Stop (LUY KE); SubagentStop ghi tokens_in/tokens_out LUY KE theo agent_id.
 
 /**
  * Segment = doan tu mot prompt den prompt ke tiep cung sid (T3 `segment()` tra ve).

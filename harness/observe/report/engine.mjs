@@ -9,7 +9,7 @@ import { isHookRun } from '../../core/audit/signals.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const DEFAULTS_DIR = path.join(HERE, 'defaults');
 export const LIMITS = Object.freeze({ timeoutMs: 5000, maxDefs: 50, maxFileBytes: 32768, maxRows: 200 });
-export const SOURCES = Object.freeze(['audit', 'candidates', 'ledger', 'inventory', 'process']);
+export const SOURCES = Object.freeze(['audit', 'candidates', 'ledger', 'inventory', 'process', 'derived']);
 export const AVG_WINDOWS = 7;
 export const FORMATS = Object.freeze(['table', 'kpi', 'list']);
 const DAY = 86400000;
@@ -75,6 +75,7 @@ function toRecs(source, inputs, ctx) {
   if (source === 'candidates') return (inputs.candidates || []).map((c) => ({ get: (k) => c[k], sid: null, task: null, ts: c.last_ts, n: c.count || 0, sess: c.sessions || 0 }));
   if (source === 'ledger') return (inputs.ledger || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: e.last_seen, n: 1, e }));
   if (source === 'process') return (inputs.process || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: null, n: e.n ?? 1, e }));
+  if (source === 'derived') return (inputs.derivedRows || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: null, n: e.n ?? 1, e }));
   if (source === 'inventory') return (inputs.inventory || []).map((e) => ({ get: (k) => e[k], sid: null, task: null, ts: null, n: e.count ?? 1, e }));
   return [];
 }
@@ -133,7 +134,7 @@ export function computeSection(def, inputs, ctx = {}) {
   }
   const primary = (r) => (typeof r.vals[0] === 'number' ? r.vals[0] : -Infinity);
   rows.sort((a, b) => primary(b) - primary(a) || a.key.localeCompare(b.key));
-  return { cols: cols.map((c) => c.as), rows: rows.slice(0, Math.min(def.limit > 0 ? def.limit : 50, LIMITS.maxRows)), total: rows.length };
+  return { cols: cols.map((c) => c.as), rows: rows.slice(0, Math.min(def.limit > 0 ? def.limit : 50, LIMITS.maxRows)), total: rows.length, ...(inputs.derivedError ? { error: inputs.derivedError } : {}) };
 }
 
 const inWin = (ts, from, to) => { const t = Date.parse(ts); return Number.isFinite(t) ? t >= from && t < to : false; };
@@ -147,6 +148,11 @@ export function windowInputs(def, all, from, to, nowIso) {
   if (all.tasks) inputs.projTasks = days0 ? all.tasks : all.tasks.filter((t) => inWin(t && t.modified, from, to));
   if (def.source === 'candidates') inputs.candidates = all.candidatesFn ? all.candidatesFn(events, nowIso) : (all.candidates || []).filter((c) => days0 || inWin(c.last_ts, from, to));
   if (def.source === 'ledger') inputs.ledger = days0 ? all.ledger || [] : (all.ledger || []).filter((e) => inWin(e.last_seen, from, to));
+  // derived: producer do all.derived[def.derive] cap; thieu/throw -> rong (fail-open), throw ghi error.
+  if (def.source === 'derived') {
+    const fn = all.derived && all.derived[def.derive];
+    if (typeof fn === 'function') { try { const r = fn({ events, from, to }); inputs.derivedRows = Array.isArray(r) ? r : []; } catch { inputs.derivedError = 'derive_failed'; } }
+  }
   return inputs;
 }
 
