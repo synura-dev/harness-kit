@@ -510,3 +510,31 @@ test('effect: rollback that bai -> bao loi, state rollback_failed', async () => 
   expect(readState(o).applied[0].status).toBe('rollback_failed');
 });
 
+
+test('kind fix: level 2, vao hang, khong bao gio tu ap; duyet khong ghi file', async () => {
+  expect(classifyChange({ kind: 'fix', target: '.claude/agents/builder.md' }).level).toBe(2);
+  expect(classifyChange({ kind: 'fix', target: null }).level).toBe(2);
+  const r = await runAutopilot({ ...o, ledgerEntries: [entry(FP, { evolve_kind: 'fix', evolve_fix_target: { area: 'brief', path: '.claude/agents/builder.md' } })] });
+  expect(r.applied.length).toBe(0);
+  expect(r.queued.length).toBe(1);
+  const q = readQueue(o)[0];
+  expect(q).toMatchObject({ kind: 'fix', level: 2, status: 'pending' });
+  const a = await queueOp({ ...o, approve: q.id, confirm: () => true });
+  expect(a.code).toBe(0);
+  const p = readProp(q.pid);
+  expect(p.status).toBe('proposed'); // duyet khong ap, khong ghi dich
+  expect(fs.existsSync(path.join(o.hubRoot, '.claude'))).toBe(false);
+});
+
+test('fix applied duoc do qua autopilot: verdict ghi vao proposal, khong rollback', async () => {
+  const pid = 'p_fix_x';
+  fs.mkdirSync(path.join(o.dataRoot, 'proposals'), { recursive: true });
+  fs.writeFileSync(path.join(o.dataRoot, 'proposals', `${pid}.json`), JSON.stringify({ id: pid, kind: 'fix', status: 'applied', applied_at: '2026-10-20T00:00:00Z', evidence: { fp: LB.get(FP) }, change: { target: null }, target_metric: { fp: LB.get(FP), baseline_value: 10, window_days: 7 }, effect: { baseline: { window_days: 7, target_count: 10, tool_calls: 1000, rate_per_1000: 10, sessions: 5, tokens_per_session: 1000, corrections_per_session: 1 } } }));
+  okCalls('2026-10-27', 'sa', 400);
+  failN('2026-10-27', 'sf', 40);
+  const r = await runAutopilot({ ...o, ledgerEntries: [], force: true });
+  expect(r.rolledBack).toEqual([]);
+  const p = readProp(pid);
+  expect(p.status).toBe('applied');
+  expect(p.effect.verdict).toBe('worse');
+});

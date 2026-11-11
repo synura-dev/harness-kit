@@ -171,7 +171,7 @@ export function measureDue(proposals, now, o = {}) {
   const L = limitsOf(o);
   const due = [];
   for (const p of proposals) {
-    if (!p || p.kind !== 'rule' || p.status !== 'applied') continue;
+    if (!p || p.status !== 'applied' || !(p.kind === 'rule' || p.target_metric)) continue;
     if (p.effect && FINAL.has(p.effect.verdict)) continue;
     const at = appliedMs(p, o);
     if (!Number.isFinite(at) || nowMs < at + EFFECT.windowDays * DAY) continue;

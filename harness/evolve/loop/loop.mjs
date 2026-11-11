@@ -17,7 +17,7 @@ export const LIMITS = Object.freeze({
   maxAfterBytes: 256 * 1024, logLimit: 20, sampleChars: 200,
   patternChars: 1000,
 });
-export const KINDS = Object.freeze(['skill', 'rule', 'inject']);
+export const KINDS = Object.freeze(['skill', 'rule', 'inject', 'fix']);
 const DAY = 86400000;
 
 const sha = (buf) => (buf == null ? 'absent' : crypto.createHash('sha256').update(buf).digest('hex'));
@@ -159,6 +159,7 @@ export async function propose(cid, o = {}) {
   const scan = await findCandidates(o);
   const cand = scan.items.find((x) => x.id === cid);
   if (!cand) throw new Error(`khong co candidate ${cid} (nguong ${scan.threshold} lan/${scan.days} ngay)`);
+  if (kind === 'fix') return proposeFix(cid, cand, scan, o, c);
   const ch = buildChange(kind, cand, o);
   if (Buffer.byteLength(ch.after) > LIMITS.maxAfterBytes) throw new Error('noi dung de xuat qua lon');
   const pol = classifyTarget(ch.target, kind, o);
@@ -171,6 +172,26 @@ export async function propose(cid, o = {}) {
   };
   saveProposal(p, o);
   appendLog(c, { op: 'propose', id, kind, target: p.change.target, policy: pol.ok ? 'ok' : pol.reason });
+  return p;
+}
+
+// kind fix: KHONG ghi file nao, KHONG qua classifyTarget (khong co dich); chi de xuat de nguoi sua tay, co target_metric de do hieu qua.
+const FIX_AREAS = ['hook', 'script', 'brief', 'doc', 'config'];
+function proposeFix(cid, cand, scan, o, c) {
+  const ft = o.fixTarget;
+  if (!ft || !FIX_AREAS.includes(ft.area) || typeof ft.path !== 'string' || !ft.path) throw new Error(`kind fix can fixTarget {area: ${FIX_AREAS.join('|')}, path}`);
+  const fix_target = { area: ft.area, path: toPosix(ft.path).slice(0, 300) };
+  const after = `Sua tay (${fix_target.area}) ${fix_target.path}.\nBang chung: fp=${cand.fp || '-'}, ${cand.count} lan / ${cand.sessions} phien (${cand.first_ts} .. ${cand.last_ts}), tool=${cand.tool}.\nMau (redacted): ${cand.sample}\n`;
+  const id = assertSafeId(`p_${cid}_fix`);
+  const p = {
+    id, candidate: cid, kind: 'fix', created: new Date().toISOString(), status: 'proposed',
+    evidence: { fp: cand.fp, count: cand.count, sessions: cand.sessions, window_days: scan.days, threshold: scan.threshold, first_ts: cand.first_ts, last_ts: cand.last_ts, tool: cand.tool, sample: cand.sample, pattern: cand.pattern },
+    change: { target: null, fix_target, after, after_sha: sha(Buffer.from(after, 'utf8')) },
+    target_metric: { fp: cand.fp, baseline_value: cand.count, window_days: scan.days },
+    policy: { ok: true, forbidden: false, reason: 'fix: khong ghi file' }, check: null, ver: null,
+  };
+  saveProposal(p, o);
+  appendLog(c, { op: 'propose', id, kind: 'fix', target: null, fix_target });
   return p;
 }
 
@@ -198,6 +219,7 @@ const afterOf = (p) => (p && p.change && typeof p.change.after === 'string' ? Bu
 export function check(id, o = {}) {
   const c = ctx(o);
   const p = loadProposal(id, o);
+  if (p.kind === 'fix') return p; // khong co dich de eval
   const done = (res) => { p.check = { ts: new Date().toISOString(), ...res }; p.status = res.ok ? 'checked' : 'rejected'; saveProposal(p, o); appendLog(c, { op: 'check', id, ok: res.ok, reason: res.reason || null }); return p; };
   const pol = classifyTarget(p.change && p.change.target, p.kind, o);
   if (!pol.ok) return done({ ok: false, reason: `khong danh gia: ${pol.reason}` });
@@ -217,6 +239,14 @@ export function apply(id, o = {}) {
   const c = ctx(o);
   const p = loadProposal(id, o);
   const refuse = (code, reason, extra = {}) => { appendLog(c, { op: 'apply', id, ok: false, reason }); return { ok: false, code, reason, ...extra }; };
+  if (p.kind === 'fix') { // KHONG ghi dich: chi danh dau nguoi da sua tay (--manual-done) de bat dau do hieu qua
+    if (p.status === 'applied') return refuse(4, 'da danh dau applied');
+    if (!o.manualDone) return refuse(2, 'kind fix khong tu ap: nguoi sua tay roi chay lai voi --manual-done');
+    p.status = 'applied'; p.applied_at = new Date(Number(o.nowMs) || Date.now()).toISOString(); p.manual = true;
+    saveProposal(p, o);
+    appendLog(c, { op: 'apply', id, ok: true, kind: 'fix', manual: true });
+    return { ok: true, code: 0, manual: true };
+  }
   const pol = classifyTarget(p.change && p.change.target, p.kind, o);
   if (pol.forbidden) return refuse(3, `tu choi (ke ca co --approve): ${pol.reason}`, { manual: manualHelp(p, c) });
   if (!o.approve) return refuse(2, 'can nguoi duyet: chay lai voi --approve');
