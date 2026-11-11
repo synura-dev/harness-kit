@@ -40,7 +40,7 @@ function relTarget(t) {
 export function classifyChange(change = {}) {
   const kind = String(change.kind || '');
   if (FORBIDDEN_KIND.test(kind) || FORBIDDEN_TEXT.test(`${kind} ${change.text || ''}`)) return { level: 0, reason: 'cam: push/deploy' };
-  if (kind === 'fix' && change.target == null) return { level: 2, reason: 'fix -> cho duyet (khong ghi file)' };
+  if (kind === 'fix') return { level: 2, reason: 'fix -> cho duyet (khong ghi file)' };
   const rel = relTarget(change.target);
   if (rel == null) return { level: 0, reason: `cam: dich ngoai repo harness (${String(change.target).slice(0, 60)})` };
   if (GATE_PATH.test(rel) || /^evolve\/(autopilot|review-queue)/i.test(rel)) return { level: 0, reason: `cam: cham guard/approval/bash-guard/data-gate/model-policy (${rel})` };

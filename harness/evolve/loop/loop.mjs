@@ -183,11 +183,12 @@ function proposeFix(cid, cand, scan, o, c) {
   const fix_target = { area: ft.area, path: toPosix(ft.path).slice(0, 300) };
   const after = `Sua tay (${fix_target.area}) ${fix_target.path}.\nBang chung: fp=${cand.fp || '-'}, ${cand.count} lan / ${cand.sessions} phien (${cand.first_ts} .. ${cand.last_ts}), tool=${cand.tool}.\nMau (redacted): ${cand.sample}\n`;
   const id = assertSafeId(`p_${cid}_fix`);
+  if (fs.existsSync(pFile(c, id))) throw new Error(`de xuat ${id} da ton tai`);
   const p = {
     id, candidate: cid, kind: 'fix', created: new Date().toISOString(), status: 'proposed',
     evidence: { fp: cand.fp, count: cand.count, sessions: cand.sessions, window_days: scan.days, threshold: scan.threshold, first_ts: cand.first_ts, last_ts: cand.last_ts, tool: cand.tool, sample: cand.sample, pattern: cand.pattern },
     change: { target: null, fix_target, after, after_sha: sha(Buffer.from(after, 'utf8')) },
-    target_metric: { fp: cand.fp, baseline_value: cand.count, window_days: scan.days },
+    target_metric: { fp: cand.fp, window_days: scan.days }, // baseline do luc apply (effect.baseline, rate/1000 call), khong luu o day
     policy: { ok: true, forbidden: false, reason: 'fix: khong ghi file' }, check: null, ver: null,
   };
   saveProposal(p, o);
@@ -240,7 +241,7 @@ export function apply(id, o = {}) {
   const p = loadProposal(id, o);
   const refuse = (code, reason, extra = {}) => { appendLog(c, { op: 'apply', id, ok: false, reason }); return { ok: false, code, reason, ...extra }; };
   if (p.kind === 'fix') { // KHONG ghi dich: chi danh dau nguoi da sua tay (--manual-done) de bat dau do hieu qua
-    if (p.status === 'applied') return refuse(4, 'da danh dau applied');
+    if (!['proposed', 'approved'].includes(p.status)) return refuse(4, `kind fix o trang thai ${p.status}: chi proposed/approved moi danh dau applied`);
     if (!o.manualDone) return refuse(2, 'kind fix khong tu ap: nguoi sua tay roi chay lai voi --manual-done');
     p.status = 'applied'; p.applied_at = new Date(Number(o.nowMs) || Date.now()).toISOString(); p.manual = true;
     saveProposal(p, o);

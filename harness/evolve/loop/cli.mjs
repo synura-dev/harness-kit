@@ -8,7 +8,7 @@ import { findPatterns } from './patterns.mjs';
 import { runAutopilot, queueOp, confirmTty } from './autopilot.mjs';
 import { findCandidates, propose, check, apply, rollback, readLog, listProposals, LIMITS } from './loop.mjs';
 
-const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] | check <pid> | apply <pid> --approve | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>]';
+const USAGE = 'evolve scan [--kind error|pattern|deprecate] [--days N] [--limit N] [--threshold N] [--sessions K] [--source ext:<id>] [--record] | propose <cid> [--kind skill] [--target F] [--fix-target <area>:<path>] | check <pid> | apply <pid> --approve (fix: --manual-done) | rollback <ver> --approve [--force] | log [--limit N] | list | autopilot [--dry-run] [--force] | queue [--approve <id>|--reject <id>]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
@@ -29,6 +29,8 @@ export function parseArgs(argv) {
     else if (k === '--source') o.source = val();
     else if (k === '--target') o.target = val();
     else if (k === '--approve') o.approve = true;
+    else if (k === '--manual-done') o.manualDone = true;
+    else if (k === '--fix-target') { const v = val() || ''; const j = v.indexOf(':'); if (j < 1 || j === v.length - 1) throw new Error('--fix-target <area>:<path>'); o.fixTarget = { area: v.slice(0, j), path: v.slice(j + 1) }; }
     else if (k === '--force') o.force = true;
     else if (k === '--cost') o.cost = true;
     else if (k === '--by-project') o.byProject = true;

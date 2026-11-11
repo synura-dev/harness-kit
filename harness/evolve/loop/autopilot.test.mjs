@@ -529,7 +529,7 @@ test('kind fix: level 2, vao hang, khong bao gio tu ap; duyet khong ghi file', a
 test('fix applied duoc do qua autopilot: verdict ghi vao proposal, khong rollback', async () => {
   const pid = 'p_fix_x';
   fs.mkdirSync(path.join(o.dataRoot, 'proposals'), { recursive: true });
-  fs.writeFileSync(path.join(o.dataRoot, 'proposals', `${pid}.json`), JSON.stringify({ id: pid, kind: 'fix', status: 'applied', applied_at: '2026-10-20T00:00:00Z', evidence: { fp: LB.get(FP) }, change: { target: null }, target_metric: { fp: LB.get(FP), baseline_value: 10, window_days: 7 }, effect: { baseline: { window_days: 7, target_count: 10, tool_calls: 1000, rate_per_1000: 10, sessions: 5, tokens_per_session: 1000, corrections_per_session: 1 } } }));
+  fs.writeFileSync(path.join(o.dataRoot, 'proposals', `${pid}.json`), JSON.stringify({ id: pid, kind: 'fix', status: 'applied', applied_at: '2026-10-20T00:00:00Z', evidence: { fp: LB.get(FP) }, change: { target: null }, target_metric: { fp: LB.get(FP), window_days: 7 }, effect: { baseline: { window_days: 7, target_count: 10, tool_calls: 1000, rate_per_1000: 10, sessions: 5, tokens_per_session: 1000, corrections_per_session: 1 } } }));
   okCalls('2026-10-27', 'sa', 400);
   failN('2026-10-27', 'sf', 40);
   const r = await runAutopilot({ ...o, ledgerEntries: [], force: true });
@@ -537,4 +537,8 @@ test('fix applied duoc do qua autopilot: verdict ghi vao proposal, khong rollbac
   const p = readProp(pid);
   expect(p.status).toBe('applied');
   expect(p.effect.verdict).toBe('worse');
+});
+
+test('kind fix luon level 2, ke ca path hook/guard/tuyet doi (khong ghi file)', () => {
+  for (const t of ['harness/hooks/x.mjs', 'harness/constrain/guard/a.mjs', '/etc/passwd', '../x']) expect(classifyChange({ kind: 'fix', target: t }).level).toBe(2);
 });
