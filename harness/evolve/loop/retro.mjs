@@ -30,13 +30,26 @@ function weekWindow(nowMs) {
 async function defaultKpi({ nowMs, timeoutMs }) {
   const run = await import('../../observe/report/run.mjs');
   const eng = await import('../../observe/report/engine.mjs');
-  const res = await run.buildReport({ nowMs, timeoutMs, process: undefined });
+  const ev = await (await import('../../observe/ledger/job.mjs')).readEvents({ days: 7, nowMs, timeoutMs }); // doc audit MOT lan, dung chung cho buildReport + signals
+  const res = await run.buildReport({ nowMs, timeoutMs, process: undefined, events: ev.events });
   const kpi = {};
   for (const r of res.results) for (const [k, v] of Object.entries(eng.kpiSnapshot(r))) kpi[`${r.def.id}.${k}`] = v;
   const b = (() => { try { return JSON.parse(fs.readFileSync(run.baselineFile(), 'utf8')); } catch { return null; } })();
   const baseline = {};
   for (const [id, rows] of Object.entries((b && b.kpis) || {})) for (const [k, v] of Object.entries(rows || {})) baseline[`${id}.${k}`] = v;
-  return { kpi, baseline, truncated: res.truncated || null };
+  return { kpi, baseline, truncated: res.truncated || ev.truncated || null, events: ev.events };
+}
+
+/** {sessions, corrections, interrupts} tu su kien audit (rec.signal ?? rec.data.signal; phien = sid|session_id). */
+export function signalsFrom(events) {
+  const sids = new Set(); let corrections = 0, interrupts = 0;
+  for (const r of events || []) {
+    if (!r) continue;
+    const s = r.sid || r.session_id; if (s) sids.add(s);
+    const sig = r.signal ?? (r.data && r.data.signal);
+    if (sig === 'correction') corrections++; else if (sig === 'interrupt') interrupts++;
+  }
+  return { sessions: sids.size, corrections, interrupts };
 }
 
 async function defaultProcess(nowMs) {
@@ -86,17 +99,20 @@ export async function retro(o = {}) {
   const errors = [];
   let truncated = null;
 
-  let kpi = o.kpi, baseline = o.baseline || {};
+  let kpi = o.kpi, baseline = o.baseline || {}, events = o.events;
   if (!kpi) {
-    try { const k = await defaultKpi({ nowMs, timeoutMs: timeoutS * 500 }); kpi = k.kpi; baseline = k.baseline; truncated = k.truncated; } catch (e) { kpi = {}; errors.push(`kpi: ${e.message}`); }
+    try { const k = await defaultKpi({ nowMs, timeoutMs: timeoutS * 500 }); kpi = k.kpi; baseline = k.baseline; truncated = k.truncated; events = events || k.events; } catch (e) { kpi = {}; errors.push(`kpi: ${e.message}`); }
   }
+  // signals: cung nguon audit voi KPI3 (rec.signal ?? data.signal; phien theo sid) - dem tu su kien da doc (buildReport) hoac o.events
+  const signals = o.signals || (events ? signalsFrom(events) : {});
+  if (signals.sessions > 0 && num(signals.corrections) !== null) kpi = { ...kpi, 'signals.corrections_per_session': signals.corrections / signals.sessions };
   const ledgerEntries = o.ledgerEntries || readLedger(o.ledgerFile || ledgerFile());
   const proposals = o.proposals || (await import('./loop.mjs')).listProposals(o, 1000);
   const appliedLog = o.appliedLog || (() => { try { return fs.readFileSync(path.join(dataDir, 'applied.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean); } catch { return []; } })();
   const pc = o.processChanges !== undefined ? o.processChanges : await defaultProcess(nowMs);
   const { start, end } = weekWindow(nowMs);
   const effects = proposals.filter((p) => p.effect && p.effect.verdict);
-  const sdm = selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges: Array.isArray(pc) ? pc : pcRows(pc), signals: o.signals || {}, weekStartMs: start, weekEndMs: end });
+  const sdm = selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges: Array.isArray(pc) ? pc : pcRows(pc), signals, weekStartMs: start, weekEndMs: end });
   const selfdev = Object.fromEntries(Object.entries(sdm).map(([k, m]) => [k, m.value]));
 
   // chuoi: append (moi lan chay cung tuan -> rev+1, readSeries lay dong cuoi) roi trend
@@ -129,6 +145,16 @@ export async function retro(o = {}) {
   const emittedFile = path.join(dir, 'emitted.json');
   const emittedAll = readJ(emittedFile, {});
   const emitted = [];
+  const res = { week, kpi, trend: ktrend, selfdev, selfdevTrend, direction, stalled, issues, effects: effectRows, plan, emitted, errors, truncated };
+  const save = () => { // ghi bao cao (lan 1 truoc apply de co file .md cho knowledge, lan 2 sau apply de co emitted/errors)
+    try {
+      res.truncated = truncated;
+      writeJ(path.join(dir, `${week}.json`), { ...res, ts: new Date(nowMs).toISOString() });
+      fs.writeFileSync(path.join(dir, `${week}.md`), renderRetro(res));
+      res.file = path.join(dir, `${week}.md`);
+    } catch (e) { errors.push(`ghi bao cao: ${e.message}`); }
+  };
+  save();
   if (o.apply) {
     const runner = o.runner || defaultRunner;
     let issueN = 0, p0N = 0;
@@ -143,17 +169,19 @@ export async function retro(o = {}) {
         emittedAll[t.key] = new Date(nowMs).toISOString(); emitted.push(t.key); isP0 ? p0N++ : issueN++;
       } catch (e) { errors.push(`add-task ${t.key}: ${e.message}`); }
     }
-    // shortcut: 'harness knowledge' la ext cua hub (khong co trong repo nay) -> khong goi, chi in plan.knowledge cho main ghi.
+    // kho tri thuc: 1 lan/tuan (khong tinh vao tran task); cung co che subprocess + fail-open
+    const kkey = `${week}:knowledge`;
+    if (res.file && !emittedAll[kkey] && !timeUp()) {
+      try {
+        const r = runner('knowledge', ['add', '--title', `Retro ${week}`, '--domain', 'hub', '--type', 'reference', '--id', `retro-${week}`, '--body-file', res.file]);
+        if (r && r.ok === false) errors.push(`knowledge add: ${r.err || 'that bai'}`);
+        else { emittedAll[kkey] = new Date(nowMs).toISOString(); emitted.push(kkey); }
+      } catch (e) { errors.push(`knowledge add: ${e.message}`); }
+    }
     if (emitted.length) writeJ(emittedFile, emittedAll);
   }
   if (timeUp() && !truncated) truncated = 'timeout';
-
-  const res = { week, kpi, trend: ktrend, selfdev, selfdevTrend, direction, stalled, issues, effects: effectRows, plan, emitted, errors, truncated };
-  try {
-    writeJ(path.join(dir, `${week}.json`), { ...res, ts: new Date(nowMs).toISOString() });
-    fs.writeFileSync(path.join(dir, `${week}.md`), renderRetro(res));
-    res.file = path.join(dir, `${week}.md`);
-  } catch (e) { errors.push(`ghi bao cao: ${e.message}`); }
+  save();
   return res;
 }
 

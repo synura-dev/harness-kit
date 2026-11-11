@@ -44,13 +44,13 @@ test('khong du lich su -> khong bao stalled gia', async () => {
 test('khong --apply -> khong goi runner; --apply: toi da 3 + 1 P0, dedupe qua emitted.json', async () => {
   seedFlat(3);
   const calls = [];
-  const runner = (cmd, args) => { calls.push(args); return { ok: true }; };
+  const runner = (cmd, args) => { if (cmd === 'projects') calls.push(args); return { ok: true }; };
   await retro({ ...base, ledgerEntries: ledger(6), runner });
   expect(calls.length).toBe(0);
   const r = await retro({ ...base, ledgerEntries: ledger(6), runner, apply: true });
   expect(calls.length).toBe(4);
   expect(calls.filter((a) => a[a.indexOf('--priority') + 1] === '0').length).toBe(1);
-  expect(r.emitted.length).toBe(4);
+  expect(r.emitted.filter((k) => !k.endsWith(':knowledge')).length).toBe(4);
   await retro({ ...base, ledgerEntries: ledger(6), runner, apply: true });
   expect(calls.length).toBe(4); // dedupe
 });
@@ -69,11 +69,40 @@ test('het timeoutS -> truncated: timeout, van ghi bao cao', async () => {
   expect(fs.existsSync(path.join(tmp, 'retro', `${isoWeek(NOW)}.json`))).toBe(true);
 });
 
+test('signals tu su kien audit: repeat_correction_rate + corrections_per_session co gia tri va vao series', async () => {
+  const events = [{ sid: 'a', signal: 'correction' }, { sid: 'a', data: { signal: 'correction' } }, { sid: 'b', signal: 'interrupt' }, { sid: 'c' }, { session_id: 'd' }];
+  const r = await retro({ ...base, events });
+  expect(r.selfdev.repeat_correction_rate).toBe(0.75); // (2 correction + 1 interrupt) / 4 phien
+  expect(r.kpi['signals.corrections_per_session']).toBe(0.5);
+  const row = JSON.parse(fs.readFileSync(path.join(tmp, 'retro', 'series.jsonl'), 'utf8').trim());
+  expect(row.kpi['signals.corrections_per_session']).toBe(0.5);
+  expect(row.selfdev.repeat_correction_rate).toBe(0.75);
+});
+
+test('apply: ghi kho tri thuc qua runner knowledge add (1 lan/tuan), loi runner fail-open', async () => {
+  const calls = [];
+  const runner = (cmd, args) => { calls.push([cmd, args]); return { ok: true }; };
+  await retro({ ...base, runner, apply: true });
+  const k = calls.filter(([c]) => c === 'knowledge');
+  expect(k.length).toBe(1);
+  const a = k[0][1], week = isoWeek(NOW);
+  expect(a.slice(0, 1)).toEqual(['add']);
+  expect(a[a.indexOf('--title') + 1]).toBe(`Retro ${week}`);
+  expect(a[a.indexOf('--id') + 1]).toBe(`retro-${week}`);
+  expect(a[a.indexOf('--domain') + 1]).toBe('hub');
+  expect(a[a.indexOf('--type') + 1]).toBe('reference');
+  expect(fs.existsSync(a[a.indexOf('--body-file') + 1])).toBe(true);
+  await retro({ ...base, runner, apply: true });
+  expect(calls.filter(([c]) => c === 'knowledge').length).toBe(1); // dedupe theo tuan
+  const r = await retro({ ...base, nowMs: NOW + WEEK, runner: (c) => { if (c === 'knowledge') throw new Error('kb down'); return { ok: true }; }, apply: true });
+  expect(r.errors.join(' ')).toContain('kb down');
+});
+
 test('retroAuto: 1 lan/isoWeek; autoApply mac dinh bat, tat duoc', async () => {
   const calls = [];
-  const runner = (c, a) => { calls.push(a); return { ok: true }; };
+  const runner = (c, a) => { if (c === 'projects') calls.push(a); return { ok: true }; };
   const a = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
-  expect(a.emitted.length).toBe(1);
+  expect(a.emitted.filter((k) => !k.endsWith(':knowledge')).length).toBe(1);
   const b = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
   expect(b.skipped).toBeTruthy();
   fs.rmSync(path.join(tmp, 'retro'), { recursive: true });
