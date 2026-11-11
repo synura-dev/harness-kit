@@ -18,8 +18,8 @@ const seedFlat = (weeks) => { for (let i = weeks; i >= 1; i--) appendSnapshot(pa
 
 test('ghi <week>.json|md, append series, trend + issues top-3 co key on dinh + bang hieu qua', async () => {
   const proposals = [{ id: 'p_a_rule', kind: 'rule', change: { target: 'evolve/rules/evolve-a.json' }, effect: { verdict: 'worse' } }, { id: 'p_b_rule', kind: 'rule', change: { target: 't' }, effect: { verdict: 'better' } }];
-  const r = await retro({ ...base, ledgerEntries: ledger(5), proposals });
-  const week = isoWeek(NOW);
+  const r = await retro({ ...base, current: false, ledgerEntries: ledger(5), proposals });
+  const week = isoWeek(NOW - WEEK);
   expect(fs.existsSync(path.join(tmp, 'retro', `${week}.json`))).toBe(true);
   expect(fs.readFileSync(path.join(tmp, 'retro', `${week}.md`), 'utf8')).toContain('Top 3 van de');
   expect(fs.readFileSync(path.join(tmp, 'retro', 'series.jsonl'), 'utf8').trim().split('\n').length).toBe(1);
@@ -73,7 +73,7 @@ test('het timeoutS -> truncated: timeout, van ghi bao cao', async () => {
 
 test('signals tu su kien audit: repeat_correction_rate + corrections_per_session co gia tri va vao series', async () => {
   const events = [{ sid: 'a', signal: 'correction' }, { sid: 'a', data: { signal: 'correction' } }, { sid: 'b', signal: 'interrupt' }, { sid: 'c' }, { session_id: 'd' }];
-  const r = await retro({ ...base, events });
+  const r = await retro({ ...base, current: false, events });
   expect(r.selfdev.repeat_correction_rate).toBe(0.75); // (2 correction + 1 interrupt) / 4 phien
   expect(r.kpi['signals.corrections_per_session']).toBe(0.5);
   const row = JSON.parse(fs.readFileSync(path.join(tmp, 'retro', 'series.jsonl'), 'utf8').trim());
@@ -130,12 +130,65 @@ test('marker <week>.auto.json chi sau apply thanh cong; xem truoc khong chan; lo
   const runner = (c, a) => { calls.push(c); return fail && c === 'projects' ? { ok: false, err: 'x' } : { ok: true }; };
   const a = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
   expect(a.errors.length).toBeGreaterThan(0);
-  expect(fs.existsSync(marker)).toBe(false);
+  expect(JSON.parse(fs.readFileSync(marker, 'utf8'))).toMatchObject({ attempts: 1, done: false }); // loi: chua chot, thu lai
   fail = false;
   const b = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
   expect(b.skipped).toBeUndefined();
-  expect(fs.existsSync(marker)).toBe(true);
+  expect(JSON.parse(fs.readFileSync(marker, 'utf8'))).toMatchObject({ attempts: 2, done: true });
   expect((await retroAuto({ ...base, ledgerEntries: ledger(1), runner })).skipped).toBeTruthy();
+});
+
+test('retroAuto: du 3 lan thu trong tuan thi chot marker kem loi; timeout cua retro cung duoc thu lai', async () => {
+  const runner = (c) => (c === 'projects' ? { ok: false, err: 'down' } : { ok: true });
+  const marker = path.join(tmp, 'retro', `${isoWeek(NOW)}.auto.json`);
+  for (let i = 1; i <= 3; i++) {
+    const r = await retroAuto({ ...base, ledgerEntries: ledger(1), runner });
+    expect(r.skipped).toBeUndefined();
+    expect(JSON.parse(fs.readFileSync(marker, 'utf8')).attempts).toBe(i);
+  }
+  const m = JSON.parse(fs.readFileSync(marker, 'utf8'));
+  expect(m.done).toBe(true);
+  expect(m.errors.join(' ')).toContain('down');
+  expect((await retroAuto({ ...base, ledgerEntries: ledger(1), runner })).skipped).toBeTruthy();
+  fs.rmSync(path.join(tmp, 'retro'), { recursive: true });
+  await retroAuto({ ...base, ledgerEntries: [], runner: () => ({ ok: true }), timeoutS: -1 });
+  expect(JSON.parse(fs.readFileSync(marker, 'utf8'))).toMatchObject({ attempts: 1, done: false }); // timeout cua retro -> thu lai
+});
+
+test('series: moi tuan chi append 1 lan (auto nhieu lan = 1 dong); --current khong bao gio append', async () => {
+  const runner = () => ({ ok: false, err: 'x' });
+  for (let i = 0; i < 5; i++) await retroAuto({ ...base, current: false, ledgerEntries: ledger(1), runner });
+  const lines = fs.readFileSync(path.join(tmp, 'retro', 'series.jsonl'), 'utf8').trim().split('\n').filter((l) => JSON.parse(l).week === isoWeek(NOW - WEEK));
+  expect(lines.length).toBe(1);
+  const cur = path.join(tmp, 'retro', 'series.jsonl');
+  const before = fs.readFileSync(cur, 'utf8');
+  await retro({ ...base, current: true });
+  expect(fs.readFileSync(cur, 'utf8')).toBe(before);
+});
+
+test('signalsFrom loc ts < asOf (khong tron su kien tuan dang chay)', () => {
+  const asOf = Date.parse('2026-11-09T00:00:00Z');
+  const s = signalsFrom([{ sid: 'a', ts: '2026-11-08T10:00:00Z', signal: 'correction' }, { sid: 'b', ts: '2026-11-10T10:00:00Z', signal: 'correction' }], asOf);
+  expect(s).toEqual({ sessions: 1, corrections: 1, interrupts: 0 });
+});
+
+test('emitted: moi key co ts; resolved roi mo lai -> cho phep task moi; don key > 90 ngay', async () => {
+  const calls = [];
+  const runner = (c, a) => { if (c === 'projects') calls.push(a); return { ok: true }; };
+  const e = (status) => [{ id: 'e', fp: 'fpR', status, count: 5, message: 'loi' }];
+  await retro({ ...base, ledgerEntries: e('open'), runner, apply: true });
+  const ef = path.join(tmp, 'retro', 'emitted.json');
+  expect(typeof JSON.parse(fs.readFileSync(ef, 'utf8'))['ledger:fpR'].ts).toBe('string');
+  await retro({ ...base, nowMs: NOW + WEEK, ledgerEntries: e('open'), runner, apply: true });
+  expect(calls.length).toBe(1); // van open: khong tao lai
+  await retro({ ...base, nowMs: NOW + 2 * WEEK, ledgerEntries: e('resolved'), runner, apply: true }); // ghi nhan resolved
+  await retro({ ...base, nowMs: NOW + 3 * WEEK, ledgerEntries: e('open'), runner, apply: true }); // mo lai
+  expect(calls.length).toBe(2);
+  const old = JSON.parse(fs.readFileSync(ef, 'utf8'));
+  old['ledger:ancient'] = { ts: new Date(NOW - 100 * 86400000).toISOString() };
+  fs.writeFileSync(ef, JSON.stringify(old));
+  await retro({ ...base, nowMs: NOW + 4 * WEEK, ledgerEntries: [], runner, apply: true });
+  expect(JSON.parse(fs.readFileSync(ef, 'utf8'))['ledger:ancient']).toBeUndefined();
 });
 
 test('emitted.json ghi ngay sau MOI spawn thanh cong', async () => {

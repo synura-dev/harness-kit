@@ -54,10 +54,11 @@ export function pickKpi(results, snapshot) {
 }
 
 /** {sessions, corrections, interrupts} tu su kien audit (rec.signal ?? rec.data.signal; phien = sid|session_id; bo HookRun nhu engine report). */
-export function signalsFrom(events) {
+export function signalsFrom(events, asOf = Infinity) {
   const sids = new Set(); let corrections = 0, interrupts = 0;
   for (const r of events || []) {
     if (!r || isHookRun(r)) continue;
+    const t = Date.parse(r.ts); if (Number.isFinite(t) && t >= asOf) continue; // chi su kien truoc het tuan can xem
     const s = r.sid || r.session_id; if (s) sids.add(s);
     const sig = r.signal ?? (r.data && r.data.signal);
     if (sig === 'correction') corrections++; else if (sig === 'interrupt') interrupts++;
@@ -111,14 +112,14 @@ export async function retro(o = {}) {
   const { week, start, end } = target(o, nowMs); // mac dinh tuan VUA XONG; o.current -> tuan dang chay
   const asOf = o.current ? nowMs : end; // KPI/audit tinh den het tuan can xem
   const errors = [];
-  let truncated = null;
+  let truncated = null, srcTrunc = null; // truncated = timeout cua chinh retro; srcTrunc = tu nguon KPI
 
   let kpi = o.kpi, baseline = o.baseline || {}, events = o.events;
   if (!kpi) {
-    try { const k = await defaultKpi({ nowMs: asOf, timeoutMs: timeoutS * 500 }); kpi = k.kpi; baseline = k.baseline; truncated = k.truncated; events = events || k.events; } catch (e) { kpi = {}; errors.push(`kpi: ${e.message}`); }
+    try { const k = await defaultKpi({ nowMs: asOf, timeoutMs: timeoutS * 500 }); kpi = k.kpi; baseline = k.baseline; srcTrunc = k.truncated; events = events || k.events; } catch (e) { kpi = {}; errors.push(`kpi: ${e.message}`); }
   }
   // signals: cung nguon audit voi KPI3 (rec.signal ?? data.signal; phien theo sid) - dem tu su kien da doc (buildReport) hoac o.events
-  const signals = o.signals || (events ? signalsFrom(events) : {});
+  const signals = o.signals || (events ? signalsFrom(events, asOf) : {});
   if (signals.sessions > 0 && num(signals.corrections) !== null) kpi = { ...kpi, 'signals.corrections_per_session': signals.corrections / signals.sessions };
   const ledgerEntries = o.ledgerEntries || readLedger(o.ledgerFile || ledgerFile());
   const proposals = o.proposals || (await import('./loop.mjs')).listProposals(o, 1000);
@@ -130,8 +131,11 @@ export async function retro(o = {}) {
 
   // chuoi: append (moi lan chay cung tuan -> rev+1, readSeries lay dong cuoi) roi trend
   const sfile = path.join(dir, 'series.jsonl');
-  appendSnapshot(sfile, { week, kpi, selfdev, nowMs });
-  const series = readSeries(sfile).series;
+  // 1 dong/tuan: chi lan chay dau co ket qua (khong --current, khong appendSeries:false); retry khong append
+  let series = readSeries(sfile).series;
+  const haveWeek = series.some((s) => s.week === week);
+  if (!haveWeek && o.appendSeries !== false && !o.current) { appendSnapshot(sfile, { week, kpi, selfdev, nowMs }); series = readSeries(sfile).series; }
+  else if (!haveWeek) series = [...series, { week, kpi, selfdev }];
   const n = RETRO.seriesWeeks;
   const trendOf = (ser, src, key, base) => trend(ser.map((s) => ({ kpi: s[src] })), key, n, base);
   const ktrend = Object.fromEntries(Object.keys(kpi).map((k) => [k, trendOf(series, 'kpi', k, num(baseline[k]))]));
@@ -146,22 +150,34 @@ export async function retro(o = {}) {
   const effectRows = effects.map((p) => ({ id: p.id, target: p.change && p.change.target, verdict: p.effect.verdict, suggest: p.effect.verdict === 'worse' ? 'rollback' : p.effect.verdict === 'better' ? 'keep' : 'xem lai' }));
   // top van de: ledger open/warned (count) + file quy tac sua lap (A1); key on dinh = nguon + fp/path
   const emittedFile = path.join(dir, 'emitted.json');
-  const emittedAll = readJ(emittedFile, {});
+  const tsOf = (v) => (typeof v === 'string' ? v : v && v.ts);
+  const emittedAll = Object.fromEntries(Object.entries(readJ(emittedFile, {})).map(([k, v]) => [k, typeof v === 'string' ? { ts: v } : v]));
+  const persist = () => { // prune key > 90 ngay khi ghi
+    for (const [k, v] of Object.entries(emittedAll)) { const t = Date.parse(tsOf(v)); if (Number.isFinite(t) && nowMs - t > 90 * 86400000) delete emittedAll[k]; }
+    writeJ(emittedFile, emittedAll);
+  };
+  // shortcut: resolved->mo lai chi phat hien o muc retro hang tuan (ledger khong co moc thoi gian resolved)
+  if (o.apply) {
+    let dirty = false;
+    for (const e of ledgerEntries) { const k = `ledger:${e.fp || e.id}`; if (e.status === 'resolved' && emittedAll[k] && !emittedAll[k].resolved) { emittedAll[k].resolved = true; dirty = true; } }
+    if (dirty) { try { persist(); } catch { /* fail-open */ } }
+  }
+  const isNew = (k) => !emittedAll[k] || !!emittedAll[k].resolved;
   const emitted = [];
   // chi van de MOI (chua tao task; key khong gan tuan) -> van de da co task ma van open khong tao lai
   const cand = [
     ...ledgerEntries.filter((e) => ['open', 'warned'].includes(e.status) && (e.fp || e.id)).map((e) => ({ key: `ledger:${e.fp || e.id}`, score: Number(e.count) || 1, summary: redact(`${String(e.message || e.rule || e.id).slice(0, 100)} (x${e.count || 1})`) })),
     ...((pc && pc.repeat) || []).map((r) => ({ key: `file:${r.path}`, score: r.edits, summary: redact(`sua lap ${r.path} (${r.edits} lan/14 ngay)`) })),
-  ].filter((c) => !emittedAll[c.key]).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, RETRO.maxIssues);
+  ].filter((c) => isNew(c.key)).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, RETRO.maxIssues);
   const issues = cand.map(({ key, summary }) => ({ key, summary }));
 
   const sd = (k) => fmtVal(selfdev[k]);
   const plan = { tasks: issues.map((i) => ({ key: i.key, summary: redact(`retro ${week}: ${i.summary}`), priority: 2 })), knowledge: `retro ${week}: huong ${direction}; self_initiated_rate=${sd('self_initiated_rate')} effective_rate=${sd('effective_rate')} rollback_rate=${sd('rollback_rate')}` };
   if (stalled) plan.tasks.unshift({ key: `${week}:stalled`, summary: `[P0] self-improvement stalled: chi so tu phat trien ${direction} 2 tuan lien (${week}); xem retro ${week}`, priority: 0 });
-  const res = { week, kpi, trend: ktrend, selfdev, selfdevTrend, direction, stalled, issues, effects: effectRows, plan, emitted, errors, truncated };
+  const res = { week, kpi, trend: ktrend, selfdev, selfdevTrend, direction, stalled, issues, effects: effectRows, plan, emitted, errors, truncated: srcTrunc, timedOut: false };
   const save = () => { // ghi bao cao (lan 1 truoc apply de co file .md cho knowledge, lan 2 sau apply de co emitted/errors)
     try {
-      res.truncated = truncated;
+      res.truncated = truncated || srcTrunc; res.timedOut = truncated === 'timeout';
       writeJ(path.join(dir, `${week}.json`), { ...res, ts: new Date(nowMs).toISOString() });
       fs.writeFileSync(path.join(dir, `${week}.md`), redactText(renderRetro(res)));
       res.file = path.join(dir, `${week}.md`);
@@ -172,17 +188,17 @@ export async function retro(o = {}) {
     const runner = o.runner || defaultRunner;
     // tran/tuan tinh theo thoi diem tao (tuan thuc te) de chay lai cung tuan khong vuot 3 + 1
     const thisWeek = isoWeek(nowMs);
-    const mine = Object.entries(emittedAll).filter(([k, v]) => !k.endsWith(':knowledge') && isoWeek(Date.parse(v)) === thisWeek);
+    const mine = Object.entries(emittedAll).filter(([k, v]) => !k.endsWith(':knowledge') && isoWeek(Date.parse(tsOf(v))) === thisWeek);
     let issueN = mine.filter(([k]) => !k.endsWith(':stalled')).length, p0N = mine.length - issueN;
     for (const t of plan.tasks) {
       if (timeUp()) { truncated = 'timeout'; break; }
-      if (emittedAll[t.key]) continue;
+      if (!isNew(t.key)) continue;
       const isP0 = t.priority === 0;
       if (isP0 ? p0N >= 1 : issueN >= RETRO.maxIssues) continue; // tran/tuan: 3 task van de + 1 P0
       try {
         const r = runner('projects', ['add-task', '--project', o.project || 'harness-kit', '--summary', t.summary, '--priority', String(t.priority)]);
         if (r && r.ok === false) { errors.push(`add-task ${t.key}: ${r.err || 'that bai'}`); continue; }
-        emittedAll[t.key] = new Date(nowMs).toISOString(); emitted.push(t.key); isP0 ? p0N++ : issueN++; writeJ(emittedFile, emittedAll); // ghi ngay sau moi spawn thanh cong (atomic)
+        emittedAll[t.key] = { ts: new Date(nowMs).toISOString() }; emitted.push(t.key); isP0 ? p0N++ : issueN++; persist(); // ghi ngay sau moi spawn thanh cong (atomic)
       } catch (e) { errors.push(`add-task ${t.key}: ${e.message}`); }
     }
     // kho tri thuc: 1 lan/tuan (khong tinh vao tran task); cung co che subprocess + fail-open
@@ -191,7 +207,7 @@ export async function retro(o = {}) {
       try {
         const r = runner('knowledge', ['add', '--title', `Retro ${week}`, '--domain', 'hub', '--type', 'reference', '--id', `retro-${week}`, '--body-file', res.file]);
         if (r && r.ok === false) errors.push(`knowledge add: ${r.err || 'that bai'}`);
-        else { emittedAll[kkey] = new Date(nowMs).toISOString(); emitted.push(kkey); writeJ(emittedFile, emittedAll); }
+        else { emittedAll[kkey] = { ts: new Date(nowMs).toISOString() }; emitted.push(kkey); persist(); }
       } catch (e) { errors.push(`knowledge add: ${e.message}`); }
     }
   }
@@ -205,10 +221,14 @@ export async function retroAuto(o = {}) {
   const nowMs = o.nowMs || Date.now();
   const dataDir = o.dataDir || ctx(o).evo;
   const marker = path.join(retroDir(dataDir), `${target(o, nowMs).week}.auto.json`);
-  if (fs.existsSync(marker)) return { skipped: 'da chay tuan nay' };
+  try { if (JSON.parse(fs.readFileSync(marker, 'utf8')).done) return { skipped: 'da chay tuan nay' }; } catch { /* chua co marker */ }
   let autoApply = o.autoApply;
   if (autoApply === undefined) { try { autoApply = loadConfig('evolve', { defaults: { retro: { autoApply: true } } }).config.retro?.autoApply !== false; } catch { autoApply = true; } }
+  let prev = {}; try { prev = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { /* chua co */ }
   const r = await retro({ ...o, nowMs, dataDir, apply: autoApply });
-  if (!r.errors.length && !r.truncated) { try { writeJ(marker, { ts: new Date(nowMs).toISOString(), week: r.week, apply: !!autoApply }); } catch { /* fail-open */ } }
+  // chi timeout cua chinh retro can thu lai; tasks_limit/max_bytes tu nguon khac chi ghi nhan. Sau 3 lan chot done du con loi.
+  const attempts = (prev.attempts || 0) + 1;
+  const done = (!r.errors.length && !r.timedOut) || attempts >= 3;
+  try { writeJ(marker, { week: r.week, attempts, done, errors: r.errors.slice(0, 10), ts: new Date(nowMs).toISOString(), apply: !!autoApply }); } catch { /* fail-open */ }
   return r;
 }

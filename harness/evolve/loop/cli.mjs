@@ -76,7 +76,7 @@ export async function render(o) {
   }
   if (o.cmd === 'retro') {
     const { retro, renderRetro } = await import('./retro.mjs');
-    const r = await retro({ apply: o.apply, current: o.current, timeoutS: o.timeoutMs ? o.timeoutMs / 1000 : undefined });
+    const r = await retro({ apply: o.apply, current: o.current, appendSeries: false, timeoutS: o.timeoutMs ? o.timeoutMs / 1000 : undefined });
     const extra = [`ke hoach: ${r.plan.tasks.length} task${o.apply ? `, da tao ${r.emitted.length}` : ' (khong --apply: chi in)'}`, ...(o.apply ? [] : r.plan.tasks.map((t) => `  [P${t.priority}] ${t.summary}`)), `knowledge: ${r.plan.knowledge}`, ...r.errors.map((e) => `loi: ${e}`)];
     return { code: 0, summary: capLines([...renderRetro(r).split('\n'), ...extra], 80).join('\n'), data: r, truncated: r.truncated };
   }
