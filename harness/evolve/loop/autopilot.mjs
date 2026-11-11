@@ -8,7 +8,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { readJson, dataPathFor, guardWrite } from '../../core/io/storage.mjs';
 import { findCandidates, propose, check, apply, rollback, ctx, classifyTarget, listProposals, appendLog } from './loop.mjs';
-import { measureDue, readBaselineCache, EFFECT } from './effect.mjs';
+import { measureDue, readBaselineCache, loadDupePairs, EFFECT } from './effect.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
 import { withLock } from '../../core/runtime/lockfile.mjs';
 
@@ -156,7 +156,7 @@ export async function runAutopilot(o = {}) {
     // Do ca luat ap tay (chu y). shortcut: luat muc 2 chi ghi effect, khong tu rollback.
     // Timeout doc audit theo audit-config (loadAuditConfig dien san query_timeout_ms 30000), nen mac dinh nen o.bgTimeoutMs khong bao gio thang config.
     // shortcut: chua co timeout rieng cho duong nen (job.mjs); muon thi truyen o.limits.query_timeout_ms tu call site.
-    const eo = o;
+    let eo = o;
     let auditCache = null; // doc audit MOT lan/lo cho baseline cua moi luat vua ap
     // shortcut: doc MOT lan toi da 1000 de xuat gan nhat (dung cho do + loai fp); vuot tran thi de xuat cu nhat roi khoi pham vi.
     const all = listProposals(o, 1000);
@@ -177,6 +177,8 @@ export async function runAutopilot(o = {}) {
       const e = { ...(fresh.effect || {}), ...patch };
       if (wr(pf, { ...fresh, effect: e })) p.effect = e;
     };
+    // shortcut: pair_recheck nap lai nguon trung noi dung MOT lan/lo khi con de xuat dang cho do (chua loc den han 7 ngay)
+    if (pend.some((p) => p.target_metric && p.target_metric.pair_recheck && !(p.effect && ['improved', 'no_effect', 'worse'].includes(p.effect.verdict)))) eo = { ...o, dupePairs: o.dupePairs || await loadDupePairs(o) };
     const due = pend.length ? measureDue(pend, nowMs, eo) : [];
     const retry = pend.filter((p) => p.kind === 'rule' && p.effect && p.effect.verdict === 'worse' && p.effect.rollback_error && (p.effect.rollback_attempts || 0) < RB_MAX).map((p) => ({ id: p.id, effect: p.effect }));
     for (const { id, effect } of [...due, ...retry]) {

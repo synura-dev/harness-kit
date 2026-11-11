@@ -12,12 +12,13 @@ import { selfdevMetrics, compositeDirection } from './selfdev.mjs';
 import { readLedger, ledgerFile } from '../../observe/ledger/ledger.mjs';
 import { loadConfig } from '../../core/config/config.mjs';
 
-export const RETRO = Object.freeze({ timeoutS: 30, maxIssues: 3, maxTasksPerWeek: 4, seriesWeeks: 8 });
+export const RETRO = Object.freeze({ ctxGrowthPct: 10, timeoutS: 30, maxIssues: 3, maxTasksPerWeek: 4, seriesWeeks: 8 });
 const DAY = 86400000;
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'cli', 'harness.mjs');
 const retroDir = (dataDir) => path.join(dataDir, 'retro');
 const readJ = (f, d) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return d; } };
 const writeJ = (f, j) => { fs.mkdirSync(path.dirname(f), { recursive: true }); const t = `${f}.${process.pid}.tmp`; fs.writeFileSync(t, JSON.stringify(j, null, 2) + '\n'); fs.renameSync(t, f); };
+const STATIC = 'kpi-context-tax.static_tokens';
 const num = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
 
 /** Tuan UTC [start, end) chua nowMs, dung cho cua so selfdev (tuan ISO bat dau thu hai). */
@@ -132,7 +133,7 @@ export async function retro(o = {}) {
     kpi = { ...kpi, 'process.changes_week': w ? w.changes : 0, 'process.repeat_files': (pc.repeat || []).length };
   }
   const effects = proposals.filter((p) => p.effect && p.effect.verdict);
-  const sdm = selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges: Array.isArray(pc) ? pc : pcRows(pc), signals, weekStartMs: start, weekEndMs: end });
+  const sdm = selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges: Array.isArray(pc) ? pc : pcRows(pc), signals, kpi, weekStartMs: start, weekEndMs: end });
   const selfdev = Object.fromEntries(Object.entries(sdm).map(([k, m]) => [k, m.value]));
 
   // chuoi: append (moi lan chay cung tuan -> rev+1, readSeries lay dong cuoi) roi trend
@@ -147,10 +148,13 @@ export async function retro(o = {}) {
   const ktrend = Object.fromEntries(Object.keys(kpi).map((k) => [k, trendOf(series, 'kpi', k, num(baseline[k]))]));
   const sdTrend = (ser) => Object.fromEntries(Object.entries(sdm).filter(([k]) => ser.some((s) => num(s.selfdev && s.selfdev[k]) !== null)).map(([k, m]) => [k, { ...trendOf(ser, 'selfdev', k, null), better: m.better }]));
   const selfdevTrend = sdTrend(series);
-  const direction = compositeDirection(selfdevTrend);
+  // tang chi phi ngu canh tinh (static_tokens) > ctxGrowthPct/tuan = xau, du slope trung binh chua vuot nguong
+  const growthPct = (ser) => { const v = ser.map((s) => num(s.kpi && s.kpi[STATIC])).filter((x) => x !== null); return v.length >= 2 && v.at(-2) > 0 ? ((v.at(-1) - v.at(-2)) / v.at(-2)) * 100 : null; };
+  const grew = (ser) => growthPct(ser) > RETRO.ctxGrowthPct;
+  const direction = grew(series) ? 'worse' : compositeDirection(selfdevTrend);
   // F3: tuan nay VA tuan truoc (can >= 2 diem de tuan truoc co nghia) deu flat|worse
   const prevSeries = series.slice(0, -1);
-  const prevDir = prevSeries.length >= 2 ? compositeDirection(sdTrend(prevSeries)) : null;
+  const prevDir = prevSeries.length >= 2 ? (grew(prevSeries) ? 'worse' : compositeDirection(sdTrend(prevSeries))) : null;
   const stalled = ['flat', 'worse'].includes(direction) && ['flat', 'worse'].includes(prevDir);
 
   const effectRows = effects.map((p) => ({ id: p.id, target: p.change && p.change.target, verdict: p.effect.verdict, suggest: p.effect.verdict === 'worse' ? 'rollback' : p.effect.verdict === 'better' ? 'keep' : 'xem lai' }));
@@ -175,6 +179,8 @@ export async function retro(o = {}) {
   for (const c of [
     ...ledgerEntries.filter((e) => ['open', 'warned'].includes(e.status) && (e.fp || e.id)).map((e) => ({ key: `ledger:${e.fp || e.id}`, score: Number(e.count) || 1, summary: redact(`${String(e.message || e.rule || e.id).slice(0, 100)} (x${e.count || 1})`) })),
     ...((pc && pc.repeat) || []).map((r) => ({ key: `file:${r.path}`, score: r.edits, summary: redact(`sua lap ${r.path} (${r.edits} lan/14 ngay)`) })),
+    ...(grew(series) ? [{ key: 'context:growth', score: Math.round(growthPct(series)), summary: `static_tokens (ngu canh nap san) tang ${Math.round(growthPct(series))}% so voi tuan truoc (> ${RETRO.ctxGrowthPct}%)` }] : []),
+    ...(num(kpi['kpi-knowledge.retire_candidates']) >= 1 ? [{ key: 'knowledge:retire-candidates', score: kpi['kpi-knowledge.retire_candidates'], summary: `${kpi['kpi-knowledge.retire_candidates']} ung vien retire tri thuc (chi liet ke; retire do nguoi/TTY)` }] : []),
   ]) if (!best.has(c.key) || c.score > best.get(c.key).score) best.set(c.key, c);
   const cand = [...best.values()].filter((c) => isNew(c.key)).sort((a, b) => b.score - a.score || a.key.localeCompare(b.key)).slice(0, RETRO.maxIssues);
   const issues = cand.map(({ key, summary }) => ({ key, summary }));

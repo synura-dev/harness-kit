@@ -161,12 +161,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Modify: `harness/evolve/loop/selfdev.mjs` (:17-51), `harness/evolve/loop/retro.mjs` (issues :151-180), `harness/evolve/loop/effect.mjs` (`measureDue` :169)
 - Test: `harness/evolve/loop/selfdev.test.mjs`, `harness/evolve/loop/retro.test.mjs`, `harness/evolve/loop/effect.test.mjs`
 
-- [ ] selfdev thêm `context_tax_tokens` và `repeat_vs_first_ratio` (better down) từ kpi; thiếu -> bỏ qua (không flat giả).
-- [ ] Retro issue `context:growth` (static_tokens vs_prev > +5%), `knowledge:retire-candidates` (>= 1 id); dedupe qua map `best` sẵn có; apply vẫn cap 3 task + 1 P0.
-- [ ] `metricVerdict(series, kpi, appliedWeek, better)`: <= 0.95x better, >= 1.05x worse, còn lại unchanged, thiếu điểm insufficient; `measureDue` rẽ nhánh khi `target_metric.kpi`.
-- [ ] Cập nhật test số đếm retro (:25,53-57,117,121,228) - đếm lại sau khi thêm khoá.
-- [ ] Done-when: `timeout 60 bun test harness/evolve/loop/selfdev.test.mjs harness/evolve/loop/retro.test.mjs harness/evolve/loop/effect.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] selfdev thêm `context_tax_tokens` và `repeat_vs_first_ratio` (better down) từ kpi; thiếu -> bỏ qua (không flat giả).
+- [x] Retro issue `context:growth` (static_tokens vs_prev > +5%), `knowledge:retire-candidates` (>= 1 id); dedupe qua map `best` sẵn có; apply vẫn cap 3 task + 1 P0.
+- [x] `metricVerdict(series, kpi, appliedWeek, better)`: <= 0.95x better, >= 1.05x worse, còn lại unchanged, thiếu điểm insufficient; `measureDue` rẽ nhánh khi `target_metric.kpi`.
+- [x] Cập nhật test số đếm retro (:25,53-57,117,121,228) - đếm lại sau khi thêm khoá.
+- [x] Done-when: `timeout 60 bun test harness/evolve/loop/selfdev.test.mjs harness/evolve/loop/retro.test.mjs harness/evolve/loop/effect.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task H1 (repo hub, `isolation: worktree`): `harness knowledge export --json`
 
