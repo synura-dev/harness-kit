@@ -1,0 +1,1 @@
+{"order":18,"id":"kpi-routing","title":"KPI: tuan thu dinh tuyen mode (loai tru unknown; excess = chi phi chenh tuong doi haiku1/sonnet3/opus5)","source":"derived","derive":"routing_kpi","group_by":["k"],"metric":"sum:v","window_days":28,"format":"kpi","empty_note":"chua co dispatch/segment du tin hieu (model, out_len)"}

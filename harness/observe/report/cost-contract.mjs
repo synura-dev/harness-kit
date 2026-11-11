@@ -60,6 +60,16 @@ export function median(arr) {
   return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
 }
 
+/** Dinh tuyen (T13): gia TUONG DOI (haiku 1, sonnet 3, opus 5). agy KHONG co gia (quota rieng, khong ep 0): chi do token, nhan "tokens, unpriced". */
+export const ROUTING = Object.freeze({
+  priceRel: Object.freeze({ haiku: 1, sonnet: 3, opus: 5 }),
+  largeReadChars: 400000, // ~100k token
+  builderTurns: 25,
+  riskRe: /(^|\/)(auth|perm|permission|permissions|guard|deploy|secret|secrets|migrate|migration|migrations|security)(\/|\.|$)/i,
+  overreadChars: 20000, // ~5k token: main doc tong out_len > nguong => main_overread
+  redoMs: 24 * 3600 * 1000,
+});
+
 /** lowercase, d-gach -> d, NFD bo dau, gop khoang trang, trim. */
 export function foldText(s) {
   return String(s ?? '').toLowerCase().replace(/đ/g, 'd').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim();

@@ -202,14 +202,14 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/observe/report/defaults/kpi-routing.json`, `harness/observe/report/defaults/kpi-agy.json` (kpi, `group_by ["k"]`, `sum:v`), `harness/observe/report/defaults/routing-misses.json` (table top 10: loại lệch, lớp việc, n, chi phí chênh ước)
 - Modify: `harness/observe/report/run.mjs` (đăng ký derive `routing`), `harness/observe/report/cost-contract.mjs` (LIMITS `priceRel {haiku:1,sonnet:3,opus:5,agy:0}`, `largeReadChars 400000`, `builderTurns 25`, `riskRe`)
 
-- [ ] Hàm thuần `routing({events, segments, from, to})` theo spec mục G bước 1-7; dùng `segment()` của Task 3; đọc luật từ hằng số (không parse AGENTS.md).
-- [ ] Ghép dispatch: Agent/Task PreToolUse (target = subagent_type, `data.model` nếu có) -> SubagentStart kế tiếp cùng sid + agent_type -> SubagentStop cùng agent_id (model thực tế, turns). Không ghép được -> `unknown`.
-- [ ] Họ model: regex `/haiku|sonnet|opus/` trên chuỗi model; `cli==='agy'` -> agy.
-- [ ] Fixture dựng theo field thật (audit.mjs:287-335, agy.mjs:131-200): (1) main WebSearch -> missed_agy web_lookup; (2) scout chạy model opus -> overuse_opus + underuse_haiku tính 1 lần (chọn loại lệch chính theo thứ tự cố định); (3) builder turns 41 -> builder_over_turns; (4) main 3 Read không dispatch -> main_overread; (5) phiên agy web_lookup rồi Segment Claude cùng khoá có Edit trong 24h -> redo; (6) phantom -> unknown, không vào mẫu số; (7) vượt maxEvents -> `truncated`.
-- [ ] Output không có prompt/target đầy đủ: ca lệch chỉ kèm sid rút gọn 8 ký tự, lớp việc, số.
-- [ ] Grep + cập nhật test số section (run/noext/engine).
-- [ ] Done-when: `timeout 60 bun test harness/observe/report/routing.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Hàm thuần `routing({events, segments, from, to})` theo spec mục G bước 1-7; dùng `segment()` của Task 3; đọc luật từ hằng số (không parse AGENTS.md).
+- [x] Ghép dispatch: Agent/Task PreToolUse (target = subagent_type, `data.model` nếu có) -> SubagentStart kế tiếp cùng sid + agent_type -> SubagentStop cùng agent_id (model thực tế, turns). Không ghép được -> `unknown`.
+- [x] Họ model: regex `/haiku|sonnet|opus/` trên chuỗi model; `cli==='agy'` -> agy.
+- [x] Fixture dựng theo field thật (audit.mjs:287-335, agy.mjs:131-200): (1) main WebSearch -> missed_agy web_lookup; (2) scout chạy model opus -> overuse_opus + underuse_haiku tính 1 lần (chọn loại lệch chính theo thứ tự cố định); (3) builder turns 41 -> builder_over_turns; (4) main 3 Read không dispatch -> main_overread; (5) phiên agy web_lookup rồi Segment Claude cùng khoá có Edit trong 24h -> redo; (6) phantom -> unknown, không vào mẫu số; (7) vượt maxEvents -> `truncated`.
+- [x] Output không có prompt/target đầy đủ: ca lệch chỉ kèm sid rút gọn 8 ký tự, lớp việc, số.
+- [x] Grep + cập nhật test số section (run/noext/engine).
+- [x] Done-when: `timeout 60 bun test harness/observe/report/routing.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 14: Retro issue routing + đề xuất đổi luật đo bằng metric
 

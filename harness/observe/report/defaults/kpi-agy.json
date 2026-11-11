@@ -1,0 +1,1 @@
+{"order":19,"id":"kpi-agy","title":"KPI: agy vs Claude (agy: tokens, unpriced; redo = Claude sua lai cung khoa <=24h)","source":"derived","derive":"agy_kpi","group_by":["k"],"metric":"sum:v","window_days":28,"format":"kpi","empty_note":"khong co phien agy"}
