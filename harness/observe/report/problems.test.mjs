@@ -114,3 +114,66 @@ test('vuot maxSegments -> truncated max_segments', () => {
   assert.equal(r.segments.length, 3);
   assert.equal(r.truncated, 'max_segments');
 });
+
+// ---- review T3 ----
+const sstart = (id) => base({ type: 'session', event: 'SubagentStart', agent_id: id, agent_type: 'builder' });
+const sstop = (id, i, o) => base({ type: 'stop', event: 'SubagentStop', agent_id: id, agent_type: 'builder', tokens_in: i, tokens_out: o });
+
+test('sub_tokens: Start doan nay, Stop doan sau; resume khong Start moi; khong cong lap luy ke', () => {
+  const ev = [prompt(), sstart('a1'), stop(U(1, 1)), prompt(), sstop('a1', 100, 20), prompt(), sstop('a1', 150, 30), stop(U(1, 1))];
+  const { segments } = segment(ev);
+  assert.equal(segments[1].sub_tokens, 120);
+  assert.equal(segments[2].sub_tokens, 60); // delta luy ke: 180 - 120
+  assert.equal(segments.reduce((a, s) => a + s.sub_tokens, 0), 180);
+});
+
+test('maxEvents: sort ts truoc, giu phan MOI nhat, truncated max_events', () => {
+  const ev = [];
+  for (let i = 0; i < 4; i++) ev.push(prompt([], 's1'), stop(U(i + 1, 0)));
+  const shuffled = [...ev].reverse();
+  const r = segment(shuffled, { limits: { maxEvents: 4 } });
+  assert.equal(r.truncated, 'max_events');
+  assert.deepEqual(r.segments.map((s) => s.tokens.input), [3, 4]);
+});
+
+test('timeout -> truncated timeout', () => {
+  const r = segment([prompt(), stop(U(1, 1))], { limits: { timeoutMs: -1 } });
+  assert.equal(r.truncated, 'timeout');
+});
+
+test('duong dan Windows (\\) van khop worktree va plan', () => {
+  const a = segment([prompt(), tool({ cwd: 'E:\\r\\.worktrees\\kt-w' }), stop(U(1, 1))]).segments[0];
+  assert.equal(a.keys.branch, 'kt-w');
+  const b = segment([prompt(), tool({ tool: 'Write', data: { files_touched: ['docs\\superpowers\\plans\\2026-11-11-win-slug.md'] } }), stop(U(1, 1))]).segments[0];
+  assert.equal(b.keys.plan, 'win-slug');
+});
+
+test('kw chung chung (tiep tuc, ok lam di, <2 tu nghia) khong tao khoa moi, ke thua khoa truoc', () => {
+  const ev = [prompt(['alpha', 'beta']), stop(U(1, 1)), prompt(['tiep', 'tuc']), stop(U(1, 1)), prompt(['ok', 'lam', 'di']), prompt(['gamma']), stop(U(1, 1))];
+  const { segments } = segment(ev);
+  assert.equal(segments[1].keys.kw, null);
+  assert.equal(segments[1].problem, 'kw:alpha+beta');
+  assert.equal(segments[2].problem, 'kw:alpha+beta');
+  assert.equal(segments[3].keys.kw, null); // 1 tu nghia
+  assert.equal(segments[3].problem, 'kw:alpha+beta');
+});
+
+test('ke thua het han sau 6 gio khong hoat dong', () => {
+  const at = (h, e) => ({ ...e, ts: new Date(Date.parse('2026-11-11T00:00:00Z') + h * 3600000).toISOString() });
+  const ev = [at(0, prompt(['alpha', 'beta'])), at(0.1, stop(U(1, 1))), at(1, prompt(['tiep', 'tuc'])), at(1.1, stop(U(1, 1))), at(8, prompt(['ok', 'di'])), at(8.1, stop(U(1, 1)))];
+  const { segments } = segment(ev);
+  assert.equal(segments[1].problem, 'kw:alpha+beta');
+  assert.equal(segments[2].problem, null);
+});
+
+test('plan/branch: uu tien su kien GHI; chi doc -> plan mid', () => {
+  const rd = 'docs/superpowers/plans/2026-11-11-read-only.md', wr = 'docs/superpowers/plans/2026-11-11-written.md';
+  const a = segment([prompt(), tool({ tool: 'Read', data: { files_touched: [rd] } }), tool({ tool: 'Edit', data: { files_touched: [wr] } }), stop(U(1, 1))]).segments[0];
+  assert.equal(a.keys.plan, 'written');
+  assert.equal(a.precision, 'high');
+  const b = segment([prompt(), tool({ tool: 'Read', data: { files_touched: [rd] } }), stop(U(1, 1))]).segments[0];
+  assert.equal(b.keys.plan, 'read-only');
+  assert.equal(b.precision, 'mid');
+  const c = segment([prompt(), tool({ cwd: '/r/.worktrees/old-wt' }), tool({ target: 'git commit -m x', cwd: '/r/.worktrees/new-wt' }), stop(U(1, 1))]).segments[0];
+  assert.equal(c.keys.branch, 'new-wt');
+});
