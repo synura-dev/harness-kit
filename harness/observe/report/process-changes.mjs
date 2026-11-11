@@ -1,7 +1,7 @@
 // Thay doi quy trinh tu git log: chi ten file + so lan sua (khong doc diff). Spec 4.2. Fail-open.
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 
 export const DEFAULT_PATHS = Object.freeze(['AGENTS.md', 'CLAUDE.md', '.claude/agents/', '.agents/agents/', '.claude/memory/']);
 const DAY = 86400000;

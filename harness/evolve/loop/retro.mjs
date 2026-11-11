@@ -4,7 +4,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync } from 'node:child_process';
+import { spawnSync } from '../../core/runtime/proc.mjs';
 import { ctx, redact } from './loop.mjs';
 import { isHookRun } from '../../core/audit/signals.mjs';
 import { isoWeek, appendSnapshot, readSeries, trend } from './series.mjs';
