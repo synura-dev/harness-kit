@@ -133,12 +133,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/evolve/usage/content-dupes.mjs`
 - Test: `harness/evolve/usage/content-dupes.test.mjs`
 
-- [ ] Chia khối theo heading/bullet; `foldText`; 5-shingle từ; chỉ mục ngược -> cặp ứng viên -> Jaccard; ngưỡng 0.6; trần `maxBlocks`, `maxDupPairs`, `timeoutMs` -> `truncated`.
-- [ ] Nguồn file như Task 6 + knowledge qua `harness knowledge export --json` (proc.mjs, timeout; lệnh chưa có/lỗi -> `knowledge: no_export`).
-- [ ] Thứ tự cặp tất định (như dupes.mjs:20-24). Output `{a:{file,line}, b:{file,line}, score}`.
-- [ ] Test: 2 đoạn gần giống (đổi 1 từ) -> score >= 0.6; khác dấu thanh cùng chữ (ma/mà) đoạn ngắn < 5 từ -> không thành shingle; truncated khi vượt.
-- [ ] Done-when: `timeout 30 bun test harness/evolve/usage/content-dupes.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Chia khối theo heading/bullet; `foldText`; 5-shingle từ; chỉ mục ngược -> cặp ứng viên -> Jaccard; ngưỡng 0.6; trần `maxBlocks`, `maxDupPairs`, `timeoutMs` -> `truncated`.
+- [x] Nguồn file như Task 6 + knowledge qua `harness knowledge export --json` (proc.mjs, timeout; lệnh chưa có/lỗi -> `knowledge: no_export`).
+- [x] Thứ tự cặp tất định (như dupes.mjs:20-24). Output `{a:{file,line}, b:{file,line}, score}`.
+- [x] Test: 2 đoạn gần giống (đổi 1 từ) -> score >= 0.6; khác dấu thanh cùng chữ (ma/mà) đoạn ngắn < 5 từ -> không thành shingle; truncated khi vượt.
+- [x] Done-when: `timeout 30 bun test harness/evolve/usage/content-dupes.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 8: Lệnh `harness evolve dupes-content` + `proposeMetricFix`
 
