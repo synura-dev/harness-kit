@@ -55,3 +55,21 @@ Chỉ cho đề xuất `kind: rule` đã apply. `apply` chụp **baseline** ngay
 - Phạm vi đo: mọi đề xuất `rule` đang `applied`, kể cả luật apply tay (chủ ý; chỉ ghi effect). Autopilot đọc audit MỘT lần mỗi lượt cho baseline các luật vừa áp (timeout đọc theo `query_timeout_ms` của audit-config, mặc định 30s; chưa có timeout riêng cho đường nền).
 - Ghi: `proposal.effect` là nguồn sự thật (metric, baseline, after, verdict, reason, measured_at, action, side); mỗi lần đo thêm một dòng `op: "effect"` vào `applied.jsonl` (`evolve log`); `evolve list` có cột `verdict=`. `--dry-run` chỉ báo sẽ làm gì, không ghi/rollback.
 - Thay cho cơ chế cũ (so count cửa sổ 30 ngày với 7 ngày: lệch đơn vị, gần như không bao giờ rollback).
+
+### Kind `fix` (chỉ hàng đợi, không tự ghi file)
+
+- `propose <cid> --kind fix --fix-target <area>:<path>` (area: hook|script|brief|doc|config): đề xuất sửa quy trình; `change.target: null`, không ghi file, có `target_metric.baseline_value`. Autopilot xếp vào review-queue (mức 2), không bao giờ auto-apply.
+- `apply <pid> --approve --manual-done`: người đã sửa tay xong; chỉ đổi status sang applied để bắt đầu đo. Thiếu `--manual-done` -> từ chối. `measureDue` đo mọi đề xuất applied có `target_metric` (không chỉ rule), ghi verdict vào proposal, không rollback (rollback tự động vẫn chỉ cho rule do autopilot áp).
+
+### Demote (tự hạ cấp rule vô ích)
+
+`demote.mjs`, gọi từ ledger job sau autopilot (guard 24h, tối đa 10 rule/lần, timeout 10s). Rule `evolve-*.json` trong 14 ngày warned >= 5 mà ignored >= 50% (acted 0): do autopilot áp -> rollback; áp tay -> chỉ log `demote_suggested`. Bỏ qua rule protected, mặc định plugin, `<project>/.harness/rules`.
+
+### Retro tuần
+
+`evolve retro [--apply] [--json] [--current]`: báo cáo tuần `<dataDir>/retro/<week>.json|.md` (KPI, trend, selfdev, top-3 vấn đề có `key` ổn định, bảng hiệu quả thay đổi). Mặc định xem tuần VỪA XONG; `--current` xem tuần đang chạy (không append series).
+- Tự động: ledger job gọi `retroAuto` 1 lần/isoWeek; marker `retro/<week>.auto.json` chỉ ghi khi chạy xong không lỗi/timeout (lỗi -> job sau thử lại). `--apply` tự bật qua config evolve `retro.autoApply` (mặc định true; `false` thì chỉ ghi báo cáo).
+- `--apply` tạo task qua `projects add-task` (+ `knowledge add` báo cáo). Trần/tuần: 3 task vấn đề + 1 P0; dedupe qua `retro/emitted.json` (vấn đề đã `resolved` được phát lại; mục > 90 ngày bị dọn). Runner lỗi/timeout: báo cáo vẫn ghi, key không vào emitted. Hết `timeoutS` (30) -> `truncated: 'timeout'`.
+- Series `retro/series.jsonl`: append-only, 1 dòng/tuần (cùng tuần `rev+1`), đọc tối đa 200 dòng/2 MB; `trend` có spark, slope, vs_prev_pct, vs_baseline_pct, direction (flat khi |slope| < 5% trung bình).
+- Selfdev (`better` = hướng tốt): self_initiated_rate up, time_to_fix_h down, time_to_verify_h down, effective_rate up, rollback_rate down, repeat_correction_rate down, repeat_errors_resolved up, repeat_files down. Mẫu 0 -> null.
+- F3 tự kiểm: tổng hợp `improving|flat|worse`; `flat|worse` 2 tuần liền -> task `[P0] self-improvement stalled: ...` (tối đa 1/tuần).

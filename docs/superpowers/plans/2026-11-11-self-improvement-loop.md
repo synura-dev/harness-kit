@@ -85,10 +85,10 @@
 
 ### Task 9: Docs + full suite mot lan (sau T8)
 **Files:** `harness/evolve/README.md`, `harness/observe/report/README.md`, `CHANGELOG.md`.
-- [ ] README evolve: kind fix, demote, retro, series, selfdev, nguong. README report: toan tu prefix, nguon process, doi nhan fingerprints.
-- [ ] CHANGELOG muc moi.
-- [ ] Full suite mot lan, nen, log ra file: `timeout 900 node --test > /tmp/<scratch>/full.log 2>&1`; bao `# pass/# fail`.
-- [ ] Commit `docs: self-improvement loop`.
+- [x] README evolve: kind fix, demote, retro, series, selfdev, nguong. README report: toan tu prefix, nguon process, doi nhan fingerprints.
+- [x] CHANGELOG muc moi.
+- [x] Full suite mot lan, nen, log ra file: `timeout 900 node --test > /tmp/<scratch>/full.log 2>&1`; bao `# pass/# fail`.
+- [x] Commit `docs: self-improvement loop`.
 **Done-when:** full suite `# fail 0` (trich dong tong ket).
 
 ### Task 10 (hub, ngoai repo harness-kit; can nguoi dung duyet)

@@ -7,7 +7,7 @@
   "desc": "vong tien hoa: loi lap (>=3 lan/7 ngay) -> de xuat -> oracle eval -> apply --approve co version -> rollback",
   "cmds": ["scan [--kind error|pattern|deprecate]", "propose", "check", "apply", "rollback", "log", "list", "scan --kind deprecate [--days N] [--cost] [--by-project] [--detail kind:id] (nguon->hanh dong, insufficient_window, duplicates_dropped; xem observe/ledger/README.md)", "autopilot [--dry-run]", "queue [--approve <id>|--reject <id>]", "retro [--apply] [--current] [--timeout-s N] (mac dinh tuan vua xong; KPI + chuoi tuan + selfdev + hieu qua + top-3 van de; --apply tao task; tu chay 1 lan/tuan qua ledger job, tat: config evolve retro.autoApply=false)"],
   "default": "index",
-  "files": { "helpers": ["loop.mjs", "policy.mjs", "patterns.mjs", "prune.mjs", "prune-cli.mjs", "autopilot.mjs", "rule-content.mjs", "effect.mjs", "series.mjs", "selfdev.mjs", "retro.mjs"] },
+  "files": { "helpers": ["loop.mjs", "policy.mjs", "patterns.mjs", "prune.mjs", "prune-cli.mjs", "autopilot.mjs", "rule-content.mjs", "effect.mjs", "series.mjs", "selfdev.mjs", "retro.mjs", "demote.mjs"] },
   "tests": ["loop.test.mjs", "patterns.test.mjs", "prune.test.mjs", "autopilot.test.mjs", "rule-content.test.mjs", "effect.test.mjs", "cli.test.mjs", "series.test.mjs", "selfdev.test.mjs", "retro.test.mjs"],
   "config": { "defaults": null, "schema": null },
   "data": "evolve",
