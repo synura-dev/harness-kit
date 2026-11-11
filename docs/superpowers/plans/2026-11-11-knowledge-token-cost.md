@@ -108,12 +108,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/observe/report/knowledge-roi.mjs`, `harness/observe/report/defaults/knowledge-roi.json` (table), `harness/observe/report/defaults/kpi-knowledge.json`
 - Test: `harness/observe/report/knowledge-roi.test.mjs`
 
-- [ ] Per id: gets, sessions, served_tokens (`out_len/4` -> `--budget N` -> null), saving (median eff cùng family không/có id, >= `minSide` mỗi bên, else null), cờ `fetched_no_saving`, `never_fetched`.
-- [ ] Danh sách id: `harness knowledge graph --json --limit 2000` qua `proc.mjs` timeout 10s, tiêm được trong test (`listIds` param); lỗi -> bỏ `never_fetched`, ghi `ids: unavailable`.
-- [ ] KPI: `fetches`, `served_tokens_measured_share`, `retire_candidates`.
-- [ ] Test: parse `harness knowledge get 2026-11-07-agent-allocation --budget 800` -> id + 800; target bị cắt 160 ký tự vẫn không crash; mẫu nhỏ -> saving null.
-- [ ] Done-when: `timeout 30 bun test harness/observe/report/knowledge-roi.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Per id: gets, sessions, served_tokens (`out_len/4` -> `--budget N` -> null), saving (median eff cùng family không/có id, >= `minSide` mỗi bên, else null), cờ `fetched_no_saving`, `never_fetched`.
+- [x] Danh sách id: `harness knowledge graph --json --limit 2000` qua `proc.mjs` timeout 10s, tiêm được trong test (`listIds` param); lỗi -> bỏ `never_fetched`, ghi `ids: unavailable`.
+- [x] KPI: `fetches`, `served_tokens_measured_share`, `retire_candidates`.
+- [x] Test: parse `harness knowledge get 2026-11-07-agent-allocation --budget 800` -> id + 800; target bị cắt 160 ký tự vẫn không crash; mẫu nhỏ -> saving null.
+- [x] Done-when: `timeout 30 bun test harness/observe/report/knowledge-roi.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 6: Thuế context `context-tax.mjs` + section
 

@@ -5,8 +5,8 @@
   "entry": "cli.mjs",
   "desc": "bao cao tuan khai bao (defaults/*.json, ghi de <project>/.harness/report/): 4 KPI + bao ve + canh bao + subagent-vs-main; baseline; xuat obsidian",
   "cmds": "[--days N] [--avg-of K] [--compare all|prev|avg|baseline] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--bootstrap-days N]",
-  "files": { "helpers": ["engine.mjs", "run.mjs", "process-changes.mjs", "cost-contract.mjs", "problems.mjs", "cost-repeat.mjs", "context-tax.mjs"] },
-  "tests": ["context-tax.test.mjs", "engine.test.mjs", "run.test.mjs", "cost-contract.test.mjs", "problems.test.mjs", "cost-repeat.test.mjs"],
+  "files": { "helpers": ["engine.mjs", "run.mjs", "process-changes.mjs", "cost-contract.mjs", "problems.mjs", "cost-repeat.mjs", "context-tax.mjs", "knowledge-roi.mjs"] },
+  "tests": ["context-tax.test.mjs", "engine.test.mjs", "run.test.mjs", "cost-contract.test.mjs", "problems.test.mjs", "cost-repeat.test.mjs", "knowledge-roi.test.mjs"],
   "config": { "defaults": null, "schema": null },
   "data": "ledger",
   "tier": "T1"

@@ -85,7 +85,7 @@ const safeRoot = () => { try { return workspaceRoot(); } catch { return ''; } };
 
 /** Module cung cap derive: moi module export `derive = {ten: ({events,from,to,deadline}) => rows | {rows, truncated}}` (DONG BO; producer kiem deadline, qua han thi tra truncated).
  *  Cac Task tiep theo (producer cost-*) them ten module vao day. Module chua co -> bo qua; loi import khac / ten derive trung -> errors[]. */
-export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs', './context-tax.mjs']);
+export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs', './context-tax.mjs', './knowledge-roi.mjs']);
 export async function loadDerived(modules = DERIVED_MODULES) {
   const map = {}; const errors = [];
   for (const f of modules) {
@@ -135,7 +135,7 @@ export async function buildReport(opts = {}) {
   const deriveErrors = [];
   const derived = dl.map;
   // derivedCtx: MOT ctx / buildReport, engine spread vao arg moi derive (T4/T5/T6 dung chung): memo, projectDir, getSegments, ledger, persist, now, dataOpts, onError
-  const derivedCtx = { projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, memo: {}, getSegments, ledger, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, onError: (m) => { if (!deriveErrors.includes(m)) deriveErrors.push(m); } };
+  const derivedCtx = { projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, memo: {}, docIds: opts.docIds, listIds: opts.listIds, getSegments, ledger, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, onError: (m) => { if (!deriveErrors.includes(m)) deriveErrors.push(m); } };
   const all = { tasks, process: proc, derived, derivedCtx, events: ev.events, ledger, inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
