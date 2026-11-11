@@ -69,9 +69,9 @@
 
 ### Task 7: Chi so kha nang tu phat trien (F2) (RED/GREEN)
 **Files:** tao `harness/evolve/loop/selfdev.mjs`, `harness/evolve/loop/selfdev.test.mjs`.
-- [ ] Test do (input fixture thuan): `self_initiated_rate`, `time_to_fix_h` (trung vi), `time_to_verify_h`, `effective_rate`, `rollback_rate`, `repeat_correction_rate`, `repeat_errors_resolved` dung cong thuc spec 4.5; mau 0 -> `null` (khong chia 0); moi chi so kem `better: 'up'|'down'`.
-- [ ] Viet `selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges, signals, weekStartMs, weekEndMs })` thuan; `compositeDirection(trends)` tra `improving|flat|worse` (>= 2 chi so cung chieu xau/ngang).
-- [ ] Commit `evolve: chi so kha nang tu phat trien`.
+- [x] Test do (input fixture thuan): `self_initiated_rate`, `time_to_fix_h` (trung vi), `time_to_verify_h`, `effective_rate`, `rollback_rate`, `repeat_correction_rate`, `repeat_errors_resolved` dung cong thuc spec 4.5; mau 0 -> `null` (khong chia 0); moi chi so kem `better: 'up'|'down'`.
+- [x] Viet `selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges, signals, weekStartMs, weekEndMs })` thuan; `compositeDirection(trends)` tra `improving|flat|worse` (>= 2 chi so cung chieu xau/ngang).
+- [x] Commit `evolve: chi so kha nang tu phat trien`.
 **Done-when:** `timeout 120 node --test harness/evolve/loop/selfdev.test.mjs` -> `# fail 0`.
 
 ### Task 8: `harness evolve retro` + nguong tu kiem (D + F3) (RED/GREEN) - sau T1-T7
