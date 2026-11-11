@@ -11,6 +11,7 @@ import { messageFingerprint } from '../../core/audit/normalize-message.mjs';
 import { isHookRun } from '../../core/audit/signals.mjs';
 import { loadAuditConfig } from '../../core/config/audit-config.mjs';
 import { ctx, nestedDateDirs } from './loop.mjs';
+import { readSeries } from './series.mjs';
 
 const DAY = 86400000;
 const EPS = 1e-9;
@@ -165,21 +166,68 @@ export function captureBaseline(p, nowMs, o = {}) {
   } catch (e) { return { baseline: null, reason: `error: ${String(e.message).slice(0, 80)}` }; }
 }
 
+const METRIC_FINAL = new Set(['improved', 'no_effect', 'worse']); // verdict theo chi so: chot ngay khi du diem; insufficient do lai
+const METRIC_BAND = 0.05;
+
+/** Verdict theo chi so series: diem retro MOI (ts > appliedMs) so voi baseline. Thieu baseline/diem -> insufficient. Khong rollback. */
+export function metricVerdict({ series, kpi, baseline, better = 'down', appliedMs: at = 0 }) {
+  const row = (Array.isArray(series) ? series : []).filter((s) => Date.parse(s && s.ts) > at && typeof s.kpi?.[kpi] === 'number' && Number.isFinite(s.kpi[kpi])).at(-1);
+  if (typeof baseline !== 'number' || !Number.isFinite(baseline) || !row) return { verdict: 'insufficient', reason: !row ? 'no_new_point' : 'no_baseline' };
+  const v = row.kpi[kpi], dir = better === 'up' ? 1 : -1; // dir>0: tang la tot
+  const tol = Math.abs(baseline) * METRIC_BAND;
+  const d = (v - baseline) * dir;
+  const verdict = d >= tol && d > 0 ? 'improved' : d <= -tol && d < 0 ? 'worse' : 'no_effect';
+  return { verdict, reason: `${kpi} ${baseline} -> ${v}`, after: v };
+}
+
+/** Do lai cap trung noi dung (cho target_metric.pair_recheck). Fail-open: loi -> null (insufficient). Inject collectSources/findContentDupes (test). */
+export async function loadDupePairs(o = {}) {
+  try {
+    const cd = await import('../usage/content-dupes.mjs');
+    const s = await (o.collectSources || cd.collectSources)({ root: ctx(o).hub });
+    const r = (o.findContentDupes || cd.findContentDupes)(s.sources);
+    return { pairs: r.pairs, truncated: s.truncated || r.truncated || null };
+  } catch { return null; }
+}
+
+function pairVerdict(tm, dup) {
+  const pairs = dup && Array.isArray(dup.pairs) ? dup.pairs : null;
+  if (!pairs) return { verdict: 'insufficient', reason: 'no_dupe_data' };
+  const A = tm.a && tm.a.file, B = tm.b && tm.b.file;
+  const hit = pairs.find((q) => (q.a.file === A && q.b.file === B) || (q.a.file === B && q.b.file === A));
+  const base = Number(tm.baseline);
+  if (!hit) return dup.truncated ? { verdict: 'insufficient', reason: `truncated: ${dup.truncated}` } : { verdict: 'improved', reason: 'pair_gone', after: 0 };
+  const s = hit.score;
+  const verdict = Number.isFinite(base) && s > base + EPS ? 'worse' : 'no_effect'; // cap da qua nguong (findContentDupes) nen khong co nhanh < THRESHOLD
+  return { verdict, reason: `pair score ${Number.isFinite(base) ? base : '-'} -> ${s}`, after: s };
+}
+
+function measureMetric(p, at, nowMs, o) {
+  const tm = p.target_metric;
+  const v = tm.kpi
+    ? metricVerdict({ series: o.series || readSeries(path.join(ctx(o).evo, 'retro', 'series.jsonl')).series, kpi: tm.kpi, baseline: tm.baseline, better: tm.better, appliedMs: at })
+    : pairVerdict(tm, o.dupePairs);
+  if (v.verdict === 'insufficient' && (nowMs - at) / DAY > EFFECT.maxRecheckDays) v.verdict = 'inconclusive'; // nhu nhanh rule: khong insufficient mai
+  const final = METRIC_FINAL.has(v.verdict) || v.verdict === 'inconclusive';
+  return { id: p.id, effect: { metric: tm.kpi || 'pair_recheck', ver: p.ver || null, baseline: tm.baseline ?? null, after: v.after ?? null, verdict: v.verdict, reason: v.reason, measured_at: iso(nowMs), action: final ? 'keep' : 'none', side: [] } };
+}
+
 /** Proposal rule da apply, chua co verdict cuoi, da den han -> [{id, effect}]. MOT luot doc audit. Khong ghi. */
 export function measureDue(proposals, now, o = {}) {
   const nowMs = typeof now === 'number' ? now : Number(now) || Date.now();
   const L = limitsOf(o);
-  const due = [];
+  const due = [], metric = [];
   for (const p of proposals) {
     if (!p || p.status !== 'applied' || !(p.kind === 'rule' || p.target_metric)) continue;
-    if (p.effect && FINAL.has(p.effect.verdict)) continue;
+    if (p.effect && (FINAL.has(p.effect.verdict) || METRIC_FINAL.has(p.effect.verdict))) continue;
     const at = appliedMs(p, o);
     if (!Number.isFinite(at) || nowMs < at + EFFECT.windowDays * DAY) continue;
+    if (p.target_metric && (p.target_metric.kpi || p.target_metric.pair_recheck)) { metric.push(measureMetric(p, at, nowMs, o)); continue; } // nhanh chi so: khong doc audit
     const afterFrom = Math.max(at, nowMs - EFFECT.windowDays * DAY);
     const retro = !(p.effect && p.effect.baseline) && at - EFFECT.windowDays * DAY >= nowMs - L.retention_days * DAY;
     due.push({ p, at, afterFrom, retro });
   }
-  if (!due.length) return [];
+  if (!due.length) return metric;
   const audits = ctx(o).audits;
   // shortcut: audit rat lon (> query_max_rows trong 7 ngay) -> luot chinh luon truncated, proposal giu insufficient mai va bi doc lai moi lan chay.
   const A = readEvents(audits,Math.min(...due.map((d) => d.afterFrom)), nowMs, o); // luot chinh: cua so after
@@ -188,7 +236,7 @@ export function measureDue(proposals, now, o = {}) {
   const retros = due.filter((d) => d.retro);
   const B = retros.length ? readEvents(audits, Math.min(...retros.map((d) => d.at - EFFECT.windowDays * DAY)), Math.max(...retros.map((d) => d.at)), o) : null;
   const idxB = B && groupIndex(B.events, nowMs);
-  return due.map(({ p, at, afterFrom, retro }) => {
+  return [...due.map(({ p, at, afterFrom, retro }) => {
     const fp = p.evidence && p.evidence.fp;
     const after = statsOf(A.events, groupEvents(idxA, fp), afterFrom, nowMs);
     const bFrom = at - EFFECT.windowDays * DAY;
@@ -199,5 +247,12 @@ export function measureDue(proposals, now, o = {}) {
       : !baseline ? { verdict: ageDays > EFFECT.maxRecheckDays ? 'inconclusive' : 'insufficient', reason: 'no_baseline', side: [] }
       : verdictOf(baseline, after, { ageDays });
     return { id: p.id, effect: { metric: 'target_rate_per_1000', ver: p.ver || null, baseline, after, verdict: v.verdict, reason: v.reason, measured_at: iso(nowMs), action: ACTION[v.verdict], side: v.side, ...(truncated ? { truncated } : {}) } };
-  });
+  }), ...metric];
+}
+
+/** Co de xuat pair_recheck DA DEN HAN do (>= windowDays sau apply) va chua chot -> autopilot moi nap loadDupePairs. */
+export function pairRecheckDue(proposals, nowMs, o = {}) {
+  return proposals.some((p) => p && p.status === 'applied' && p.target_metric && p.target_metric.pair_recheck
+    && !(p.effect && (FINAL.has(p.effect.verdict) || METRIC_FINAL.has(p.effect.verdict)))
+    && nowMs >= appliedMs(p, o) + EFFECT.windowDays * DAY);
 }

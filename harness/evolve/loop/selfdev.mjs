@@ -3,7 +3,9 @@
 // proposals [{id, candidate, effect:{measured_at}}] (candidate = ledgerEntries[].id); ledgerEntries [{id, first_ts, last_ts, status}];
 // effects [{id, effect:{verdict, measured_at}}]; processChanges [{ts, file}] (moi thay doi file quy tac qua git = user-directed);
 // signals {sessions, corrections, interrupts}. Moi chi so lay theo cua so tuan [weekStartMs, weekEndMs) de chuoi tuan khong tron so tich luy.
-const FINAL = new Set(['better', 'worse', 'unchanged', 'inconclusive']);
+const FINAL = new Set(['better', 'worse', 'unchanged', 'inconclusive', 'improved', 'no_effect']);
+// chi so tu kpi retro (khoa series on dinh): [ten selfdev, khoa kpi, better]; thieu so -> bo qua (khong flat gia)
+const KPI_METRICS = [['repeat_vs_first_ratio', 'kpi-cost-repeat.repeat_vs_first_ratio', 'down'], ['eff_tokens_per_problem', 'kpi-cost-repeat.eff_tokens_per_problem', 'down'], ['static_tokens', 'kpi-context-tax.static_tokens', 'down'], ['dup_lines', 'kpi-context-tax.dup_lines', 'down'], ['roi_saved_tokens', 'kpi-knowledge.roi_saved_tokens', 'up'], ['key_coverage', 'kpi-cost-repeat.key_coverage', 'up']];
 const HOUR = 3600e3, DAY = 24 * HOUR;
 const ms = (t) => (typeof t === 'number' ? t : Date.parse(t));
 const ratio = (n, d) => (d > 0 ? n / d : null);
@@ -14,7 +16,7 @@ const median = (a) => {
 };
 const arr = (x) => (Array.isArray(x) ? x : []);
 
-export function selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges, signals, weekStartMs = -Infinity, weekEndMs = Infinity } = {}) {
+export function selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, processChanges, signals, kpi, weekStartMs = -Infinity, weekEndMs = Infinity } = {}) {
   const inWeek = (t) => { const v = ms(t); return Number.isFinite(v) && v >= weekStartMs && v < weekEndMs; };
   const applied = arr(appliedLog).filter((e) => e.op === 'apply' && e.ok && inWeek(e.ts));
   const rolled = arr(appliedLog).filter((e) => e.op === 'rollback' && e.ok && inWeek(e.ts));
@@ -42,11 +44,12 @@ export function selfdevMetrics({ appliedLog, proposals, ledgerEntries, effects, 
     self_initiated_rate: r(ratio(applied.length, applied.length + user), 'up'),
     time_to_fix_h: r(median(fix), 'down'),
     time_to_verify_h: r(median(verify), 'down'),
-    effective_rate: r(ratio(done.filter((e) => e.effect.verdict === 'better').length, done.length), 'up'),
+    effective_rate: r(ratio(done.filter((e) => ['better', 'improved'].includes(e.effect.verdict)).length, done.length), 'up'),
     rollback_rate: r(ratio(rolled.length, applied.length), 'down'),
     repeat_correction_rate: r(ratio((sig.corrections || 0) + (sig.interrupts || 0), sig.sessions || 0), 'down'),
     repeat_errors_resolved: r(ratio(led.filter((l) => l.status === 'resolved').length, led.length), 'up'),
     repeat_files: r([...per.values()].filter((n) => n >= 2).length, 'down'),
+    ...Object.fromEntries(KPI_METRICS.filter(([, key]) => typeof kpi?.[key] === 'number' && Number.isFinite(kpi[key])).map(([name, key, better]) => [name, r(kpi[key], better)])),
   };
 }
 
