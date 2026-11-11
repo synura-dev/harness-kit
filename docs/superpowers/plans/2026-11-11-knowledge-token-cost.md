@@ -121,13 +121,13 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/observe/report/context-tax.mjs`, `harness/observe/report/defaults/kpi-context-tax.json`, `harness/observe/report/defaults/context-dupes.json` (list)
 - Test: `harness/observe/report/context-tax.test.mjs`
 
-- [ ] Tĩnh (theo quy ước, không config): CLAUDE.md + `@import` một cấp; `.claude/memory/MEMORY.md` 200 dòng đầu (thiếu -> `memory: not_found`); mô tả skill qua `inventorySkills` (evolve/loop/prune.mjs:101); role mỗi agent qua `harness knowledge role <agent>` (proc.mjs, timeout, cắt 3072 byte, fail-open) x số SubagentStart cửa sổ.
-- [ ] Đo thực: median `data.usage.first_ctx` Stop đầu mỗi sid main; `calibration = first_ctx/static`.
-- [ ] Trùng dòng: băm `foldText` dòng >= 30 ký tự qua CLAUDE.md, AGENTS.md, MEMORY.md, `.claude/memory/*.md`, `.claude/agents/*.md`, `.agents/agents/*.md`; xuất `file:dòng` (không nội dung).
-- [ ] KPI khoá: `static_tokens`, `rules_tokens`, `memory_index_tokens`, `skills_desc_tokens`, `role_tokens_per_subagent`, `first_ctx_tokens`, `dup_lines`.
-- [ ] Test trên thư mục tạm: 2 file chung 1 dòng dài -> dup_lines 1, output không chứa nội dung dòng; tiếng Việt có/không dấu cùng nhóm.
-- [ ] Done-when: `timeout 30 bun test harness/observe/report/context-tax.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] Tĩnh (theo quy ước, không config): CLAUDE.md + `@import` một cấp; `.claude/memory/MEMORY.md` 200 dòng đầu (thiếu -> `memory: not_found`); mô tả skill qua `inventorySkills` (evolve/loop/prune.mjs:101); role mỗi agent qua `harness knowledge role <agent>` (proc.mjs, timeout, cắt 3072 byte, fail-open) x số SubagentStart cửa sổ.
+- [x] Đo thực: median `data.usage.first_ctx` Stop đầu mỗi sid main; `calibration = first_ctx/static`.
+- [x] Trùng dòng: băm `foldText` dòng >= 30 ký tự qua CLAUDE.md, AGENTS.md, MEMORY.md, `.claude/memory/*.md`, `.claude/agents/*.md`, `.agents/agents/*.md`; xuất `file:dòng` (không nội dung).
+- [x] KPI khoá: `static_tokens`, `rules_tokens`, `memory_index_tokens`, `skills_desc_tokens`, `role_tokens_per_subagent`, `first_ctx_tokens`, `dup_lines`.
+- [x] Test trên thư mục tạm: 2 file chung 1 dòng dài -> dup_lines 1, output không chứa nội dung dòng; tiếng Việt có/không dấu cùng nhóm.
+- [x] Done-when: `timeout 30 bun test harness/observe/report/context-tax.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 7: Trùng gần đúng nội dung `content-dupes.mjs`
 

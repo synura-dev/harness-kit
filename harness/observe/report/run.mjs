@@ -83,7 +83,7 @@ const safeRoot = () => { try { return workspaceRoot(); } catch { return ''; } };
 
 /** Module cung cap derive: moi module export `derive = {ten: ({events,from,to,deadline}) => rows | {rows, truncated}}` (DONG BO; producer kiem deadline, qua han thi tra truncated).
  *  Cac Task tiep theo (producer cost-*) them ten module vao day. Module chua co -> bo qua; loi import khac / ten derive trung -> errors[]. */
-export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs']);
+export const DERIVED_MODULES = Object.freeze(['./cost-repeat.mjs', './context-tax.mjs']);
 export async function loadDerived(modules = DERIVED_MODULES) {
   const map = {}; const errors = [];
   for (const f of modules) {
@@ -119,7 +119,7 @@ export async function buildReport(opts = {}) {
   let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
   const dl = opts.derived !== undefined ? { map: opts.derived, errors: [] } : sections.some((d) => d.source === 'derived') ? await loadDerived() : { map: undefined, errors: [] };
   const derived = dl.map;
-  const all = { tasks, process: proc, derived, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
+  const all = { tasks, process: proc, derived, derivedCtx: { projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, memo: {} }, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };
