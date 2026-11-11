@@ -2,6 +2,10 @@
 import { test, expect } from 'bun:test';
 import { routing, derive } from './routing.mjs';
 import { segment } from './problems.mjs';
+import { resolvePolicy } from './routing-policy.mjs';
+import fs from 'node:fs';
+import path from 'node:path';
+const HUB = resolvePolicy(JSON.parse(fs.readFileSync(path.join(import.meta.dir, 'examples/hub-routing.json'), 'utf8'))).policy;
 
 let n = 0;
 const T = (m = 0) => new Date(Date.UTC(2026, 10, 10, 0, 0, 0) + m * 60000 + (n++)).toISOString();
@@ -9,7 +13,7 @@ const ev = (o) => ({ v: 2, ts: T(o.m || 0), type: 'tool', cli: 'claude', cwd: '/
 const prompt = (sid, m, extra = {}) => ev({ sid, m, type: 'prompt', event: 'UserPromptSubmit', data: {}, ...extra });
 const stop = (sid, m, input, extra = {}) => ev({ sid, m, type: 'stop', event: 'Stop', model: 'claude-opus-4', data: { usage: { input, output: 0, cache_read: 0, cache_creation: 0, msgs: 1 } }, ...extra });
 const post = (sid, m, tool, o = {}) => ev({ sid, m, event: 'PostToolUse', tool, ok: true, ...o });
-const run = (events) => routing({ events, segments: segment(events), hubDir: '/hub' });
+const run = (events) => routing({ events, segments: segment(events), hubDir: '/hub', policy: HUB });
 const val = (r, k) => r.rows.find((x) => x.k === k)?.v;
 const dispatch = (sid, m, type, id, { model, tools = [] } = {}) => [
   ev({ sid, m, event: 'PreToolUse', tool: 'Agent', target: type }),
@@ -35,6 +39,7 @@ test('agy: Stop usage unavailable -> cost_per_problem null (khong do), khong pha
     post('agy-2', 1, 'WebSearch', { ...a, data: { out_len: 5, files_touched: PLAN } }),
     ev({ sid: 'agy-2', m: 2, type: 'stop', event: 'Stop', ...a, data: { usage: 'unavailable', usage_reason: 'no_path' } }),
   ]);
+  expect(r.agy.find((x) => x.k === 'share').v).toBeGreaterThan(0); // agyU khong rong
   expect(r.agy.find((x) => x.k === 'cost_per_problem').v).toBeNull();
 });
 

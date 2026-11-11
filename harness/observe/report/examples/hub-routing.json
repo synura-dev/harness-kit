@@ -1,0 +1,13 @@
+{
+  "expected": {
+    "plan": "opus",
+    "review": "sonnet",
+    "review_risk": "opus",
+    "code_edit": "sonnet",
+    "read_small": "haiku",
+    "test_run": "haiku"
+  },
+  "backends": {
+    "agy": { "classes": ["web_lookup", "large_read"], "label": "agy (tra web, doc rat lon)" }
+  }
+}
