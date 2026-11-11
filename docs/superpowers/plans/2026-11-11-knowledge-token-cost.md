@@ -37,12 +37,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Test: `harness/observe/audit/audit.test.mjs`, `harness/observe/audit/usage-tail.test.mjs`
 - Modify: `harness/observe/README.md` (:21-33 thêm 2 trường; :77 sửa câu "cache-creation không được audit ghi" thành đúng: `tokens_in` gồm cache_creation, `data.usage` tách riêng)
 
-- [ ] Test đỏ: PostToolUse Bash với `tool_response {stdout:'abc', stderr:'de'}` -> `data.out_len === 5`; response chuỗi -> độ dài chuỗi; không response -> không có trường; KHÔNG có `stdout` trong record (assert `JSON.stringify(rec)` không chứa 'abc').
-- [ ] Test đỏ: `sumUsage` trên 2 message assistant -> `first_ctx = input + cache_creation + cache_read` của message ĐẦU trong delta; delta rỗng -> không có `first_ctx`.
-- [ ] Code: tính độ dài trên giá trị đã có trong payload, không lưu chuỗi; cắt trần `Number.MAX_SAFE_INTEGER` không cần, chỉ `Math.min(len, 1e9)`.
-- [ ] Cập nhật README.
-- [ ] Done-when: `timeout 60 bun test harness/observe/audit/audit.test.mjs harness/observe/audit/usage-tail.test.mjs` -> 0 fail.
-- [ ] Commit `audit: ghi out_len Bash va usage.first_ctx (chi so)`.
+- [x] Test đỏ: PostToolUse Bash với `tool_response {stdout:'abc', stderr:'de'}` -> `data.out_len === 5`; response chuỗi -> độ dài chuỗi; không response -> không có trường; KHÔNG có `stdout` trong record (assert `JSON.stringify(rec)` không chứa 'abc').
+- [x] Test đỏ: `sumUsage` trên 2 message assistant -> `first_ctx = input + cache_creation + cache_read` của message ĐẦU trong delta; delta rỗng -> không có `first_ctx`.
+- [x] Code: tính độ dài trên giá trị đã có trong payload, không lưu chuỗi; cắt trần `Number.MAX_SAFE_INTEGER` không cần, chỉ `Math.min(len, 1e9)`.
+- [x] Cập nhật README.
+- [x] Done-when: `timeout 60 bun test harness/observe/audit/audit.test.mjs harness/observe/audit/usage-tail.test.mjs` -> 0 fail.
+- [x] Commit `audit: ghi out_len Bash va usage.first_ctx (chi so)`.
 
 ### Task 1: Hợp đồng Segment + LIMITS
 

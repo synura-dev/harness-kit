@@ -251,6 +251,11 @@ export function buildEnvelope(inp, cfg, now = new Date(), opts = {}) {
     for (const k of rule.data || []) if (ti[k] != null && typeof ti[k] !== 'object') data[k] = typeof ti[k] === 'string' ? cut(redact(ti[k], res), 80) : ti[k];
     for (const k of rule.len || []) if (typeof ti[k] === 'string') data[k + '_len'] = ti[k].length;
   }
+  if (tool === 'Bash' && event === 'PostToolUse' && inp.tool_response != null) { // chi so do dai dau ra (khong luu noi dung)
+    const r = inp.tool_response;
+    const n = typeof r === 'string' ? r.length : (typeof r === 'object' ? (typeof r.stdout === 'string' ? r.stdout.length : 0) + (typeof r.stderr === 'string' ? r.stderr.length : 0) : null);
+    if (n != null) data.out_len = Math.min(n, 1e9);
+  }
   if (inp.tool_use_id) data.tool_use_id = cut(String(inp.tool_use_id).replace(/[^A-Za-z0-9_-]/g, ''), 80);
   if (typeof inp.prompt === 'string') data.prompt_len = inp.prompt.length;
   if (typeof inp.message === 'string') data.message_len = inp.message.length;

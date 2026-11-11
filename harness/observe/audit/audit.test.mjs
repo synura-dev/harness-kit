@@ -160,3 +160,12 @@ test('Bash: ghi has_timeout, bg, cmd_line (dong dau)', () => {
   expect(b.has_timeout).toBeNull();
   expect(b.bg).toBe(true);
 });
+
+test('PostToolUse Bash: data.out_len tu stdout+stderr, khong luu noi dung', () => {
+  const mkr = (tool_response) => buildEnvelope({ hook_event_name: 'PostToolUse', session_id: 'ol', tool_name: 'Bash', tool_input: { command: 'ls' }, tool_response }, cfg);
+  const a = mkr({ stdout: 'abc', stderr: 'de' });
+  expect(a.data.out_len).toBe(5);
+  expect(JSON.stringify(a)).not.toContain('abc');
+  expect(mkr('hello').data.out_len).toBe(5);
+  expect('out_len' in mkr(undefined).data).toBe(false);
+});

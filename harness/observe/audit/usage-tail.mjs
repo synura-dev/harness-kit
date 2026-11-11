@@ -42,6 +42,8 @@ export function sumUsage(text, deadline = Infinity) {
   }
   const r = { input: 0, output: 0, cache_read: 0, cache_creation: 0, total_tokens: 0, msgs: by.size, model };
   for (const u of by.values()) { r.input += u.input_tokens || 0; r.output += u.output_tokens || 0; r.cache_read += u.cache_read_input_tokens || 0; r.cache_creation += u.cache_creation_input_tokens || 0; }
+  const f0 = by.values().next().value; // message DAU trong delta (Map giu thu tu chen): kich thuoc context luc vao
+  if (f0) r.first_ctx = (f0.input_tokens || 0) + (f0.cache_creation_input_tokens || 0) + (f0.cache_read_input_tokens || 0);
   r.total_tokens = r.input + r.output + r.cache_creation; // khop tokens_in+tokens_out (khong tinh cache_read)
   return r;
 }
