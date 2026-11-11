@@ -78,12 +78,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Create: `harness/observe/report/problems.mjs`
 - Test: `harness/observe/report/problems.test.mjs`
 
-- [ ] `segment(events, {limits})` -> `{segments, truncated}`: tách theo sid, cắt tại type `prompt`; token = cộng `data.usage` các Stop trong đoạn; subagent = MAX lũy kế `tokens_in/out` theo `agent_id` của SubagentStop có SubagentStart trong đoạn (cộng các agent, không cộng lặp cùng agent); tools = số PostToolUse/PostToolUseFailure; fetches = Bash target khớp tiền tố `kpi-info-fetch.json` hoặc `harness knowledge (get|search)`; `kfetch` = id sau `knowledge get`.
-- [ ] Khoá ưu tiên task > plan > branch (bỏ `agent-[0-9a-f]{6,}`) > err > kw; đoạn không khoá thừa khoá đoạn trước cùng sid; `precision` high|mid|low; family (err -> id ledger entry chứa fp qua tham số `ledger`, khác -> `<loại>:<slug>`).
-- [ ] Lọc sự kiện noise như engine (`origin noise`/HookRun).
-- [ ] Test (fixture dựng theo field thật của audit.mjs): 2 prompt 1 sid; plan path spec+plan cùng slug; worktree `agent-a970ef` bị bỏ; thừa khoá; phantom SubagentStop không token -> sub_tokens 0; vượt `maxSegments` -> `truncated:'max_segments'`.
-- [ ] Done-when: `timeout 30 bun test harness/observe/report/problems.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] `segment(events, {limits})` -> `{segments, truncated}`: tách theo sid, cắt tại type `prompt`; token = cộng `data.usage` các Stop trong đoạn; subagent = MAX lũy kế `tokens_in/out` theo `agent_id` của SubagentStop có SubagentStart trong đoạn (cộng các agent, không cộng lặp cùng agent); tools = số PostToolUse/PostToolUseFailure; fetches = Bash target khớp tiền tố `kpi-info-fetch.json` hoặc `harness knowledge (get|search)`; `kfetch` = id sau `knowledge get`.
+- [x] Khoá ưu tiên task > plan > branch (bỏ `agent-[0-9a-f]{6,}`) > err > kw; đoạn không khoá thừa khoá đoạn trước cùng sid; `precision` high|mid|low; family (err -> id ledger entry chứa fp qua tham số `ledger`, khác -> `<loại>:<slug>`).
+- [x] Lọc sự kiện noise như engine (`origin noise`/HookRun).
+- [x] Test (fixture dựng theo field thật của audit.mjs): 2 prompt 1 sid; plan path spec+plan cùng slug; worktree `agent-a970ef` bị bỏ; thừa khoá; phantom SubagentStop không token -> sub_tokens 0; vượt `maxSegments` -> `truncated:'max_segments'`.
+- [x] Done-when: `timeout 30 bun test harness/observe/report/problems.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 4: Lần đầu vs lần lặp `cost-repeat.mjs` + section
 
