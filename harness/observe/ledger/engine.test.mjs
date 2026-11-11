@@ -120,6 +120,9 @@ test('matchFilter prefix: khop dau lenh va sau && ; |, khong khop giua chuoi', (
   assert.equal(m('a | git status', p), true);
   assert.equal(m('xgit status', p), false);
   assert.equal(m('echo git status', p), false);
+  assert.equal(m('git statusx', p), false);
+  assert.equal(m('a && git statusx', p), false);
+  assert.equal(m('git status', p), true);
   assert.equal(m(null, p), false);
   assert.equal(m('git log', { prefix: ['git status', 'git log'] }), true);
 });

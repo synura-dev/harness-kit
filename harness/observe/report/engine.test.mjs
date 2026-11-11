@@ -170,7 +170,8 @@ test('KPI1 defaults: Bash "git status --short" duoc dem (prefix)', () => {
 
 test('cost-session defaults: ms/session > 0 tu dur_ms, token khong doi', () => {
   const def = loadSections({ projectDir: null }).sections.find((s) => s.id === 'cost-session');
-  const events = [ev({ dur_ms: 500 }), ev({ dur_ms: 250 }),
+  // shortcut: token cumulative co the bi cong trung neu 1 phien co nhieu Stop (chua dedup theo sid; ngoai pham vi T2)
+  const events = [ev({ dur_ms: 500 }), ev({ dur_ms: 200, event: 'PostToolUseFailure' }), ev({ dur_ms: 50 }),
     ev({ event: 'Stop', tool: undefined, data: { usage_mode: 'cumulative', usage: { input: 100, output: 20 } } })];
   const r = evaluateSection(def, { events }, { nowMs: NOW });
   assert.deepEqual(r.rows[0].vals.slice(1), [100, 20, 750]);
