@@ -24,6 +24,10 @@ test('promptSignal: boc channel + cum sua loi tieng Viet', () => {
   for (const s of ['tôi đã nói là dùng bun', 'sao lại sửa file đó', 'từ giờ đừng làm vậy']) expect(promptSignal(s)).toBe('correction');
   for (const s of ['đừng cho test', 'dừng lại file cũ', 'Sai Gon', 'từ giờ đến mai', 'sửa lại README', 'abc '.repeat(500)]) expect(promptSignal(s)).toBeNull();
 });
+test('promptSignal: bo dau phan biet dung/dung, khong duoc, nhieu dong', () => {
+  for (const s of ['đừng có sửa file đó', 'từ giờ đừng dùng mock', 'ok\nkhông được làm vậy', 'xong rồi.\nkhông phải vậy']) expect(promptSignal(s)).toBe('correction');
+  for (const s of ['dùng cơ chế cache X', 'dùng cờ --force', 'đúng cơ', 'từ giờ dùng bun bản mới', 'login không được', 'build không được']) expect(promptSignal(s)).toBeNull();
+});
 test('bashSignal: revert / task_status', () => {
   expect(bashSignal('git revert HEAD')).toBe('revert');
   expect(bashSignal('cd x && git reset --hard HEAD~1')).toBe('revert');

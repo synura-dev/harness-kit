@@ -25,14 +25,14 @@ export function promptTrace(prompt, maxKw = 8) {
 // Sua loi: xet 300 ky tu dau sau khi bo boc <channel>/<system-reminder>. Cum sua loi ro nghia o BAT KY dau, hoac tu khoa o DAU CAU (tranh "Sai Gon", "sai so", "khong phai lo", "sua lai README", "dung cho test").
 const CORRECTION_MAX = 300;
 const unwrap = (raw) => raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, " ").replace(/<\/?channel\b[^>]*>/g, " ");
-const CORRECTION_PHRASE = /(?:^|[^a-z])(?:sai roi|lam sai|khong dung|ko dung|khong phai vay|ko phai vay|lam lai|undo that|that'?s wrong|that is wrong|toi da noi|toi da bao|sao lai|lai nua|tu gio tro di|tu gio dung|dung co|khong duoc)(?:[^a-z]|$)/;
-const CORRECTION_START = /^(?:(?:khong|ko|k) phai (?:vay|file nay|cai nay|cai do|y toi)|undo(?: it)?\b|redo\b|wrong\b|incorrect\b|not what i)/;
+const CORRECTION_PHRASE = /(?:^|[^a-z])(?:sai roi|lam sai|khong dung|ko dung|khong phai vay|ko phai vay|lam lai|undo that|that'?s wrong|that is wrong|toi da noi|toi da bao|sao lai|lai nua|tu gio tro di|tu gio xdungx|xdungx co)(?:[^a-z]|$)/; // xdungx = "đừng" nhan dien truoc khi bo dau (tranh "dùng"/"đúng")
+const CORRECTION_START = /^(?:khong duoc\b|(?:khong|ko|k) phai (?:vay|file nay|cai nay|cai do|y toi)|undo(?: it)?\b|redo\b|wrong\b|incorrect\b|not what i)/;
 /** Prompt sua loi -> 'correction' | null. */
 export function promptSignal(prompt) {
   const raw = String(prompt ?? '');
-  const t = strip(unwrap(raw)).slice(0, CORRECTION_MAX).replace(/\s+/g, ' ').trim();
+  const t = strip(unwrap(raw).toLowerCase().normalize('NFC').replace(/đừng/g, 'xdungx')).slice(0, CORRECTION_MAX).replace(/[^\S\n]+/g, ' ').trim();
   if (!t) return null;
-  if (CORRECTION_PHRASE.test(t)) return 'correction';
+  if (CORRECTION_PHRASE.test(t.replace(/\s+/g, ' '))) return 'correction'; // giu \n de CORRECTION_START xet tung dong
   return t.split(/[.!?;\n]+/).some((x) => CORRECTION_START.test(x.trim())) ? 'correction' : null;
 }
 
