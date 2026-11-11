@@ -22,15 +22,15 @@ export function promptTrace(prompt, maxKw = 8) {
   return { prompt_hash: sha1(String(prompt)), prompt_kw: kw };
 }
 
-// Sua loi: chi prompt ngan (<= 120 ky tu). Cum sua loi ro nghia o BAT KY dau, hoac tu khoa o DAU CAU (tranh "Sai Gon", "sai so", "khong phai lo", "sua lai README", "add an undo button", "revert feature").
-const CORRECTION_MAX = 120;
-const CORRECTION_PHRASE = /(?:^|[^a-z])(?:sai roi|lam sai|khong dung|ko dung|khong phai vay|ko phai vay|lam lai|undo that|that'?s wrong|that is wrong)(?:[^a-z]|$)/;
+// Sua loi: xet 300 ky tu dau sau khi bo boc <channel>/<system-reminder>. Cum sua loi ro nghia o BAT KY dau, hoac tu khoa o DAU CAU (tranh "Sai Gon", "sai so", "khong phai lo", "sua lai README", "dung cho test").
+const CORRECTION_MAX = 300;
+const unwrap = (raw) => raw.replace(/<system-reminder>[\s\S]*?<\/system-reminder>/g, " ").replace(/<\/?channel\b[^>]*>/g, " ");
+const CORRECTION_PHRASE = /(?:^|[^a-z])(?:sai roi|lam sai|khong dung|ko dung|khong phai vay|ko phai vay|lam lai|undo that|that'?s wrong|that is wrong|toi da noi|toi da bao|sao lai|lai nua|tu gio tro di|tu gio dung|dung co|khong duoc)(?:[^a-z]|$)/;
 const CORRECTION_START = /^(?:(?:khong|ko|k) phai (?:vay|file nay|cai nay|cai do|y toi)|undo(?: it)?\b|redo\b|wrong\b|incorrect\b|not what i)/;
 /** Prompt sua loi -> 'correction' | null. */
 export function promptSignal(prompt) {
   const raw = String(prompt ?? '');
-  if (raw.length > CORRECTION_MAX) return null;
-  const t = strip(raw).replace(/\s+/g, ' ').trim();
+  const t = strip(unwrap(raw)).slice(0, CORRECTION_MAX).replace(/\s+/g, ' ').trim();
   if (!t) return null;
   if (CORRECTION_PHRASE.test(t)) return 'correction';
   return t.split(/[.!?;\n]+/).some((x) => CORRECTION_START.test(x.trim())) ? 'correction' : null;

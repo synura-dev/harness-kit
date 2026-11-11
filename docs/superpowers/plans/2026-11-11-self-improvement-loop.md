@@ -18,11 +18,11 @@
 
 ### Task 1: promptSignal bat du cau sua loi (A2) (RED/GREEN)
 **Files:** `harness/core/audit/signals.mjs`, `harness/core/audit/signals.test.mjs`
-- [ ] Test do: prompt boc `<channel source="plugin:telegram">... sai roi ...</channel>` dai > 120 -> `'correction'`; `toi da noi la...`, `sao lai sua file do`, `tu gio dung lam vay` -> `'correction'`.
-- [ ] Test chong duong tinh gia (phai `null`): `dung cho test`, `dung lai file cu`, `Sai Gon`, `tu gio den mai`, `sua lai README`, prompt 2000 ky tu khong co cum.
-- [ ] Sua: ham `unwrap(raw)` bo `<channel ...>`/`</channel>` va khoi `<system-reminder>...</system-reminder>`; xet `strip(unwrap(raw)).slice(0, 300)`; bo early return `> CORRECTION_MAX` (doi thanh cat 300). Them cum co ngu canh vao `CORRECTION_PHRASE`/`CORRECTION_START` (xem spec 4.1).
-- [ ] Giu chu ky `promptSignal(prompt) -> 'correction'|null`; test cu van xanh.
-- [ ] Commit `audit signals: bo boc channel, them cum sua loi tieng Viet`.
+- [x] Test do: prompt boc `<channel source="plugin:telegram">... sai roi ...</channel>` dai > 120 -> `'correction'`; `toi da noi la...`, `sao lai sua file do`, `tu gio dung lam vay` -> `'correction'`.
+- [x] Test chong duong tinh gia (phai `null`): `dung cho test`, `dung lai file cu`, `Sai Gon`, `tu gio den mai`, `sua lai README`, prompt 2000 ky tu khong co cum.
+- [x] Sua: ham `unwrap(raw)` bo `<channel ...>`/`</channel>` va khoi `<system-reminder>...</system-reminder>`; xet `strip(unwrap(raw)).slice(0, 300)`; bo early return `> CORRECTION_MAX` (doi thanh cat 300). Them cum co ngu canh vao `CORRECTION_PHRASE`/`CORRECTION_START` (xem spec 4.1).
+- [x] Giu chu ky `promptSignal(prompt) -> 'correction'|null`; test cu van xanh.
+- [x] Commit `audit signals: bo boc channel, them cum sua loi tieng Viet`.
 **Done-when:** `timeout 120 node --test harness/core/audit/signals.test.mjs` -> `# fail 0`.
 
 ### Task 2: Toan tu filter `prefix` + sua KPI1, ms/session, nhan fp (B) (RED/GREEN)
