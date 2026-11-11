@@ -18,11 +18,22 @@ export function parseFetch(e) {
   return parseKnowledgeCmds(e.target);
 }
 
-/** Danh sach id tu `harness knowledge export --json --no-text`. Loi/qua han -> {unavailable: ly do} (fail-open). */
+/** Ly do ngan tu stderr: ma HKERR neu co. */
+const reasonOf = (r) => {
+  const m = /HKERR (\{.*\})/.exec(String((r && r.stderr) || ''));
+  try { const c = m && JSON.parse(m[1]).code; if (c) return 'ids_unavailable:' + String(c).slice(0, 60); } catch { /* fail-open */ }
+  return 'ids_unavailable';
+};
+
+/** Danh sach id tu `harness knowledge export --json --no-text`. Uu tien `harness` tren PATH (shim -> ban plugin da dang ky; registry ext theo thu muc du lieu plugin), ENOENT -> CLI theo import.meta.
+ *  Loi/qua han -> {unavailable: ids_unavailable[:HKERR_CODE]} (fail-open). */
 export function loadDocIds({ run = spawnSync, cli = CLI, timeoutMs = ROI.idsTimeoutMs, cwd } = {}) {
+  const args = ['knowledge', 'export', '--json', '--no-text'];
+  const o = { encoding: 'utf8', timeout: timeoutMs, windowsHide: true, cwd: cwd || undefined, maxBuffer: 16 * 1024 * 1024 };
   try {
-    const r = run(process.execPath, ['--no-warnings', cli, 'knowledge', 'export', '--json', '--no-text'], { encoding: 'utf8', timeout: timeoutMs, windowsHide: true, cwd: cwd || undefined, maxBuffer: 16 * 1024 * 1024 });
-    if (!r || r.status !== 0) return { unavailable: 'ids_unavailable' };
+    let r = run('harness', args, o);
+    if (r && r.error && r.error.code === 'ENOENT') r = run(process.execPath, ['--no-warnings', cli, ...args], o);
+    if (!r || r.status !== 0) return { unavailable: reasonOf(r) };
     const j = JSON.parse(r.stdout);
     const ids = (j && Array.isArray(j.docs) ? j.docs : []).map((d) => d && d.id).filter((x) => typeof x === 'string');
     return ids.length ? { ids, truncated: j.truncated ? 'ids_truncated' : null } : { unavailable: 'ids_unavailable' };
@@ -110,7 +121,10 @@ export function computeRoi({ events, segs, docIds, limits } = {}) {
 function idsOf(a) {
   if (a.docIds !== undefined) return { ids: a.docIds };
   const m = a.memo || {};
-  if (!m.knowledgeIds) m.knowledgeIds = (a.listIds || loadDocIds)({ cwd: a.projectDir });
+  if (!m.knowledgeIds) {
+    m.knowledgeIds = (a.listIds || loadDocIds)({ cwd: a.projectDir });
+    if (m.knowledgeIds.unavailable && a.onError) a.onError('ids: ' + m.knowledgeIds.unavailable);
+  }
   return m.knowledgeIds;
 }
 const compute = (a, withIds) => {

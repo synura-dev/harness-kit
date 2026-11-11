@@ -98,3 +98,22 @@ test('buildReport: muc knowledge-*; docIds tiem, khong spawn CLI; chi khoa on di
   const kpi = r.results.find((x) => x.def.id === 'kpi-knowledge');
   assert.deepEqual(kpi.rows.map((x) => x.key).sort(), ['fetches', 'never_fetched_count', 'retire_candidates', 'tokens_measured_share', 'tokens_served']);
 });
+
+test('loadDocIds: uu tien harness tren PATH; ENOENT -> fallback CLI import.meta', () => {
+  const cmds = [];
+  const okOut = JSON.stringify({ docs: [{ id: 'a' }] });
+  const r1 = loadDocIds({ run: (c) => { cmds.push(c); return { status: 0, stdout: okOut }; } });
+  assert.deepEqual(r1.ids, ['a']); assert.deepEqual(cmds, ['harness']);
+  cmds.length = 0;
+  const r2 = loadDocIds({ run: (c) => { cmds.push(c); return c === 'harness' ? { error: { code: 'ENOENT' }, status: null } : { status: 0, stdout: okOut }; } });
+  assert.deepEqual(r2.ids, ['a']); assert.equal(cmds.length, 2); assert.notEqual(cmds[1], 'harness');
+});
+
+test('loadDocIds: HKERR code vao ly do; buildReport.errors[] hien ly do', async () => {
+  const stderr = 'HKERR ' + JSON.stringify({ code: 'HK_EXT_UNREGISTERED', cause: 'x' }) + '\n';
+  const run = () => ({ status: 2, stdout: '', stderr });
+  assert.equal(loadDocIds({ run }).unavailable, 'ids_unavailable:HK_EXT_UNREGISTERED');
+  const events = seg('a', { gets: ['doc-a'], out_len: 400 });
+  const r = await buildReport({ nowMs: Date.UTC(2026, 10, 3), events, ledger: [], baseline: null, process: [], inventory: [], projectDir: null, hubDir: os.tmpdir(), listIds: () => loadDocIds({ run }) });
+  assert.ok(r.errors.some((m) => m.includes('ids_unavailable:HK_EXT_UNREGISTERED')), JSON.stringify(r.errors));
+});
