@@ -156,7 +156,7 @@ export function windowInputs(def, all, from, to, nowIso) {
     // fn({events,from,to,deadline}) -> rows | {rows, truncated}; dong bo (Promise bi tu choi); producer tu kiem deadline va tra truncated.
     if (typeof fn === 'function') {
       try {
-        const r = fn({ events, from, to, deadline: Date.now() + LIMITS.timeoutMs });
+        const r = fn({ ...(all.derivedCtx || {}), events, from, to, deadline: Date.now() + LIMITS.timeoutMs });
         if (r && typeof r.then === 'function') { r.then(null, () => {}); inputs.derivedError = 'derive_async_unsupported'; }
         else { inputs.derivedRows = Array.isArray(r) ? r : r && Array.isArray(r.rows) ? r.rows : []; if (r && r.truncated) inputs.derivedTruncated = r.truncated; }
       } catch { inputs.derivedError = 'derive_failed'; }

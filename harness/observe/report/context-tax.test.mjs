@@ -2,7 +2,7 @@ import { test, expect } from 'bun:test';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { contextTax, derive } from './context-tax.mjs';
+import { contextTax, derive, skillDesc } from './context-tax.mjs';
 
 const mk = () => fs.mkdtempSync(path.join(os.tmpdir(), 'ctxtax-'));
 const w = (root, rel, s) => { const f = path.join(root, rel); fs.mkdirSync(path.dirname(f), { recursive: true }); fs.writeFileSync(f, s); };
@@ -44,9 +44,47 @@ test('@import ngoai root bi bo qua (realpath + prefix)', () => {
   expect(val(contextTax({ projectDir: p }), 'rules_tokens')).toBeLessThan(100);
 });
 
-test('derive: dang ky, deadline qua han -> truncated', () => {
-  const p = mk(); w(p, 'CLAUDE.md', `${LONG}\n`); w(p, '.claude/memory/a.md', `${LONG}\n`);
-  expect(typeof derive.context_tax).toBe('function');
-  expect(derive.context_dupes({ projectDir: p, deadline: Date.now() + 5000 }).length).toBe(1);
+test('derive: dedup qua MEMORY.md, deadline qua han -> truncated', () => {
+  const p = mk(); w(p, 'CLAUDE.md', `${LONG}\n`); w(p, '.claude/memory/MEMORY.md', `${LONG}\n`);
+  expect(derive.context_dupes({ projectDir: p, deadline: Date.now() + 5000 }).rows.length).toBe(1);
   expect(derive.context_tax({ projectDir: p, events: [], deadline: Date.now() - 1 }).truncated).toBe('timeout');
 });
+
+test('memory/*.md va agents/*.md khong tinh vao dup_lines', () => {
+  const p = mk(); w(p, 'CLAUDE.md', `${LONG}\n`);
+  w(p, '.claude/memory/a.md', `${LONG}\n`); w(p, '.claude/agents/x.md', `${LONG}\n`); w(p, '.agents/agents/x.md', `${LONG}\n`);
+  expect(val(contextTax({ projectDir: p }), 'dup_lines')).toBe(0);
+});
+
+test('bo code fence, dong bang, frontmatter', () => {
+  const p = mk();
+  w(p, 'CLAUDE.md', `@AGENTS.md\n---\nkey: ${LONG}\n---\n\`\`\`\n${LONG}\n\`\`\`\n| ${LONG} | b |\n`);
+  w(p, 'AGENTS.md', `---\nname: x\n---\n${LONG}\n`);
+  expect(val(contextTax({ projectDir: p }), 'dup_lines')).toBe(0);
+});
+
+test('skillDesc: khoi > va | nhieu dong, mot dong', () => {
+  expect(skillDesc('---\nname: a\ndescription: >\n  dong mot\n  dong hai\nmodel: x\n---\n')).toBe('dong mot\ndong hai');
+  expect(skillDesc('---\ndescription: |-\n  a\n  b\n---\n')).toBe('a\nb');
+  expect(skillDesc('---\ndescription: ngan\nname: z\n---\n')).toBe('ngan');
+});
+
+test('cham maxBytes -> truncated max_bytes', () => {
+  const p = mk(); w(p, 'CLAUDE.md', 'x'.repeat(300000));
+  expect(contextTax({ projectDir: p }).truncated).toBe('max_bytes');
+});
+
+test('projectDir tu tham so thang env; memo dung chung cho 2 derive', () => {
+  const p = mk(); const q = mk(); w(p, 'CLAUDE.md', 'a'.repeat(400)); w(q, 'CLAUDE.md', 'b'.repeat(40000));
+  const old = process.env.CLAUDE_PROJECT_DIR; process.env.CLAUDE_PROJECT_DIR = q;
+  try {
+    const memo = {};
+    const t = derive.context_tax({ projectDir: p, events: [], deadline: Infinity, memo });
+    expect(t.rows.find((r) => r.name === 'rules_tokens').tokens).toBe(100);
+    const before = memo[p];
+    expect(before).toBeTruthy();
+    derive.context_dupes({ projectDir: p, deadline: Infinity, memo });
+    expect(memo[p]).toBe(before);
+  } finally { if (old === undefined) delete process.env.CLAUDE_PROJECT_DIR; else process.env.CLAUDE_PROJECT_DIR = old; }
+});
+
