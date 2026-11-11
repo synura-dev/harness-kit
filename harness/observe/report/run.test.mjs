@@ -16,6 +16,13 @@ test('buildReport tren du lieu tiem vao: du muc, khong loi, baseline null', asyn
   assert.match(r.markdown, /chua chot/);
 });
 
+test('onError cua derive: tien to = ten derive, khong cung cost-repeat', async () => {
+  const sec = { order: 1, id: 'x', title: 'x', source: 'derived', derive: 'roi_x', group_by: ['k'], metric: 'sum:n', window_days: 0, format: 'list', limit: 5 };
+  const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null, process: [], sections: [sec], derived: { roi_x: (a) => { a.onError('ids: unavailable'); return []; } } });
+  assert.ok(r.errors.includes('roi_x: ids: unavailable'), JSON.stringify(r.errors));
+  assert.ok(!r.errors.some((e) => e.startsWith('cost-repeat:')));
+});
+
 test('saveBaseline: dry-run khong ghi; that thi ghi va doc lai', async () => {
   const d = mk(); const o = { dataOpts: { env: { HUB_DATA_DIR: d } } };
   const r = await buildReport({ nowMs: NOW, events: [ev], ledger: [], baseline: null });

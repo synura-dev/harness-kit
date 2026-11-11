@@ -135,14 +135,14 @@ export async function buildReport(opts = {}) {
   const deriveErrors = [];
   const derived = dl.map;
   // derivedCtx: MOT ctx / buildReport, engine spread vao arg moi derive (T4/T5/T6 dung chung): memo, projectDir, getSegments, ledger, persist, now, dataOpts, onError
-  const derivedCtx = { projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, memo: {}, docIds: opts.docIds, listIds: opts.listIds, getSegments, ledger, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, onError: (m) => { if (!deriveErrors.includes(m)) deriveErrors.push(m); } };
+  const derivedCtx = { projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, memo: {}, docIds: opts.docIds, listIds: opts.listIds, getSegments, ledger, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, onError: (m, who) => { const x = `${who || 'derive'}: ${m}`; if (!deriveErrors.includes(x)) deriveErrors.push(x); } };
   const all = { tasks, process: proc, derived, derivedCtx, events: ev.events, ledger, inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };
   const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx, avgOf: cfg.avgOf, compare: cfg.compare })), has);
   const truncated = ev.truncated || loaded.truncated || (tl && tl.truncated) || (results.find((r) => r.truncated) || {}).truncated || null;
-  const errors = [...loaded.errors, ...dl.errors, ...deriveErrors.map((m) => `cost-repeat: ${m}`), ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
+  const errors = [...loaded.errors, ...dl.errors, ...deriveErrors, ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
   const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors });
   return { markdown, results, truncated, errors, nowMs };
 }
