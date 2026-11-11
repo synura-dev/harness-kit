@@ -437,3 +437,44 @@ test('kind fix: da ton tai khong ghi de; manual-done tu choi khi rejected/applie
   expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(true);
   expect(apply(p.id, { ...o, manualDone: true }).ok).toBe(false);
 });
+
+
+// ---- proposeMetricFix (kt T8) ----
+import { proposeMetricFix, openDupCount } from './loop.mjs';
+const mfOpts = (name, rows) => {
+  const dr = path.join(tmp, name);
+  fs.mkdirSync(path.join(dr, 'retro'), { recursive: true });
+  if (rows) fs.writeFileSync(path.join(dr, 'retro', 'series.jsonl'), rows.map((r) => JSON.stringify(r)).join('\n') + '\n');
+  return { dr, om: { ...o, dataRoot: dr } };
+};
+const P = (file, line) => ({ file, line, loc: `${file}:${line}` });
+const K = 'kpi-context-tax.dup_lines';
+test('proposeMetricFix: ca hai phia nap san -> kpi series, baseline tuan gan nhat, id khong theo dong, dedupe', () => {
+  const { dr, om } = mfOpts('mf1', [{ week: '2026-W44', ts: '2026-10-28T00:00:00Z', kpi: { [K]: 9 } }, { week: '2026-W45', ts: '2026-10-29T00:00:00Z', kpi: { [K]: 7 } }]);
+  const pair = { a: P('CLAUDE.md', 3), b: P('AGENTS.md', 8), score: 0.8, text: 'BLOCKSECRETTEXT' };
+  const p = proposeMetricFix(pair, om);
+  expect(p.kind).toBe('fix');
+  expect(p.id).toMatch(/^p_dup_[0-9a-f]{8}_fix$/);
+  expect(p.target_metric).toEqual({ kpi: K, better: 'down', baseline: 7 });
+  expect(p.change.target).toBeNull();
+  expect(JSON.stringify(p)).not.toContain('BLOCKSECRETTEXT');
+  const moved = proposeMetricFix({ a: P('AGENTS.md', 50), b: P('CLAUDE.md', 99), score: 0.7 }, om); // doi dong + doi thu tu: cung id
+  expect(moved).toBeNull();
+  expect(fs.readdirSync(path.join(dr, 'proposals'))).toHaveLength(1);
+});
+test('proposeMetricFix: phia khong nap san -> pair_recheck; knowledge -> fix_target area knowledge + phia b', () => {
+  const { om } = mfOpts('mf2');
+  const p = proposeMetricFix({ a: P('CLAUDE.md', 3), b: { file: 'kb-doc', line: 4, loc: 'kb-doc#4' }, score: 0.75 }, om);
+  expect(p.target_metric).toEqual({ pair_recheck: true, a: { file: 'CLAUDE.md' }, b: { file: 'kb-doc' }, baseline: 0.75, better: 'down' });
+  expect(p.change.fix_target).toEqual({ area: 'knowledge', a: { path: 'CLAUDE.md' }, b: { id: 'kb-doc' } });
+  const q = proposeMetricFix({ a: P('.claude/memory/x.md', 1), b: P('AGENTS.md', 2), score: 0.7 }, om);
+  expect(q.target_metric.pair_recheck).toBe(true);
+  expect(q.change.fix_target.area).toBe('doc');
+  expect(openDupCount(om)).toBe(2);
+});
+test('proposeMetricFix: baseline null khi series cu > 14 ngay hoac thieu', () => {
+  const old = mfOpts('mf3', [{ week: '2026-W30', ts: '2026-07-20T00:00:00Z', kpi: { [K]: 5 } }]);
+  expect(proposeMetricFix({ a: P('CLAUDE.md', 1), b: P('AGENTS.md', 1), score: 0.9 }, old.om).target_metric.baseline).toBeNull();
+  const none = mfOpts('mf4');
+  expect(proposeMetricFix({ a: P('CLAUDE.md', 1), b: P('AGENTS.md', 1), score: 0.9 }, none.om).target_metric.baseline).toBeNull();
+});

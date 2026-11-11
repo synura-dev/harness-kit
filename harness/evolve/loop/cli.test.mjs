@@ -91,3 +91,23 @@ test('parseArgs: --manual-done, --fix-target area:path', () => {
   expect(parseArgs(['apply', 'p1', '--manual-done']).manualDone).toBe(true);
   expect(() => parseArgs(['propose', 'c1', '--fix-target', 'khongco'])).toThrow();
 });
+
+test('dupes-content: parseArgs + render (nguon gia, --propose toi da N, dedupe)', async () => {
+  const o = parseArgs(['dupes-content', '--propose', '--threshold', '0.7', '--limit', '5', '--json']);
+  expect(o.cmd).toBe('dupes-content'); expect(o.propose).toBe(true); expect(o.limit).toBe(5); expect(o.thresholdF).toBe(0.7);
+  const fs = await import('node:fs'), os = await import('node:os'), path = await import('node:path');
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'dc-'));
+  const para = 'mot hai ba bon nam sau bay tam chin muoi mot hai ba bon nam sau bay tam';
+  fs.writeFileSync(path.join(tmp, 'CLAUDE.md'), `# a\n\n${para}\n`);
+  fs.writeFileSync(path.join(tmp, 'AGENTS.md'), `# b\n\n${para}\n`);
+  const run = async () => '{"docs":[]}';
+  const base = { cmd: 'dupes-content', root: tmp, run, hubRoot: tmp, dataBase: path.join(tmp, 'd'), dataRoot: path.join(tmp, 'd', 'evolve'), auditDir: path.join(tmp, 'a') };
+  const r0 = await render(base);
+  expect(r0.code).toBe(0); expect(r0.data.pairs.length).toBe(1);
+  expect(fs.existsSync(path.join(tmp, 'd', 'evolve', 'proposals'))).toBe(false);
+  const r1 = await render({ ...base, propose: true });
+  expect(r1.data.proposed.length).toBe(1);
+  const r2 = await render({ ...base, propose: true });
+  expect(r2.data.proposed.length).toBe(0);
+  expect(fs.readFileSync(path.join(tmp, 'CLAUDE.md'), 'utf8')).toContain(para);
+});
