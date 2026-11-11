@@ -11,3 +11,12 @@
 - Hang tuan: hook ledger SessionStart goi `kickReport` (<= 1 lan/7 ngay, khoa 10 phut, detached, timeout cung).
 - So sanh: cot cua so lien truoc (ten theo do dai: hom qua/tuan truoc/N ngay truoc) + trung binh K cua so truoc (mac dinh K=7) + baseline. Tham so: `--avg-of K`, `--compare all|prev|avg|baseline`, config `report` (loadConfig: config/report*.json, env HARNESS_REPORT_AVG_OF/COMPARE); mac dinh trong `REPORT_DEFAULTS` (run.mjs). `--days 1` ghi `harness-daily-YYYY-MM-DD.md`. Task done lay tu ext `projects` (`projects tasks --all --json`, completed/khong tinh cancelled; fail-open).
 - Dinh tuyen (T13, `routing.mjs`): 3 muc `kpi-routing`, `kpi-agy`, `routing-misses` (derive `routing_kpi|agy_kpi|routing_misses`). Lop viec tat dinh -> mode ky vong (hang so `ROUTING` o cost-contract.mjs); thieu model/out_len/phantom -> `unknown` (khong phai lech). agy khong gia (tokens, unpriced).
+
+## Muc chi phi / ngu canh / tri thuc / dinh tuyen (0.4.8)
+
+- `kpi-cost-repeat`, `cost-by-family` (`cost-repeat.mjs`): chi phi lap lai theo khoa van de + theo ho; chi `--weekly` ghi index.
+- `kpi-context-tax`, `context-dupes` (`context-tax.mjs`): token file nap san (rules, memory index, mo ta skill) + dong trung giua cac file. SKILL.md chi doc 8KB dau (mo ta), cat khong tinh la truncated.
+- `kpi-knowledge`, `knowledge-roi`, `knowledge-retire` (`knowledge-roi.mjs`): ROI doc tri thuc va ung vien nghi huu; lay danh sach id qua CLI (`opts.docIds`/`opts.listIds` tiem trong test; khong tiem se spawn CLI that).
+- `kpi-routing`, `kpi-agy`, `routing-misses` (`routing.mjs`): xem tren.
+- Dong `truncated:` dau bao cao ghi nguon: `truncated: <muc>:<ly do>, ...` (khong trung); `events:`/`sections:` cho nguon doc chung.
+- Sau khi deploy ban moi, chay mot lan: `harness observe report --bootstrap-days 28` (nap index khoa van de tu lich su).

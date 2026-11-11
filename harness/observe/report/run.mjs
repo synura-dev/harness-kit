@@ -141,7 +141,9 @@ export async function buildReport(opts = {}) {
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };
   const ctx = { hubDir };
   const results = markNoSource(sections.map((d) => evaluateSection(d, all, { nowMs, ctx, avgOf: cfg.avgOf, compare: cfg.compare })), has);
-  const truncated = ev.truncated || loaded.truncated || (tl && tl.truncated) || (results.find((r) => r.truncated) || {}).truncated || null;
+  // nhan nguon: <muc>:<ly do> (tranh doc nham la dau ra bi cat); dedupe
+  const tr = [...new Set([ev.truncated && `events:${ev.truncated}`, loaded.truncated && `sections:${loaded.truncated}`, tl && tl.truncated, ...results.filter((r) => r.truncated).map((r) => `${r.def.id}:${r.truncated}`)].filter(Boolean))];
+  const truncated = tr.length ? tr.join(', ') : null;
   const errors = [...loaded.errors, ...dl.errors, ...deriveErrors, ...results.filter((r) => r.error).map((r) => `${r.def.id}: ${r.error}`)];
   const markdown = renderReport(results, { days: opts.days || 7, nowMs, truncated, baseline, errors });
   return { markdown, results, truncated, errors, nowMs };

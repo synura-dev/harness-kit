@@ -32,7 +32,7 @@ test('hub tam khong ext: ledger -> hook warn -> report file -> autopilot dry-run
     expect(String(h.additionalContext || '')).toMatch(/ledger\[/);
 
     // 3) report: ghi file .md trong thu muc du lieu, KPI task done = khong co nguon, day Obsidian that bai khong hong
-    const r = await buildReport({ nowMs: NOW, events, hubDir: hub, dataOpts, baseline: null, projectDir: null });
+    const r = await buildReport({ nowMs: NOW, events, hubDir: hub, dataOpts, baseline: null, projectDir: null, docIds: [] });
     expect(r.errors).toEqual([]);
     expect(r.markdown).toContain(NO_SOURCE);
     const f = writeReportFile(r.markdown, { dataOpts, nowMs: NOW });
@@ -50,7 +50,7 @@ test('hub tam khong ext: ledger -> hook warn -> report file -> autopilot dry-run
 });
 
 test('requires: nguon co -> khong danh dau; thieu -> khong co nguon', async () => {
-  const base = { nowMs: NOW, events: [], ledger: [], baseline: null, projectDir: null, hubDir: os.tmpdir() };
+  const base = { nowMs: NOW, events: [], ledger: [], baseline: null, projectDir: null, hubDir: os.tmpdir(), docIds: [] };
   const miss = await buildReport({ ...base, has: () => false });
   const ok = await buildReport({ ...base, has: () => true });
   expect(miss.markdown).toContain(NO_SOURCE);
