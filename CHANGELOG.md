@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.4.9
+### Added
+- Chinh sach dinh tuyen (mode/agy, gia model, nguong) doc tu `<project>/.harness/routing.json`, core trung lap cong cu; vi du `harness/observe/report/examples/hub-routing.json`.
+
 ## 0.4.8
 ### Added
 - Report chi phi/ngu canh/tri thuc/dinh tuyen: muc `kpi-cost-repeat`, `cost-by-family`, `kpi-context-tax`, `context-dupes`, `kpi-knowledge` (+roi/retire), `kpi-routing`, `kpi-agy`, `routing-misses`; `evolve dupes-content`, `evolve propose-metric`; `observe report --bootstrap-days N`.
