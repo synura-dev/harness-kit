@@ -4,5 +4,8 @@
 - Metric: count, sessions, per_session[:F], per_task, per_1000, sum:F, last:F, rate (rate_filter). F = `a|b.c` (truong dau co gia tri).
 - Ghi de: `<project>/.harness/report/<ten>.json` (tron nong theo ten file); `{"enabled":false}` tat; file moi them muc.
 - `harness observe report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly]`. Baseline: `ledger/report-baseline.json`. Obsidian: goi `harness obsidian put --section "Noi dung=..."` (qua dai/loi -> in stdout, hub tu put).
+- Filter toan tu `prefix`: `{"prefix":["git status"]}` khop dau lenh hoac sau `&& `/`; `/`| ` voi ranh gioi tu (`git status --short` khop, `xgit status` khong); toi da 50 mau, so 2000 ky tu dau.
+- Nguon `process`: thay doi quy trinh tu `git log` (`process-changes.mjs`, section `kpi-process-changes`: changes/tuan, so file sua lap >= 2 lan/14 ngay; ghi de paths qua `<project>/.harness/report/process-changes.json`; fail-open, `truncated: no_git|max_commits`).
+- `warnings`: nhan cot `fp` doi thanh `fingerprints`. Sua: KPI1 dung `prefix` (truoc luon 0); ms/session loc theo su kien tool (`dur_ms`), token cumulative nam trong tung cot token.
 - Hang tuan: hook ledger SessionStart goi `kickReport` (<= 1 lan/7 ngay, khoa 10 phut, detached, timeout cung).
 - So sanh: cot cua so lien truoc (ten theo do dai: hom qua/tuan truoc/N ngay truoc) + trung binh K cua so truoc (mac dinh K=7) + baseline. Tham so: `--avg-of K`, `--compare all|prev|avg|baseline`, config `report` (loadConfig: config/report*.json, env HARNESS_REPORT_AVG_OF/COMPARE); mac dinh trong `REPORT_DEFAULTS` (run.mjs). `--days 1` ghi `harness-daily-YYYY-MM-DD.md`. Task done lay tu ext `projects` (`projects tasks --all --json`, completed/khong tinh cancelled; fail-open).

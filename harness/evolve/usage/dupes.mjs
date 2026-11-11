@@ -17,9 +17,10 @@ export function findDupes(items, { threshold = 0.7, top = 10, maxItems = 200 } =
       let inter = 0;
       for (const w of x.t) if (y.t.has(w)) inter++;
       const score = inter / (x.t.size + y.t.size - inter);
-      if (score >= threshold) pairs.push({ a: x.id, b: y.id, score });
+      // thu tu cap tat dinh: readdir khong dam bao thu tu nen id nho dung truoc
+      if (score >= threshold) pairs.push(x.id <= y.id ? { a: x.id, b: y.id, score } : { a: y.id, b: x.id, score });
     }
   }
-  pairs.sort((p, q) => q.score - p.score);
+  pairs.sort((p, q) => q.score - p.score || (p.a < q.a ? -1 : p.a > q.a ? 1 : p.b < q.b ? -1 : p.b > q.b ? 1 : 0));
   return { pairs: pairs.slice(0, top), truncated };
 }
