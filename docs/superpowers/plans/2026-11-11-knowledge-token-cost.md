@@ -93,12 +93,12 @@ Spec: `docs/superpowers/specs/2026-11-11-knowledge-token-cost-design.md`.
 - Modify: `harness/observe/report/run.mjs` (cờ `persistIndex` khi `--weekly`; `--bootstrap-days N`)
 - Test: `harness/observe/report/cost-repeat.test.mjs`
 
-- [ ] `costRepeat({events, from, to, index, persist, now})` -> rows `{k, v}`: `repeat_vs_first_ratio`, `tokens_per_problem`, `problems`, `repeat_share`, `key_coverage`, `cache_read_share`; `byFamily` rows cho bảng.
-- [ ] Index `problems-index.json` trong thư mục dữ liệu report (dùng helper đường dẫn sẵn có của report, không hardcode): trần 2000, TTL 90 ngày, ghi atomic (temp + rename), chỉ khi `persist`.
-- [ ] Test: khoá xuất hiện phiên 1 (1000 eff) và phiên 2,3 (400, 600) -> ratio 0.5; lần đầu nằm trong index cũ -> phiên trong cửa sổ đều là lặp; `persist:false` không tạo file (tmp dir); chỉ khoá high|mid vào ratio.
-- [ ] Grep + cập nhật test số section (run/noext/engine).
-- [ ] Done-when: `timeout 60 bun test harness/observe/report/cost-repeat.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
-- [ ] Commit.
+- [x] `costRepeat({events, from, to, index, persist, now})` -> rows `{k, v}`: `repeat_vs_first_ratio`, `tokens_per_problem`, `problems`, `repeat_share`, `key_coverage`, `cache_read_share`; `byFamily` rows cho bảng.
+- [x] Index `problems-index.json` trong thư mục dữ liệu report (dùng helper đường dẫn sẵn có của report, không hardcode): trần 2000, TTL 90 ngày, ghi atomic (temp + rename), chỉ khi `persist`.
+- [x] Test: khoá xuất hiện phiên 1 (1000 eff) và phiên 2,3 (400, 600) -> ratio 0.5; lần đầu nằm trong index cũ -> phiên trong cửa sổ đều là lặp; `persist:false` không tạo file (tmp dir); chỉ khoá high|mid vào ratio.
+- [x] Grep + cập nhật test số section (run/noext/engine).
+- [x] Done-when: `timeout 60 bun test harness/observe/report/cost-repeat.test.mjs harness/observe/report/run.test.mjs` -> 0 fail.
+- [x] Commit.
 
 ### Task 5: ROI tri thức `knowledge-roi.mjs` + section
 

@@ -118,7 +118,8 @@ export async function buildReport(opts = {}) {
   // thay doi quy trinh tu git (fail-open): chi chay khi co muc nguon process
   let proc; if (opts.process !== undefined) proc = opts.process; else if (sections.some((d) => d.source === 'process')) { try { proc = processRows(processChanges({ projectDir: opts.projectDir ?? process.env.CLAUDE_PROJECT_DIR ?? hubDir, nowMs })); } catch { /* fail-open */ } }
   const dl = opts.derived !== undefined ? { map: opts.derived, errors: [] } : sections.some((d) => d.source === 'derived') ? await loadDerived() : { map: undefined, errors: [] };
-  const derived = dl.map;
+  // producer nhan them ngu canh ghi index (--weekly) + ledger; opts.derived tiem tay thi giu nguyen
+  const derived = opts.derived !== undefined || !dl.map ? dl.map : Object.fromEntries(Object.entries(dl.map).map(([k, fn]) => [k, (a) => fn({ ...a, persist: !!opts.persistIndex, now: nowMs, dataOpts: opts.dataOpts, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)) })]));
   const all = { tasks, process: proc, derived, events: ev.events, ledger: opts.ledger || readLedger(ledgerFile(opts.dataOpts)), inventory, baseline,
     // KPI2 = loi lap (error) + quy trinh lap (pattern): detectPatterns la phan thuan cua findPatterns (cung nguong, cung su kien da loc cua so)
     candidatesFn: (events, nowIso) => [...failureCandidates(events, nowIso), ...detectPatterns(events).items] };

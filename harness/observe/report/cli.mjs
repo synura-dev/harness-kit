@@ -4,13 +4,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseCommon, emit, posInt } from '../../core/io/out.mjs';
 import { bgDoneOnExit } from '../../core/runtime/proc.mjs';
+import { readEvents } from '../ledger/job.mjs';
+import { bootstrapIndex } from './cost-repeat.mjs';
 import { buildReport, saveBaseline, putObsidian, markRun, writeReportFile, REPORT } from './run.mjs';
 
 const USAGE = 'report [--days N] [--out -|obsidian] [--dry-run] [--baseline] [--weekly] [--avg-of K] [--compare all|prev|avg|baseline] [--json] [--raw] [--timeout-s N]';
 
 export function parseArgs(argv) {
   const c = parseCommon(argv);
-  const o = { json: c.json, raw: c.raw, maxBytes: c.maxBytes, timeoutS: c.timeoutS, days: null, out: '-', dryRun: false, baseline: false, weekly: false, avgOf: null, compare: null };
+  const o = { json: c.json, raw: c.raw, maxBytes: c.maxBytes, timeoutS: c.timeoutS, days: null, out: '-', dryRun: false, baseline: false, weekly: false, bootstrapDays: null, avgOf: null, compare: null };
   const r = c.rest;
   for (let i = 0; i < r.length; i++) {
     const a = r[i];
@@ -20,6 +22,7 @@ export function parseArgs(argv) {
     else if (k === '--out') { o.out = val(); if (!['-', 'obsidian'].includes(o.out)) throw new Error('out phai la - hoac obsidian'); }
     else if (k === '--avg-of') o.avgOf = posInt(val()) || null;
     else if (k === '--compare') { o.compare = val(); if (!['all', 'prev', 'avg', 'baseline'].includes(o.compare)) throw new Error('compare phai la all|prev|avg|baseline'); }
+    else if (k === '--bootstrap-days') o.bootstrapDays = posInt(val()) || null;
     else if (k === '--dry-run') o.dryRun = true;
     else if (k === '--baseline') o.baseline = true;
     else if (k === '--weekly') { o.weekly = true; o.out = 'obsidian'; }
@@ -32,7 +35,13 @@ export async function main(argv = process.argv.slice(2)) {
   bgDoneOnExit();
   try {
     const o = parseArgs(argv);
-    const res = await buildReport({ days: o.days, avgOf: o.avgOf, compare: o.compare, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
+    if (o.bootstrapDays) { // nap index khoa van de tu lich su dai, khong dung bao cao
+      const ev = await readEvents({ days: o.bootstrapDays, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
+      const n = o.dryRun ? null : bootstrapIndex({ events: ev.events });
+      emit({ summary: `bootstrap ${o.bootstrapDays} ngay: ${n == null ? 'dry-run, khong ghi' : n + ' khoa trong index'}`, data: { keys: n, truncated: ev.truncated }, truncated: ev.truncated }, { json: o.json, raw: o.raw, maxBytes: o.maxBytes });
+      return 0;
+    }
+    const res = await buildReport({ persistIndex: o.weekly && !o.dryRun, days: o.days, avgOf: o.avgOf, compare: o.compare, timeoutMs: (o.timeoutS || REPORT.timeoutS) * 1000 });
     const notes = [];
     if (o.baseline) { const b = saveBaseline(res, { dryRun: o.dryRun }); notes.push(o.dryRun ? `baseline (dry-run, khong ghi): ${b.baseline.date}` : b.ok ? `baseline da chot: ${b.baseline.date}` : 'baseline: khong ghi duoc'); }
     let md = res.markdown;
