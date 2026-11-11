@@ -197,25 +197,46 @@ function proposeFix(cid, cand, scan, o, c) {
   return p;
 }
 
-// kind fix theo chi so (khong theo fp ledger): cap trung noi dung -> de xuat gop tay. KHONG ghi/xoa file, KHONG chua noi dung khoi (chi loc+diem).
-// target_metric.kpi = khoa series (retro do sau, T9 metricVerdict); baseline = gia tri moi nhat trong series. Trung id -> null (bo qua).
+// kind fix theo chi so (khong theo fp ledger): cap trung noi dung -> de xuat gop tay. KHONG ghi/xoa file, KHONG chua noi dung khoi (chi file+diem).
+// Ca hai phia nap san (CLAUDE/AGENTS/MEMORY/@imports) -> target_metric.kpi = khoa series (T9 do); con lai -> pair_recheck (do lai cap). id theo cap file da sap (khong theo dong). Trung id -> null.
 export const DUP_KPI = 'kpi-context-tax.dup_lines';
+const PRELOADED = new Set(['CLAUDE.md', 'AGENTS.md']);
+const isPreloaded = (f, o) => PRELOADED.has(f) || path.basename(f) === 'MEMORY.md' || (o.preloaded || []).includes(f);
+const isKnowledge = (s) => s.loc && s.loc.startsWith(`${s.file}#`);
+const sideOf = (s) => (isKnowledge(s) ? { id: s.file } : { path: toPosix(s.file).slice(0, 300) });
+const BASE_MAX_AGE_MS = 14 * DAY;
+/** So de xuat p_dup_* dang mo (proposed|approved): tran 3 tinh theo day, khong theo moi lan chay. */
+export function openDupCount(o = {}) {
+  const dir = path.join(ctx(o).evo, 'proposals');
+  let n = 0;
+  try { for (const f of fs.readdirSync(dir)) if (f.startsWith('p_dup_') && f.endsWith('.json')) { const st = readJson(path.join(dir, f))?.status; if (st === 'proposed' || st === 'approved') n++; } } catch { /* chua co */ }
+  return n;
+}
 export function proposeMetricFix(pair, o = {}) {
   const c = ctx(o);
-  const key = `${pair.a.loc}|${pair.b.loc}`;
-  const id = assertSafeId(`p_dup_${crypto.createHash('sha256').update(key).digest('hex').slice(0, 8)}_fix`);
+  const [a, b] = [pair.a, pair.b].sort((x, y) => (x.file < y.file ? -1 : x.file > y.file ? 1 : 0));
+  const id = assertSafeId(`p_dup_${crypto.createHash('sha256').update(`${a.file}|${b.file}`).digest('hex').slice(0, 8)}_fix`);
   if (fs.existsSync(pFile(c, id))) return null;
-  const vals = readSeries(path.join(c.evo, 'retro', 'series.jsonl')).series.map((s) => s?.kpi?.[DUP_KPI]).filter((v) => typeof v === 'number' && Number.isFinite(v));
-  const after = `Sua tay (doc): gop khoi trung noi dung ${pair.a.loc} <-> ${pair.b.loc} (do tuong dong ${pair.score}). Giu mot ban, tro ban kia ve ban giu.\n`;
+  const both = isPreloaded(a.file, o) && isPreloaded(b.file, o);
+  let target_metric;
+  if (both) {
+    const rs = readSeries(path.join(c.evo, 'retro', 'series.jsonl'));
+    const last = rs.series.at(-1);
+    const v = last?.kpi?.[DUP_KPI];
+    const fresh = !rs.truncated && Date.parse(last?.ts) >= (Number(o.nowMs) || Date.now()) - BASE_MAX_AGE_MS;
+    target_metric = { kpi: DUP_KPI, better: 'down', baseline: fresh && typeof v === 'number' && Number.isFinite(v) ? v : null };
+  } else target_metric = { pair_recheck: true, a: { file: a.file }, b: { file: b.file }, baseline: pair.score, better: 'down' };
+  const fix_target = { area: isKnowledge(a) || isKnowledge(b) ? 'knowledge' : 'doc', a: sideOf(a), b: sideOf(b) };
+  const after = `Sua tay (${fix_target.area}): gop khoi trung noi dung ${a.loc} <-> ${b.loc} (do tuong dong ${pair.score}). Giu mot ban, tro ban kia ve ban giu.\n`;
   const p = {
     id, candidate: id, kind: 'fix', created: new Date().toISOString(), status: 'proposed',
-    evidence: { dup: { a: pair.a.loc, b: pair.b.loc, score: pair.score } },
-    change: { target: null, fix_target: { area: 'doc', path: toPosix(pair.a.file).slice(0, 300) }, after, after_sha: sha(Buffer.from(after, 'utf8')) },
-    target_metric: { kpi: DUP_KPI, better: 'down', baseline: vals.length ? vals.at(-1) : null },
+    evidence: { dup: { a: a.loc, b: b.loc, score: pair.score } },
+    change: { target: null, fix_target, after, after_sha: sha(Buffer.from(after, 'utf8')) },
+    target_metric,
     policy: { ok: true, forbidden: false, reason: 'fix: khong ghi file' }, check: null, ver: null,
   };
   saveProposal(p, o);
-  appendLog(c, { op: 'propose', id, kind: 'fix', target: null, metric: DUP_KPI });
+  appendLog(c, { op: 'propose', id, kind: 'fix', target: null, metric: both ? DUP_KPI : 'pair_recheck' });
   return p;
 }
 
