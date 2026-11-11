@@ -1,0 +1,1 @@
+{"order":26,"id":"kpi-knowledge","title":"KPI tri thuc: lan lay, token phuc vu (do duoc), ROI","source":"derived","derive":"knowledge_kpi","group_by":["k"],"metric":"sum:v","window_days":28,"format":"kpi","empty_note":"khong co du lieu"}
