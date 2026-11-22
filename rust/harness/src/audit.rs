@@ -316,8 +316,12 @@ pub fn write_envelope(env: &EnvelopeV2, root: &Path, max_file_bytes: u64) {
     let dir = root
         .join(format!("date={date_part}"))
         .join(format!("type={}", env.rec_type));
+    let new_day = !root.join(format!("date={date_part}")).exists();
     if fs::create_dir_all(&dir).is_err() {
         return;
+    }
+    if new_day {
+        prune_old_partitions(root, date_part, crate::data::audit_retention_days(), MAX_PRUNE_DIRS);
     }
 
     let len = line.len() as u64;
@@ -333,6 +337,46 @@ pub fn write_envelope(env: &EnvelopeV2, root: &Path, max_file_bytes: u64) {
 
     if let Ok(mut file) = OpenOptions::new().create(true).append(true).open(&target) {
         let _ = file.write_all(line.as_bytes());
+    }
+}
+
+const MAX_PRUNE_DIRS: usize = 64;
+
+/// Delete `date=YYYY-MM-DD` dirs directly under `root` older than `days` before `today`.
+/// Bounded by `cap`, never follows symlinks, fail-open.
+pub(crate) fn prune_old_partitions(root: &Path, today: &str, days: u64, cap: usize) {
+    let Ok(today) = chrono::NaiveDate::parse_from_str(today, "%Y-%m-%d") else {
+        return;
+    };
+    let Some(cutoff) = today.checked_sub_days(chrono::Days::new(days)) else {
+        return;
+    };
+    let Ok(rd) = fs::read_dir(root) else {
+        return;
+    };
+    let mut removed = 0;
+    for ent in rd.flatten().take(cap * 8) {
+        if removed >= cap {
+            break;
+        }
+        let name = ent.file_name();
+        let Some(d) = name.to_str().and_then(|n| n.strip_prefix("date=")) else {
+            continue;
+        };
+        let Ok(date) = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d") else {
+            continue;
+        };
+        if date >= cutoff {
+            continue;
+        }
+        let path = ent.path();
+        match fs::symlink_metadata(&path) {
+            Ok(m) if m.is_dir() && !m.file_type().is_symlink() => {
+                let _ = fs::remove_dir_all(&path);
+                removed += 1;
+            }
+            _ => {}
+        }
     }
 }
 
@@ -1198,6 +1242,35 @@ mod tests {
         assert!(!masked.contains("ghp_1234567890abcdef"), "{masked}");
         assert!(!masked.contains("secretval123"), "{masked}");
         assert!(masked.contains("***"), "{masked}");
+    }
+
+    #[test]
+    fn prune_removes_old_partitions_only() {
+        let tmp = std::env::temp_dir().join(format!("hk-prune-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&tmp);
+        let root = tmp.join("audit");
+        let outside = tmp.join("outside");
+        fs::create_dir_all(root.join("date=2026-01-01/type=tool")).unwrap();
+        fs::create_dir_all(root.join("date=2026-11-20")).unwrap();
+        fs::create_dir_all(root.join("other")).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("keep.txt"), "x").unwrap();
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(&outside, root.join("date=2025-01-01")).unwrap();
+        prune_old_partitions(&root, "2026-11-22", 30, 64);
+        assert!(!root.join("date=2026-01-01").exists());
+        assert!(root.join("date=2026-11-20").exists());
+        assert!(root.join("other").exists());
+        assert!(outside.join("keep.txt").exists());
+        #[cfg(unix)]
+        assert!(root.join("date=2025-01-01").exists());
+        for d in 1..=5 {
+            fs::create_dir_all(root.join(format!("date=2026-02-0{d}"))).unwrap();
+        }
+        prune_old_partitions(&root, "2026-11-22", 30, 2);
+        let left = (1..=5).filter(|d| root.join(format!("date=2026-02-0{d}")).exists()).count();
+        assert_eq!(left, 3);
+        let _ = fs::remove_dir_all(&tmp);
     }
 
     #[test]

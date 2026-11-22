@@ -60,6 +60,14 @@ pub fn load_registry(ws: &Path) -> Result<(DataRegistry, String), String> {
     Ok((reg, "embedded:registry.json".to_string()))
 }
 
+/// Retention (days) of the embedded `audit` entry; used by the audit writer's pruning.
+pub fn audit_retention_days() -> u64 {
+    serde_json::from_str::<DataRegistry>(EMBEDDED_REGISTRY_JSON)
+        .ok()
+        .and_then(|r| r.entries.get("audit").and_then(|e| e.retention_days))
+        .unwrap_or(30)
+}
+
 pub fn run_data(
     paths: &WorkspacePaths,
     action: &str,
@@ -101,7 +109,11 @@ fn effective_rel(key: &str, ent: &RegistryEntry) -> String {
 }
 
 /// Registry paths are relative to the data dir (audit included: `system/audit`).
-fn entry_abs(paths: &WorkspacePaths, _key: &str, rel: &str) -> std::path::PathBuf {
+/// The `audit` entry always resolves to `audit_root` (single truth, even with a registry override).
+fn entry_abs(paths: &WorkspacePaths, key: &str, rel: &str) -> std::path::PathBuf {
+    if key == "audit" {
+        return paths.audit_root.clone();
+    }
     paths.data_dir.join(rel)
 }
 
