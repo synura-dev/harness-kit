@@ -19,7 +19,7 @@
         let paths = WorkspacePaths {
             workspace: PathBuf::from("/work/hub"),
             data_dir: PathBuf::from("/work/hub/data"),
-            audit_root: PathBuf::from("/tmp/harness-test-audit"),
+            audit_root: PathBuf::from("/work/hub/data/system/audit"),
             has_workspace_marker: true,
             is_plugin_mode: false,
         };
@@ -715,6 +715,28 @@ deny_reason = "r"
     }
 
     #[test]
+    fn core_protects_audit_root_without_data_gate() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for tool in ["Write", "Edit", "MultiEdit", "NotebookEdit"] {
+            for p in [format!("{a}/date=2026-01-01/type=tool/x.jsonl"), "data/system/audit/y.jsonl".to_string()] {
+                let r = eval_claude(&eng, tool, serde_json::json!({"file_path": p}));
+                assert_eq!(r.decision, Some(Decision::Deny), "{tool} {p}");
+            }
+        }
+        for cmd in [format!("rm -rf {a}"), format!("echo x > {a}/f.jsonl")] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_eq!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+        let rd = eval_claude(&eng, "Bash", serde_json::json!({"command": format!("cat {a}/x.jsonl")}));
+        assert_ne!(rd.decision, Some(Decision::Deny), "pure read stays allowed");
+        let rr = eval_claude(&eng, "Read", serde_json::json!({"file_path": format!("{a}/x.jsonl")}));
+        assert_ne!(rr.decision, Some(Decision::Deny));
+        let ok = eval_claude(&eng, "Write", serde_json::json!({"file_path": "/work/hub/data/other/x"}));
+        assert_ne!(ok.decision, Some(Decision::Deny));
+    }
+
+    #[test]
     fn core_protects_harness_dir_writes() {
         let (_g, ws, _home) = t4_env("coreprot");
         let eng = RulesEngine::empty();
@@ -724,7 +746,7 @@ deny_reason = "r"
             format!("{w}/.harness/rules.toml"),
             format!("{w}/.harness/rules.local.toml"),
             format!("{w}/.harness/agy.off"),
-            format!("{w}/.harness/audit/x.jsonl"),
+            format!("{w}/.harness/state/x.json"),
             format!("{w}/sub/../.harness/rules.toml"),
             format!("{w}/./.harness/./rules.toml"),
             format!("{w}/link/new.toml"),

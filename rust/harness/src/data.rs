@@ -100,14 +100,9 @@ fn effective_rel(key: &str, ent: &RegistryEntry) -> String {
         .to_string()
 }
 
-/// Registry paths are relative to the data dir, except the audit log which now lives at
-/// `<project>/.harness/audit` (or CLAUDE_AUDIT_DIR): resolve it from the configured audit root.
-fn entry_abs(paths: &WorkspacePaths, key: &str, rel: &str) -> std::path::PathBuf {
-    if key == "audit" {
-        paths.audit_root.clone()
-    } else {
-        paths.data_dir.join(rel)
-    }
+/// Registry paths are relative to the data dir (audit included: `system/audit`).
+fn entry_abs(paths: &WorkspacePaths, _key: &str, rel: &str) -> std::path::PathBuf {
+    paths.data_dir.join(rel)
 }
 
 fn default_retention(class_name: Option<&str>) -> Option<u64> {

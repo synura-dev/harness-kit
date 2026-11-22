@@ -60,6 +60,8 @@ pub(super) fn eval_core_guard(
     protected_paths: &[String],
     sensitive_names: &[String],
     claude_web: Option<&str>,
+    audit_root: &Path,
+    tool_cwd: &Path,
 ) -> Option<(String, String)> {
     let tool = input.tool_name.as_deref()?;
     if let (Some(reason), Host::Claude, "WebSearch" | "WebFetch") = (claude_web, input.host, tool) {
@@ -77,6 +79,9 @@ pub(super) fn eval_core_guard(
             let np = fp.replace('\\', "/");
             if is_rules_file(&np) {
                 return Some(("rules-protect".to_string(), RULES_PROTECT_REASON.to_string()));
+            }
+            if in_audit_root(&np, audit_root, tool_cwd) {
+                return Some(("audit-protect".to_string(), AUDIT_PROTECT_REASON.to_string()));
             }
             if is_launcher_file(&np) {
                 return Some((
@@ -142,6 +147,10 @@ pub(super) fn eval_core_guard(
             ));
         }
         let ncmd = collapse_line_continuations(cmd);
+        let audit_txt = audit_root.to_string_lossy().replace('\\', "/");
+        if hit_protected_path(&ncmd, std::slice::from_ref(&audit_txt)) && !is_pure_read_cmd(&ncmd) {
+            return Some(("audit-protect".to_string(), AUDIT_PROTECT_REASON.to_string()));
+        }
         if hit_protected_path(&ncmd, protected_paths) {
             return Some((
                 "protected-path".to_string(),
@@ -384,7 +393,7 @@ pub(super) fn boundary_contains(haystack: &str, needle: &str) -> bool {
 }
 
 
-const RULES_PROTECT_REASON: &str = "guard[rules-protect]: Cam ghi vao .harness/ (luat, agy.off, audit) hoac ~/.harness/; chi nguoi dung sua. / Writes under .harness/ are protected; the human edits them.";
+const RULES_PROTECT_REASON: &str = "guard[rules-protect]: Cam ghi vao .harness/ (luat, agy.off) hoac ~/.harness/; chi nguoi dung sua. / Writes under .harness/ are protected; the human edits them.";
 
 /// Any path with a `.harness` component is protected (workspace and ~/.harness alike).
 /// Normalizes `.`/`..` and resolves symlinks of the deepest existing ancestor.
@@ -421,8 +430,39 @@ pub(super) fn is_rules_file(np: &str) -> bool {
 /// `rg` is not "pure read": `--pre`/`--pre-glob` run arbitrary programs. `find` only passes with
 /// the harmless -name/-iname/-type/-maxdepth/-path predicates (-exec/-ok/-delete escalate).
 /// shortcut: quote-split spellings like '.har''ness' are not caught.
+const RO: &str = r"(?:(?:cat|ls|head|tail|grep|wc|stat)(?:\s[^;&|<>`$()\n]*)?|find(?:\s+(?:[^\s;&|<>`$()\n-][^\s;&|<>`$()\n]*|-(?:name|iname|type|maxdepth|path)\s+\S+))*)";
+
+fn is_pure_read_cmd(cmd: &str) -> bool {
+    let pat = format!(r"^\s*{RO}(?:\|\s*{RO})*\s*$");
+    Regex::new(&pat).is_ok_and(|re| re.is_match(cmd))
+}
+
+const AUDIT_PROTECT_REASON: &str = "guard[audit-protect]: Cam ghi/xoa audit log (<data>/system/audit); chi doc qua harness observe. / The audit log is tamper-protected; read it via harness observe.";
+
+/// True when `np` (absolute or relative to `cwd`) is the audit root or below it, symlinks of the
+/// deepest existing ancestor resolved. Independent of the data_gate opt-in.
+fn in_audit_root(np: &str, audit_root: &Path, cwd: &Path) -> bool {
+    fn resolve(p: &Path) -> PathBuf {
+        let mut rest: Vec<std::ffi::OsString> = Vec::new();
+        let mut cur = p.to_path_buf();
+        loop {
+            if let Ok(real) = cur.canonicalize() {
+                return rest.iter().rev().fold(real, |a, r| a.join(r));
+            }
+            match (cur.file_name().map(|f| f.to_os_string()), cur.parent()) {
+                (Some(n), Some(par)) => {
+                    rest.push(n);
+                    cur = par.to_path_buf();
+                }
+                _ => return p.to_path_buf(),
+            }
+        }
+    }
+    let target = resolve(&crate::config::lexical_path(cwd, np));
+    target.starts_with(resolve(audit_root))
+}
+
 pub(super) fn rules_mention_bash_spec(action: RuleAction) -> BashRuleSpec {
-    const RO: &str = r"(?:(?:cat|ls|head|tail|grep|wc|stat)(?:\s[^;&|<>`$()\n]*)?|find(?:\s+(?:[^\s;&|<>`$()\n-][^\s;&|<>`$()\n]*|-(?:name|iname|type|maxdepth|path)\s+\S+))*)";
     let unless = format!(r"^\s*{RO}(?:\|\s*{RO})*\s*$");
     serde_json::from_value(serde_json::json!({
         "id": "rules-protect",

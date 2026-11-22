@@ -66,17 +66,7 @@ struct ScanInfo {
 }
 
 fn audit_roots(paths: &WorkspacePaths) -> Vec<PathBuf> {
-    let mut roots = vec![paths.audit_root.clone()];
-    if std::env::var("CLAUDE_AUDIT_DIR")
-        .ok()
-        .is_none_or(|v| v.trim().is_empty())
-    {
-        let legacy = paths.data_dir.join("audit");
-        if legacy != paths.audit_root && legacy.is_dir() {
-            roots.push(legacy);
-        }
-    }
-    roots
+    vec![paths.audit_root.clone()]
 }
 
 enum ScanEv<'a> {

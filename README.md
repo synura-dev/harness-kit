@@ -27,7 +27,7 @@ scripts/check-binary.sh     verify plugin binaries match the source tree
 docs/                       plans and source history
 ```
 
-Both plugins ship the identical binary. Project-specific rules are optional, in `<project>/.harness/rules.toml`. Audit data goes to `<project>/.harness/audit/`.
+Both plugins ship the identical binary. Project-specific rules are optional, in `<project>/.harness/rules.toml`. Audit data goes to `<data>/system/audit/` (data dir: `HUB_DATA_DIR`, else `data/` in a hub workspace, else `.harness/data/`); agents cannot write there.
 
 ## Configuration
 

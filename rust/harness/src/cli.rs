@@ -17,7 +17,7 @@ const STDIN_READ_TIMEOUT: Duration = Duration::from_secs(2);
 /// Hook stdin cap (8 MiB). Over the cap or timeout: never silently allow writes (see `handle_read_failure`).
 pub const HOOK_STDIN_CAP: usize = 8 * 1024 * 1024;
 
-/// Shared by every test in the crate that sets CLAUDE_AUDIT_DIR (env is process-global).
+/// Shared by every test in the crate that sets HUB_DATA_DIR (env is process-global).
 #[cfg(test)]
 pub(crate) static AUDIT_ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
@@ -923,16 +923,16 @@ mod tests {
         assert_eq!(String::from_utf8(claude_out).unwrap().trim(), "{}");
     }
 
-    // Env is process-global: serialize every test that touches CLAUDE_AUDIT_DIR.
+    // Env is process-global: serialize every test that touches HUB_DATA_DIR.
 
 
     fn with_audit_dir<T>(f: impl FnOnce() -> T) -> (T, String) {
         let _g = crate::cli::AUDIT_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = std::env::temp_dir().join(format!("harness-t5-{}-{:?}", std::process::id(), std::thread::current().id()));
         let _ = fs::remove_dir_all(&dir);
-        std::env::set_var("CLAUDE_AUDIT_DIR", &dir);
+        std::env::set_var("HUB_DATA_DIR", &dir);
         let r = f();
-        std::env::remove_var("CLAUDE_AUDIT_DIR");
+        std::env::remove_var("HUB_DATA_DIR");
         let mut found = String::new();
         for e in walk(&dir) {
             found.push_str(&fs::read_to_string(e).unwrap_or_default());
@@ -1004,7 +1004,7 @@ mod tests {
         fs::create_dir_all(&wt).unwrap();
         fs::write(wt.join(".git"), "gitdir: /nowhere/else").unwrap();
         std::env::set_var("CLAUDE_PROJECT_DIR", &hub);
-        std::env::set_var("CLAUDE_AUDIT_DIR", hub.join("aud"));
+        std::env::set_var("HUB_DATA_DIR", hub.join("dat"));
         let (out, _, _) = run_with_raw(
             Host::Claude,
             "PreToolUse",
@@ -1012,7 +1012,7 @@ mod tests {
                 "tool_name":"Read","tool_input":{"file_path":"/tmp/t6-marker.txt"}})),
         );
         std::env::remove_var("CLAUDE_PROJECT_DIR");
-        std::env::remove_var("CLAUDE_AUDIT_DIR");
+        std::env::remove_var("HUB_DATA_DIR");
         assert!(out.contains(r#""permissionDecision":"deny""#), "{out}");
         let _ = fs::remove_dir_all(&hub);
     }
@@ -1022,14 +1022,14 @@ mod tests {
         let _g = crate::cli::AUDIT_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let d = t6_dir("tmpcwd");
         std::env::remove_var("CLAUDE_PROJECT_DIR");
-        std::env::set_var("CLAUDE_AUDIT_DIR", d.join("aud"));
+        std::env::set_var("HUB_DATA_DIR", d.join("dat"));
         let (out, _, _) = run_with_raw(
             Host::Claude,
             "PreToolUse",
             json_read(serde_json::json!({"hook_event_name":"PreToolUse","cwd":d.join("nope/x"),
                 "tool_name":"Bash","tool_input":{"command":"cat .env"}})),
         );
-        std::env::remove_var("CLAUDE_AUDIT_DIR");
+        std::env::remove_var("HUB_DATA_DIR");
         assert!(out.contains(r#""permissionDecision":"deny""#), "{out}");
         let _ = fs::remove_dir_all(&d);
     }
@@ -1042,11 +1042,11 @@ mod tests {
         fs::write(d.join(".harness/agy.off"), "").unwrap();
         fs::write(d.join(".harness/rules.toml"), "").unwrap();
         std::env::remove_var("HARNESS_AGY");
-        std::env::set_var("CLAUDE_AUDIT_DIR", d.join("aud"));
+        std::env::set_var("HUB_DATA_DIR", d.join("dat"));
         let payload = serde_json::json!({"conversationId":"t","workspacePaths":[d],
             "toolCall":{"name":"run_command","args":{"CommandLine":"cat .env"}}});
         let (out, _, _) = run_with_raw(Host::Agy, "PreToolUse", json_read(payload));
-        std::env::remove_var("CLAUDE_AUDIT_DIR");
+        std::env::remove_var("HUB_DATA_DIR");
         assert!(out.contains(r#""decision":"deny""#), "agy.off must be ignored: {out}");
         let _ = fs::remove_dir_all(&d);
     }

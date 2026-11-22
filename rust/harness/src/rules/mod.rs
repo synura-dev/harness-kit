@@ -462,7 +462,7 @@ impl RulesEngine {
 
         // 1. Built-in core guard
         let tool_cwd = effective_tool_cwd(input, &paths.workspace);
-        let core = eval_core_guard(input, &self.protected_paths, &self.sensitive_file_names, self.claude_web.as_deref())
+        let core = eval_core_guard(input, &self.protected_paths, &self.sensitive_file_names, self.claude_web.as_deref(), &paths.audit_root, &tool_cwd)
             .map(|(rule, reason)| (core_rule_decision(&rule, input.host), rule, reason))
             .or_else(|| {
                 eval_default_guards(input, &paths.workspace, &tool_cwd, &self.sensitive_file_names)
