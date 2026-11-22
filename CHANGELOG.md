@@ -2,6 +2,11 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.6.2
+- Audit log now lives under the data layout: `<data>/system/audit` (registry `audit` target); `CLAUDE_AUDIT_DIR` removed (use `HUB_DATA_DIR`). New core guard `audit-protect` denies agent writes/deletes there regardless of data_gate; reads via `harness observe`. Existing data: move the old per-project audit partitions into `<data>/system/audit/`.
+- Audit writer now prunes `date=` partitions older than 30 days (registry `retentionDays` 90 -> 30). Migrated old partitions older than 30 days are pruned on the first write of a new day.
+- `audit-protect`: direct hits (inside the audit root, destructive verbs on it or its ancestors down to the data dir) are denied; bulk deleters (`find -delete`, `xargs rm`, `git clean -x`) run from an ancestor above the data dir only ask (`audit-protect-bulk`).
+
 ## 0.6.1
 - Fix: ship harness-rs with executable bit (hooks/MCP failed with Permission denied on 0.6.0).
 
@@ -9,7 +14,6 @@ GitHub releases and commit history are the source of truth going forward. This f
 ### BREAKING
 - Viet lai core bang Rust: bo toan bo JS, ext, evolve, install. Binary doi ten `harness-rs`, dat o `plugins/claude/bin/harness-rs` va `plugins/agy/bin/harness-rs` (bo cuc `plugins/*`).
 - Bo legacy config/guard json; project `agy.off` bi bo qua.
-- Audit ghi ve `.harness/audit`.
 - Ten tool MCP khi chay qua plugin: `mcp__plugin_harness-kit_harness__*`.
 ### Security
 - Lop luat hop nhat, fail-closed, gioi han stdin, allowlist git, prefilter escape.

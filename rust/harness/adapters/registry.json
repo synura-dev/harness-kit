@@ -6,8 +6,8 @@
       "zone": "system",
       "class": "log",
       "owner": "audit",
-      "retentionDays": 90,
-      "note": "events 30d pruned by audit; digest 90d",
+      "retentionDays": 30,
+      "note": "date= partitions older than retentionDays are pruned by the audit writer when a new day starts",
       "target": "system/audit",
       "path": "system/audit"
     }

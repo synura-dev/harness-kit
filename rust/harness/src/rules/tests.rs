@@ -19,7 +19,7 @@
         let paths = WorkspacePaths {
             workspace: PathBuf::from("/work/hub"),
             data_dir: PathBuf::from("/work/hub/data"),
-            audit_root: PathBuf::from("/tmp/harness-test-audit"),
+            audit_root: PathBuf::from("/work/hub/data/system/audit"),
             has_workspace_marker: true,
             is_plugin_mode: false,
         };
@@ -715,6 +715,160 @@ deny_reason = "r"
     }
 
     #[test]
+    fn core_protects_audit_root_without_data_gate() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for tool in ["Write", "Edit", "MultiEdit", "NotebookEdit"] {
+            for p in [format!("{a}/date=2026-01-01/type=tool/x.jsonl"), "data/system/audit/y.jsonl".to_string()] {
+                let r = eval_claude(&eng, tool, serde_json::json!({"file_path": p}));
+                assert_eq!(r.decision, Some(Decision::Deny), "{tool} {p}");
+            }
+        }
+        for cmd in [format!("rm -rf {a}"), format!("echo x > {a}/f.jsonl")] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_eq!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+        let rd = eval_claude(&eng, "Bash", serde_json::json!({"command": format!("cat {a}/x.jsonl")}));
+        assert_ne!(rd.decision, Some(Decision::Deny), "pure read stays allowed");
+        let rr = eval_claude(&eng, "Read", serde_json::json!({"file_path": format!("{a}/x.jsonl")}));
+        assert_ne!(rr.decision, Some(Decision::Deny));
+        let ok = eval_claude(&eng, "Write", serde_json::json!({"file_path": "/work/hub/data/other/x"}));
+        assert_ne!(ok.decision, Some(Decision::Deny));
+    }
+
+    #[test]
+    fn audit_protect_bash_bypasses_are_denied() {
+        let eng = RulesEngine::empty();
+        for cmd in [
+            "rm -rf data/system/audit",
+            "cd data && rm -rf system/audit",
+            "rm -rf /work/hub/data/system",
+            "find /work/hub/data/system -delete",
+            "rm -rf /work/hub/data/system/aud*",
+            "mv /work/hub/data/system /tmp/x",
+            "tee /work/hub/data/system/audit/f < /dev/null",
+            "cd /work/hub/data/system/audit && rm -rf .",
+            "cd /work/hub/data/system/audit && rm *",
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_eq!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn audit_protect_r2_groupings_and_bulk_deleters_denied() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for cmd in [
+            "(cd /work/hub/data && rm -rf system/audit)".to_string(),
+            "{ cd /work/hub/data; rm -rf system/audit; }".to_string(),
+            "cd /work/hub/data && find . -name '*.jsonl' -delete".to_string(),
+            "cd /work/hub/data && find . -exec rm {} +".to_string(),
+            "cd /work/hub/data && find . -name '*.jsonl' | xargs rm -f".to_string(),
+            "cd /work/hub/data && git clean -fdx".to_string(),
+            format!("sort -o {a}/x.jsonl /tmp/in"),
+            format!("dd if=/dev/zero of={a}/x.jsonl"),
+            format!("echo x >{a}/f"),
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_eq!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn audit_protect_r2_quoted_redirect_and_new_read_verbs_allowed() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for cmd in [
+            format!("jq 'select(.dur > 1000)' {a}/x.jsonl"),
+            format!("grep '=>' {a}/f"),
+            format!("cat {a}/x.jsonl > /tmp/y"),
+            format!("cd {a} && wc -l * > /tmp/o"),
+            format!("rg foo {a}"),
+            format!("less {a}/x"),
+            format!("zcat {a}/x.gz"),
+            format!("zgrep foo {a}/x.gz"),
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_ne!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn audit_protect_r3_everyday_commands_allowed_bulk_asks() {
+        let eng = RulesEngine::empty();
+        let run = |cmd: &str| eval_claude(&eng, "Bash", serde_json::json!({"command": cmd})).decision;
+        for cmd in [
+            "git clean -fd",
+            "git clean -nfd",
+            "xargs grep -l rm",
+            "git ls-files -z | xargs -0 grep -l rm",
+            "find src -name '*.tmp' -delete",
+            "sort -o /tmp/out /tmp/in",
+        ] {
+            assert_ne!(run(cmd), Some(Decision::Deny), "{cmd}");
+            assert_ne!(run(cmd), Some(Decision::Ask), "{cmd}");
+        }
+        for cmd in [
+            "find . -name '*.tmp' -delete",
+            "find . -exec chmod 644 {} \\;",
+            "git ls-files -z | xargs -0 rm",
+            "git ls-files -z | xargs -0 -n 5 rm -f",
+            "git clean -fdx",
+            "git -C /work/hub clean -x",
+        ] {
+            assert_eq!(run(cmd), Some(Decision::Ask), "{cmd}");
+        }
+        assert_eq!(run("cd /work/hub/data && git clean -fdx"), Some(Decision::Deny));
+    }
+
+    #[test]
+    fn audit_bulk_ask_does_not_shadow_later_deny() {
+        let root = PathBuf::from("/work/hub/data/system/audit");
+        let run = |cmd: &str| {
+            let payload = serde_json::json!({"hook_event_name": "PreToolUse", "session_id": "t", "cwd": "/work/hub",
+                "tool_name": "Bash", "tool_input": {"command": cmd}});
+            let input = parse_stdin(Host::Claude, Some("PreToolUse"), payload.to_string().as_bytes()).unwrap();
+            eval_core_guard(&input, &["secretdir".to_string()], &[], None, &root, Path::new("/work/hub")).map(|h| h.0)
+        };
+        assert_eq!(run("find . -name '*.tmp' -delete").as_deref(), Some("audit-protect-bulk"));
+        assert_eq!(run("find . -name '*.tmp' -delete; ls secretdir/x").as_deref(), Some("protected-path"));
+    }
+
+    #[test]
+    fn audit_protect_resolves_symlinked_data_dir() {
+        let (_g, ws, _home) = t4_env("auditlink");
+        std::fs::create_dir_all(ws.join("real/system/audit")).unwrap();
+        std::os::unix::fs::symlink(ws.join("real"), ws.join("data")).unwrap();
+        let root = ws.join("real/system/audit");
+        let payload = serde_json::json!({"hook_event_name": "PreToolUse", "session_id": "t", "cwd": ws,
+            "tool_name": "Bash", "tool_input": {"command": "rm -rf data/system"}});
+        let input = parse_stdin(Host::Claude, Some("PreToolUse"), payload.to_string().as_bytes()).unwrap();
+        let hit = eval_core_guard(&input, &[], &[], None, &root, &ws);
+        assert_eq!(hit.map(|h| h.0), Some("audit-protect".to_string()));
+    }
+
+    #[test]
+    fn audit_protect_read_only_commands_stay_allowed() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for cmd in [
+            format!("du -sh {a}"),
+            format!("jq . {a}/x.jsonl"),
+            format!("stat {a}"),
+            format!("file {a}/x"),
+            format!("cat {a}/x 2>/dev/null"),
+            format!("cat {a}/x 2>&1"),
+            format!("ls {a} | sort"),
+            format!("cd {a} && ls"),
+            "rm -rf /work/hub/data/other".to_string(),
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_ne!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
     fn core_protects_harness_dir_writes() {
         let (_g, ws, _home) = t4_env("coreprot");
         let eng = RulesEngine::empty();
@@ -724,7 +878,7 @@ deny_reason = "r"
             format!("{w}/.harness/rules.toml"),
             format!("{w}/.harness/rules.local.toml"),
             format!("{w}/.harness/agy.off"),
-            format!("{w}/.harness/audit/x.jsonl"),
+            format!("{w}/.harness/state/x.json"),
             format!("{w}/sub/../.harness/rules.toml"),
             format!("{w}/./.harness/./rules.toml"),
             format!("{w}/link/new.toml"),

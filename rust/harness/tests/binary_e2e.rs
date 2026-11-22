@@ -36,7 +36,7 @@ impl Drop for TempDir {
 fn run_harness(args: &[&str], stdin_bytes: &[u8], audit_dir: &Path) -> std::process::Output {
     let mut child = Command::new(bin_path())
         .args(args)
-        .env("CLAUDE_AUDIT_DIR", audit_dir)
+        .env("HUB_DATA_DIR", audit_dir)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -122,8 +122,8 @@ fn binary_replays_all_11_fixtures_with_layered_hub_rules() {
 
     // Verify audit JSONL files were written on disk
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
-    let tool_dir = audit.path().join(format!("date={date}")).join("type=tool");
-    let gate_dir = audit.path().join(format!("date={date}")).join("type=gate");
+    let tool_dir = audit.path().join("system/audit").join(format!("date={date}")).join("type=tool");
+    let gate_dir = audit.path().join("system/audit").join(format!("date={date}")).join("type=gate");
     assert!(tool_dir.is_dir(), "expected audit tool dir");
     assert!(gate_dir.is_dir(), "expected audit gate dir");
 }
@@ -196,6 +196,7 @@ fn binary_hook_fail_open_and_claude_enrichments() {
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
     let log_file = audit
         .path()
+        .join("system/audit")
         .join(format!("date={date}/type=tool/claude-s-secret.jsonl"));
     let log_txt = fs::read_to_string(log_file).unwrap();
     assert!(!log_txt.contains("sk-1234567890abcdef"));
@@ -295,7 +296,7 @@ fn binary_agy_separates_workspace_cwd_and_tool_cwd() {
     cmd_home
         .args(["hook", "--host", "agy", "PreToolUse"])
         .env("HOME", &home)
-        .env("CLAUDE_AUDIT_DIR", audit.path())
+        .env("HUB_DATA_DIR", audit.path())
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
@@ -414,7 +415,7 @@ fn run_sh_hook(command: &str, plugin_root: &Path, stdin_bytes: &[u8], audit: &Pa
         .arg("-c")
         .arg(&cmd)
         .current_dir(cwd)
-        .env("CLAUDE_AUDIT_DIR", audit)
+        .env("HUB_DATA_DIR", audit)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
@@ -448,7 +449,7 @@ fn e2e_permission_request() {
     assert_eq!(v, json!({}), "PermissionRequest must be a no-op: {v}");
     let date = chrono::Utc::now().format("%Y-%m-%d").to_string();
     assert!(
-        audit.path().join(format!("date={date}")).join("type=permission").is_dir(),
+        audit.path().join("system/audit").join(format!("date={date}")).join("type=permission").is_dir(),
         "PermissionRequest must be audited under type=permission"
     );
 }

@@ -154,10 +154,8 @@ pub fn resolve_paths(cwd_hint: Option<&str>) -> WorkspacePaths {
         _ if marker => ws.join("data"),
         _ => ws.join(".harness").join("data"),
     };
-    let audit_root = match env::var("CLAUDE_AUDIT_DIR") {
-        Ok(val) if !val.trim().is_empty() => lexical_path(&ws, val.trim()),
-        _ => ws.join(".harness").join("audit"),
-    };
+    // Audit lives under the data layout: registry.json `audit` target (system/audit).
+    let audit_root = data_dir.join("system").join("audit");
     WorkspacePaths {
         workspace: ws,
         data_dir,
@@ -498,20 +496,19 @@ mod tests {
     }
 
     #[test]
-    fn audit_defaults_to_project_harness_audit_and_env_overrides() {
+    fn audit_lives_under_data_dir_system_audit() {
         let _g = crate::cli::AUDIT_ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let ws = std::env::temp_dir().join(format!("harness-cfg-aud-{}", std::process::id()));
         let _ = fs::remove_dir_all(&ws);
         fs::create_dir_all(ws.join(".harness")).unwrap();
         fs::write(ws.join(".harness/rules.toml"), "").unwrap();
-        std::env::remove_var("CLAUDE_AUDIT_DIR");
         std::env::remove_var("HUB_DATA_DIR");
         let p = resolve_paths(Some(&ws.to_string_lossy()));
-        assert_eq!(p.audit_root, ws.join(".harness").join("audit"));
-        std::env::set_var("CLAUDE_AUDIT_DIR", ws.join("custom"));
+        assert_eq!(p.audit_root, p.data_dir.join("system").join("audit"));
+        std::env::set_var("HUB_DATA_DIR", ws.join("custom"));
         let p = resolve_paths(Some(&ws.to_string_lossy()));
-        std::env::remove_var("CLAUDE_AUDIT_DIR");
-        assert_eq!(p.audit_root, ws.join("custom"));
+        std::env::remove_var("HUB_DATA_DIR");
+        assert_eq!(p.audit_root, ws.join("custom").join("system").join("audit"));
         let _ = fs::remove_dir_all(&ws);
     }
 }

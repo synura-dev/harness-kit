@@ -65,20 +65,6 @@ struct ScanInfo {
     reason: Option<String>,
 }
 
-fn audit_roots(paths: &WorkspacePaths) -> Vec<PathBuf> {
-    let mut roots = vec![paths.audit_root.clone()];
-    if std::env::var("CLAUDE_AUDIT_DIR")
-        .ok()
-        .is_none_or(|v| v.trim().is_empty())
-    {
-        let legacy = paths.data_dir.join("audit");
-        if legacy != paths.audit_root && legacy.is_dir() {
-            roots.push(legacy);
-        }
-    }
-    roots
-}
-
 enum ScanEv<'a> {
     /// A new file starts (its `date=` partition, "" if none).
     File(&'a str),
@@ -140,7 +126,7 @@ fn scan(
     mut f: impl FnMut(ScanEv),
 ) -> ScanInfo {
     let cutoff_date = cutoff.format("%Y-%m-%d").to_string();
-    let files = collect_jsonl_files(&audit_roots(paths), &cutoff_date);
+    let files = collect_jsonl_files(std::slice::from_ref(&paths.audit_root), &cutoff_date);
     let started = Instant::now();
     let mut info = ScanInfo { files_scanned: 0, events_scanned: 0, truncated: false, reason: None };
     let mut used: u64 = 0;
@@ -794,7 +780,7 @@ pub struct SizesResult {
 /// Bytes of audit jsonl per date partition (read-only).
 pub fn run_sizes(paths: &WorkspacePaths) -> SizesResult {
     let mut m: BTreeMap<String, u64> = BTreeMap::new();
-    for (date, p) in collect_jsonl_files(&audit_roots(paths), "") {
+    for (date, p) in collect_jsonl_files(std::slice::from_ref(&paths.audit_root), "") {
         *m.entry(date).or_default() += fs::metadata(&p).map(|x| x.len()).unwrap_or(0);
     }
     let mut partitions: Vec<(String, u64)> = m.into_iter().collect();
