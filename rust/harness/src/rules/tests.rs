@@ -766,7 +766,7 @@ deny_reason = "r"
             "cd /work/hub/data && find . -exec rm {} +".to_string(),
             "cd /work/hub/data && find . -name '*.jsonl' | xargs rm -f".to_string(),
             "cd /work/hub/data && git clean -fdx".to_string(),
-            "cd /work/hub && find . -name '*.jsonl' -delete".to_string(),
+            format!("sort -o {a}/x.jsonl /tmp/in"),
             format!("dd if=/dev/zero of={a}/x.jsonl"),
             format!("echo x >{a}/f"),
         ] {
@@ -792,6 +792,34 @@ deny_reason = "r"
             let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
             assert_ne!(r.decision, Some(Decision::Deny), "{cmd}");
         }
+    }
+
+    #[test]
+    fn audit_protect_r3_everyday_commands_allowed_bulk_asks() {
+        let eng = RulesEngine::empty();
+        let run = |cmd: &str| eval_claude(&eng, "Bash", serde_json::json!({"command": cmd})).decision;
+        for cmd in [
+            "git clean -fd",
+            "git clean -nfd",
+            "xargs grep -l rm",
+            "git ls-files -z | xargs -0 grep -l rm",
+            "find src -name '*.tmp' -delete",
+            "sort -o /tmp/out /tmp/in",
+        ] {
+            assert_ne!(run(cmd), Some(Decision::Deny), "{cmd}");
+            assert_ne!(run(cmd), Some(Decision::Ask), "{cmd}");
+        }
+        for cmd in [
+            "find . -name '*.tmp' -delete",
+            "find . -exec chmod 644 {} \\;",
+            "git ls-files -z | xargs -0 rm",
+            "git ls-files -z | xargs -0 -n 5 rm -f",
+            "git clean -fdx",
+            "git -C /work/hub clean -x",
+        ] {
+            assert_eq!(run(cmd), Some(Decision::Ask), "{cmd}");
+        }
+        assert_eq!(run("cd /work/hub/data && git clean -fdx"), Some(Decision::Deny));
     }
 
     #[test]

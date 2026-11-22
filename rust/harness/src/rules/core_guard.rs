@@ -147,8 +147,11 @@ pub(super) fn eval_core_guard(
             ));
         }
         let ncmd = collapse_line_continuations(cmd);
-        if bash_touches_audit(&ncmd, audit_root, tool_cwd, 0) {
-            return Some(("audit-protect".to_string(), AUDIT_PROTECT_REASON.to_string()));
+        match bash_touches_audit(&ncmd, audit_root, tool_cwd, 0) {
+            2 => return Some(("audit-protect".to_string(), AUDIT_PROTECT_REASON.to_string())),
+            // shortcut: an ask here pre-empts later guards (protected-path); the user still reviews it
+            1 => return Some(("audit-protect-bulk".to_string(), AUDIT_BULK_REASON.to_string())),
+            _ => {}
         }
         if hit_protected_path(&ncmd, protected_paths) {
             return Some((
@@ -543,10 +546,11 @@ fn redirect_targets(seg: &str) -> Vec<String> {
 
 /// Segment-wise: tracks `cd X` for the effective cwd; read-only verbs never hit; destructive verbs
 /// hit on the audit root, anything below it, or an ancestor; unknown verbs hit on inside/verbatim mention.
-fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) -> bool {
+fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) -> u8 {
     if depth > 4 {
-        return false;
+        return 0;
     }
+    let mut worst = 0u8;
     let root = resolve_deep(audit_root);
     let audit_txt = audit_root.to_string_lossy().replace('\\', "/");
     let mut cwd = cwd.to_path_buf();
@@ -570,9 +574,11 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         }
         let u = unwrap_shell_prefix(&raw);
         for s in &u.env_scripts {
-            if bash_touches_audit(s, audit_root, &cwd, depth + 1) {
-                return true;
+            let r = bash_touches_audit(s, audit_root, &cwd, depth + 1);
+            if r == 2 {
+                return 2;
             }
+            worst = worst.max(r);
         }
         let toks = u.rest;
         let Some(first) = toks.first() else { continue };
@@ -580,9 +586,11 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         if matches!(verb, "sh" | "bash" | "zsh" | "dash" | "ksh") {
             if let Some(k) = toks.iter().skip(1).position(|t| is_shell_c_flag(t)) {
                 if let Some(inner) = toks.get(k + 2) {
-                    if bash_touches_audit(inner, audit_root, &cwd, depth + 1) {
-                        return true;
+                    let r = bash_touches_audit(inner, audit_root, &cwd, depth + 1);
+                    if r == 2 {
+                        return 2;
                     }
+                    worst = worst.max(r);
                 }
             }
             continue;
@@ -596,12 +604,34 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         let find_del = verb == "find"
             && toks.iter().any(|t| matches!(t.as_str(), "-delete" | "-exec" | "-execdir" | "-ok" | "-okdir" | "-fprint" | "-fls"));
         // conditional bulk deleters: whatever they match under cwd may include the audit log, so ANY
-        // ancestor of the root (workspace, cwd) is a hit
-        let xargs_del = verb == "xargs" && toks[1..].iter().any(|t| DESTRUCTIVE_VERBS.contains(&basename(t)));
-        let git_clean = verb == "git" && toks.get(1).is_some_and(|t| t == "clean") && {
-            let fl: String = toks[2..].iter().filter(|t| t.starts_with('-') && !t.starts_with("--")).flat_map(|t| t.chars().skip(1)).collect();
-            fl.contains(['x', 'X']) || (fl.contains('d') && fl.contains('f'))
-        };
+        // ancestor of the root (workspace, cwd) is a hit (ask: heuristic only)
+        let mut xargs_del = false;
+        if verb == "xargs" {
+            // judge only the command xargs runs: first token after xargs flags (and their args)
+            let mut i = 1;
+            while let Some(t) = toks.get(i).filter(|t| t.starts_with('-')) {
+                i += if matches!(t.as_str(), "-n" | "-I" | "-P" | "-L" | "-d" | "-E" | "-s" | "-a" | "-l" | "--max-args" | "--max-procs" | "--delimiter" | "--max-lines" | "--arg-file") { 2 } else { 1 };
+                if t == "--" {
+                    break;
+                }
+            }
+            xargs_del = toks.get(i).is_some_and(|t| DESTRUCTIVE_VERBS.contains(&basename(t)));
+        }
+        let mut git_dir: Option<String> = None;
+        let mut git_clean = false;
+        if verb == "git" {
+            let mut i = 1;
+            while let Some(t) = toks.get(i).filter(|t| t.starts_with('-')) {
+                if t == "-C" {
+                    git_dir = toks.get(i + 1).cloned();
+                }
+                i += if matches!(t.as_str(), "-C" | "-c") { 2 } else { 1 };
+            }
+            if toks.get(i).is_some_and(|t| t == "clean") {
+                let fl: String = toks[i + 1..].iter().filter(|t| t.starts_with('-') && !t.starts_with("--")).flat_map(|t| t.chars().skip(1)).collect();
+                git_clean = fl.contains(['x', 'X']);
+            }
+        }
         // find -exec/-ok only counts as bulk when the executed command is a destructive verb
         let find_bulk = verb == "find"
             && (toks.iter().any(|t| t == "-delete")
@@ -612,7 +642,20 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         let mut cands: Vec<String> = Vec::new();
         // redirects count only outside quotes and only when the TARGET is in the audit root
         if redirect_targets(&seg).iter().any(|t| t != "/dev/null" && audit_path_hit(t, &cwd, &root, true, false)) {
-            return true;
+            return 2;
+        }
+        // sort -o FILE / --output=FILE writes FILE
+        if verb == "sort" {
+            let outs = toks.iter().enumerate().filter_map(|(i, t)| {
+                if t == "-o" {
+                    toks.get(i + 1).map(String::as_str)
+                } else {
+                    t.strip_prefix("--output=").or_else(|| t.strip_prefix("-o").filter(|v| !v.is_empty() && !t.starts_with("--")))
+                }
+            });
+            if outs.into_iter().any(|t| audit_path_hit(t, &cwd, &root, true, false)) {
+                return 2;
+            }
         }
         if !destructive && (READ_VERBS.contains(&verb) || verb == "find") {
             continue;
@@ -620,8 +663,10 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         // find: only the leading path operands, not -name patterns
         let args: Vec<&str> = if verb == "find" {
             toks[1..].iter().map(String::as_str).take_while(|t| !t.starts_with(['-', '(', '!'])).collect()
-        } else if xargs_del || git_clean {
+        } else if xargs_del {
             Vec::new()
+        } else if git_clean {
+            git_dir.iter().map(String::as_str).collect()
         } else if verb == "dd" {
             toks[1..].iter().filter_map(|t| t.strip_prefix("of=")).collect()
         } else {
@@ -635,15 +680,20 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
                 cands.push(".".to_string());
             }
         }
-        if cands.iter().any(|t| audit_path_hit(t, &cwd, &root, destructive, bulk)) {
-            return true;
+        if cands.iter().any(|t| audit_path_hit(t, &cwd, &root, destructive, false)) {
+            return 2;
+        }
+        if bulk && cands.iter().any(|t| audit_path_hit(t, &cwd, &root, destructive, true)) {
+            worst = 1;
         }
         if !is_dest && hit_protected_path(&seg, std::slice::from_ref(&audit_txt)) {
-            return true;
+            return 2;
         }
     }
-    false
+    worst
 }
+
+const AUDIT_BULK_REASON: &str = "guard[audit-protect-bulk]: lenh xoa/sua hang loat tu thu muc cha cua audit log co the xoa audit log (<data>/system/audit); can nguoi dung duyet. / Bulk delete/modify from an ancestor directory may delete the audit log; needs approval.";
 
 const AUDIT_PROTECT_REASON: &str = "guard[audit-protect]: Cam ghi/xoa audit log (<data>/system/audit); chi doc qua harness observe. / The audit log is tamper-protected; read it via harness observe.";
 
@@ -675,7 +725,7 @@ pub(super) fn rules_mention_bash_spec(action: RuleAction) -> BashRuleSpec {
 /// sometimes legitimate" shell guards, deny for everything else.
 pub(super) fn core_rule_decision(rule: &str, host: Host) -> Decision {
     match rule {
-        "rm-recursive-outside" | "git-force-push" if host == Host::Claude => Decision::Ask,
+        "rm-recursive-outside" | "git-force-push" | "audit-protect-bulk" if host == Host::Claude => Decision::Ask,
         _ => Decision::Deny,
     }
 }

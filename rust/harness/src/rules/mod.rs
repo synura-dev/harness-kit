@@ -250,6 +250,7 @@ const CORE_PROTECTED_IDS: &[&str] = &[
     "rules-protect",
     "secret-files",
     "rm-recursive-outside",
+    "audit-protect-bulk",
     "git-force-push",
 ];
 
