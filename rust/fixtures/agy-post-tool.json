@@ -1,0 +1,25 @@
+{
+  "name": "agy-post-tool",
+  "host": "agy",
+  "event": "PostToolUse",
+  "input": {
+    "conversationId": "golden-test",
+    "workspacePaths": [
+      "/work/hub"
+    ],
+    "toolCall": {
+      "name": "read_file",
+      "args": {
+        "Path": "/work/hub/AGENTS.md"
+      }
+    },
+    "toolResult": {
+      "status": "success"
+    }
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{}",
+    "stdout_json": {}
+  }
+}

@@ -1,0 +1,1 @@
+{"mcpServers":{"harness":{"type":"stdio","command":"${CLAUDE_PLUGIN_ROOT}/bin/harness-rs","args":["mcp"]}}}

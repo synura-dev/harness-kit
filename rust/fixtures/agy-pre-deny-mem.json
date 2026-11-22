@@ -1,0 +1,28 @@
+{
+  "name": "agy-pre-deny-mem",
+  "host": "agy",
+  "event": "PreToolUse",
+  "input": {
+    "conversationId": "golden-test",
+    "workspacePaths": [
+      "/work/hub"
+    ],
+    "toolCall": {
+      "name": "read_file",
+      "args": {
+        "Path": "/work/hub/memories/entities/agent/scout/entity.yaml"
+      }
+    }
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"decision\":\"deny\",\"reason\":\"Khong doc truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) get <id> hoac context <id> --for <task> --budget N\"}",
+    "stdout_json": {
+      "decision": "deny",
+      "reason": "Khong doc truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) get <id> hoac context <id> --for <task> --budget N"
+    },
+    "decision": "deny",
+    "rule": "memories-guard",
+    "must_not_emit_updated_input": true
+  }
+}

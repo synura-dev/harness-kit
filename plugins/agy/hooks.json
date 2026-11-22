@@ -1,0 +1,49 @@
+{
+  "harness-kit": {
+    "SessionStart": [
+      {
+        "type": "command",
+        "command": "./bin/harness-rs hook --host agy SessionStart",
+        "timeout": 10
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "run_command|write_file|edit_file|read_file|view_file|write_to_file|replace_file_content|multi_replace_file_content|find_by_name|grep_search|list_dir",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./bin/harness-rs hook --host agy PreToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "run_command|write_file|edit_file|read_file|view_file|write_to_file|replace_file_content|multi_replace_file_content|find_by_name|grep_search|list_dir|call_mcp_tool|send_message|invoke_subagent|mcp_.*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "./bin/harness-rs hook --host agy PostToolUse",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "PostInvocation": [
+      {
+        "type": "command",
+        "command": "./bin/harness-rs hook --host agy PostInvocation",
+        "timeout": 5
+      }
+    ],
+    "Stop": [
+      {
+        "type": "command",
+        "command": "./bin/harness-rs hook --host agy Stop",
+        "timeout": 5
+      }
+    ]
+  }
+}

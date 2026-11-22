@@ -1,0 +1,109 @@
+# Hub policy rules overlay (test fixture; canonical copy: docs/hub-rules.example.toml in harness-kit, applied at HUB/.harness/rules.toml)
+# prefilter = any-of substrings (ascii case-insensitive, matched on quote-stripped command or cwd); rule skipped when none present. No prefilter => always runs.
+# Opt-ins (all OFF without this file): data_gate, claude_web, worktree_dir, and every rule below.
+worktree_dir = ".worktrees"
+
+# Protect the data directory from direct reads/writes (omit data_dir = resolved default).
+[data_gate]
+data_dir = "data"
+
+# Deny WebSearch/WebFetch on Claude.
+[claude_web]
+reason = "guard[claude-web]: use the lookup tool instead of WebSearch/WebFetch on Claude."
+
+[[path_rules]]
+id = "memories-guard-read"
+tools = ["Read"]
+action = "deny"
+match_kind = "resolved_regex"
+pattern = '(^|/)memories/entities(/|$)'
+reason = 'Khong doc truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) get <id> hoac context <id> --for <task> --budget N'
+
+[[path_rules]]
+id = "memories-guard-write"
+tools = ["Write", "Edit", "MultiEdit", "NotebookEdit"]
+action = "deny"
+match_kind = "resolved_regex"
+pattern = '(^|/)memories/entities(/|$)'
+reason = 'Khong ghi truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) assert|retract|log ...'
+
+[[path_rules]]
+id = "memories-guard-grep"
+tools = ["Grep", "Glob"]
+action = "deny"
+match_kind = "resolved_regex"
+pattern = '(^|/)(memories/entities(/|$)|memories$)'
+reason = 'Khong grep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) find <tu> (hoac get <id>)'
+
+[[agy_arg_scan]]
+id = "agy-memories-guard"
+action = "deny"
+match_kind = "resolved_regex"
+pattern = '(^|/)memories/entities(/|$)'
+exclude_keys = ["Content", "CodeContent", "ReplacementContent"]
+skip_command_line_on = ["run_command"]
+reason = "Khong truy cap truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) get <id> | find <tu>"
+
+[[bash_rules]]
+id = "memories-guard-worktree-script"
+kind = "worktree_script"
+prefilter = ["worktrees"]
+action = "deny"
+script_regex = '(^|/)(\.worktrees|\.claude/worktrees)/[^/]+/(hub/memory/[^/]+\.mjs|\.claude/hooks/(agent-activity|memories-lint)\.mjs)$'
+exclude_regex = '\.test\.mjs$'
+allow_env_vars = ["MEM_ROOT", "MEM_ROOTS"]
+allow_tmp_prefixes = ["/tmp", "/var/tmp", "/dev/shm"]
+ignore_script_paths = ["/work/hub/hub/memory/mem.mjs"]
+reason = "chay script mem tu worktree se ghi vao kho that; dat MEM_ROOT=/tmp/... hoac dung mem / MCP mem_* (du phong: mem-bun) / mem replay"
+
+[[bash_rules]]
+id = "memories-guard-bash"
+kind = "shell_access"
+prefilter = ["memories"]
+action = "deny"
+mention_regex = 'memories/+entities'
+dir_regex = '(^|/)memories/?$'
+allow_commands = ["git", "mem", "mem-bun"]
+allow_subcommands = ["harness mem"]
+allow_scripts = ["/work/hub/hub/memory/mem.mjs"]
+redirect_target_regex = 'memories'
+search_cmds = ["grep", "rg", "find", "cat", "tar", "cp", "du", "tree", "head", "tail", "less", "zcat"]
+recursive_ls_flag = true
+reason = 'Khong dung lenh shell tren memories/entities/ (chi mem/mem-bun hoac git). Doc/ghi: mem / MCP mem_* (du phong: mem-bun) get <id>|assert|retract|log|find ... Ghi bu: mem replay'
+
+[[bash_rules]]
+id = "mongo-guard"
+kind = "command_guard"
+prefilter = ["mongo", "2701"]
+tool_reason = "cong cu MongoDB"
+action = "ask"
+reason_prefix = "mongo-guard: "
+reason_suffix = "; can nguoi dung duyet"
+uri_regex = '''(?i)mongodb(\+srv)?://([^\s'"/]*)'''
+uri_allow_host_regex = '(?i)^(?:[^@]*@)?(127\.0\.0\.1|localhost):27018$'
+uri_reason = "chuoi ket noi MongoDB ngoai 127.0.0.1/localhost:27018"
+inline_exec_regex = '\b(node|bun|deno|python3?)\s+(?:-\S+\s+)*-(e|pe|p|c|-eval)\b'
+inline_keyword_regex = '(?i)mongodb|MongoClient|pymongo'
+inline_reason = "script inline truy cap MongoDB"
+tools = ["mongosh", "mongodump", "mongoexport", "mongorestore", "mongoimport", "mongofiles", "mongostat", "mongotop", "mongo"]
+backstop_tools = ["mongosh", "mongodump", "mongoexport", "mongorestore", "mongoimport", "mongofiles", "mongostat", "mongotop"]
+readonly_commands = ["grep", "rg", "ag", "echo", "printf", "cat", "less", "ls", "ps", "pgrep", "which", "type", "man"]
+kill_tools = ["pkill", "killall"]
+kill_arg_contains = "mongo"
+kill_reason = "dung tien trinh mongo"
+
+[[bash_rules.port_forward_rules]]
+regex = '\b(auto)?ssh\b.*\s-[A-Za-z]*L\s*\S*2701[789]'
+reason = "ssh port-forward toi MongoDB"
+
+[[bash_rules.port_forward_rules]]
+regex = '\bkubectl\b.*port-forward.*2701[789]'
+reason = "kubectl port-forward toi MongoDB"
+
+[bash_rules.allow_daemons]
+command = "mongod"
+required_port = "27018"
+path_flag = "--dbpath"
+allowed_paths_env = "MONGO_GUARD_ALLOWED_DBPATH"
+allowed_paths = "/work/app/.data"
+deny_reason = "mongod ngoai cong 27018/dbpath app-prod"

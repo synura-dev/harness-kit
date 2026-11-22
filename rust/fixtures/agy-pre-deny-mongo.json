@@ -1,0 +1,30 @@
+{
+  "name": "agy-pre-deny-mongo",
+  "host": "agy",
+  "event": "PreToolUse",
+  "note": "Legacy agy-native did not wire hub mongo-guard.py; unified Rust rules.toml maps mongo-guard (Claude ask) -> agy deny with [ASK] prefix.",
+  "input": {
+    "conversationId": "golden-test",
+    "workspacePaths": [
+      "/work/hub"
+    ],
+    "toolCall": {
+      "name": "run_command",
+      "args": {
+        "CommandLine": "mongosh --version",
+        "Cwd": "/work/hub"
+      }
+    }
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"decision\":\"deny\",\"reason\":\"[ASK] mongo-guard: cong cu MongoDB mongosh; can nguoi dung duyet\"}",
+    "stdout_json": {
+      "decision": "deny",
+      "reason": "[ASK] mongo-guard: cong cu MongoDB mongosh; can nguoi dung duyet"
+    },
+    "decision": "deny",
+    "rule": "mongo-guard",
+    "must_not_emit_updated_input": true
+  }
+}

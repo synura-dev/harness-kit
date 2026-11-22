@@ -1,0 +1,28 @@
+{
+  "name": "claude-pre-deny-mem",
+  "host": "claude",
+  "event": "PreToolUse",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "golden-test",
+    "cwd": "/work/hub",
+    "tool_name": "Read",
+    "tool_input": {
+      "file_path": "/work/hub/memories/entities/agent/scout/entity.yaml"
+    },
+    "tool_use_id": "toolu_golden_03"
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"Khong doc truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) get <id> hoac context <id> --for <task> --budget N\"}}",
+    "stdout_json": {
+      "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "Khong doc truc tiep memories/entities/. Dung: mem / MCP mem_* (du phong: mem-bun) get <id> hoac context <id> --for <task> --budget N"
+      }
+    },
+    "decision": "deny",
+    "rule": "memories-guard"
+  }
+}

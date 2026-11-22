@@ -2,6 +2,36 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.6.0
+### BREAKING
+- Viet lai core bang Rust: bo toan bo JS, ext, evolve, install. Binary doi ten `harness-rs`, dat o `plugins/claude/bin/harness-rs` va `plugins/agy/bin/harness-rs` (bo cuc `plugins/*`).
+- Bo legacy config/guard json; project `agy.off` bi bo qua.
+- Audit ghi ve `.harness/audit`.
+- Ten tool MCP khi chay qua plugin: `mcp__plugin_harness-kit_harness__*`.
+### Security
+- Lop luat hop nhat, fail-closed, gioi han stdin, allowlist git, prefilter escape.
+- Guard mac dinh: secret, rm, force-push; bao ve `.harness`.
+### Audit
+- Tokens/model lay tu transcript; redact; bo `prompt_len`/`error_len`/`out_len`.
+### Observe
+- Ngay moi, stream, Stop moi nhat.
+
+## 0.5.0
+### BREAKING
+- Go moi noi core goi kho tri thuc cu (`harness knowledge`): retro khong con ghi bao cao tuan vao kho, content-dupes bo nguon kho, bo 3 muc bao cao ROI/KPI/retire cua kho (`knowledge-roi`, `kpi-knowledge`, `knowledge-retire`) va chi so selfdev `roi_saved_tokens` (danh dau "(da bo)"), allowlist agy bo domain `knowledge`. Zone du lieu `knowledge` van giu.
+- Xoa lenh khong dung (0 lan dung/30 ngay hoac <= 4 lan ngoai loi); khoi phuc tu git history neu can: `evolve propose|check|apply|rollback|log|list|queue|propose-metric|dupes-content|autopilot`, `constrain proc`, `constrain worktree prune`, `constrain config sources`, `observe sizes`, `observe data-prune`, `data adopt`; skill `propose-automation`. Hook tu dong `proc-orphans` va `WorktreeRemove` van chay.
+- Bo LiteLLM khoi `observe report`.
+- Bo Obsidian khoi guard va report: `observe report --weekly/--out` khong con; lan chay hang tuan nay do kick noi bo.
+- `evolve` chi con `scan` va `retro`. Luat da ap dung (`evolve/rules/*.json`, `evolve/inject/*.md`) van co hieu luc; muon go thi xoa file bang tay (khong con lenh rollback).
+- Chi so selfdev da chet trong retro danh dau "(da bo)".
+### Added
+- `observe usage --by tool|mcp` (count, err, p50/max ms; MCP gom theo server); `--json` khong con bi cat hong, co truong `truncated`.
+- `kpi-context-tax` them `mcp_servers`; `mcp_schema_tokens` la null cho den khi co nguon.
+- Ext thoat ma 2 duoc bao la loi cach dung (severity `usage`, audit `kind: usage|error`), khong in trung.
+- `--help` o moi domain va lenh con; ext khong doi so in index; `data tail` vao manifest.
+### Notes
+- `harness/tools/adapters` giu lai (dev/sync dung).
+
 ## 0.4.9
 ### Added
 - Chinh sach dinh tuyen (mode/agy, gia model, nguong) doc tu `<project>/.harness/routing.json`, core trung lap cong cu; vi du `harness/observe/report/examples/hub-routing.json`.

@@ -1,0 +1,28 @@
+{
+  "name": "claude-pre-deny-py",
+  "host": "claude",
+  "event": "PreToolUse",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "golden-test",
+    "cwd": "/work/hub",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "python3 -c 'import os\nprint(1)'"
+    },
+    "tool_use_id": "toolu_golden_05"
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"bash-guard: python -c nhieu dong. Write file vao scratchpad roi chay (khong dung python - / python -c nhieu dong / heredoc dai).\"}}",
+    "stdout_json": {
+      "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "bash-guard: python -c nhieu dong. Write file vao scratchpad roi chay (khong dung python - / python -c nhieu dong / heredoc dai)."
+      }
+    },
+    "decision": "deny",
+    "rule": "bash-guard"
+  }
+}

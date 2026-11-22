@@ -1,0 +1,28 @@
+{
+  "name": "claude-pre-deny-env",
+  "host": "claude",
+  "event": "PreToolUse",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "golden-test",
+    "cwd": "/work/hub",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "cat /work/hub/.env"
+    },
+    "tool_use_id": "toolu_golden_02"
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":\"guard[config-dump]: Cam in noi dung file cau hinh/bi mat (.env, khoa, credential...). Dung sha256sum/wc/grep -n co gioi han. / Config/secret dump blocked; use sha256sum, wc, bounded grep -n.\"}}",
+    "stdout_json": {
+      "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "deny",
+        "permissionDecisionReason": "guard[config-dump]: Cam in noi dung file cau hinh/bi mat (.env, khoa, credential...). Dung sha256sum/wc/grep -n co gioi han. / Config/secret dump blocked; use sha256sum, wc, bounded grep -n."
+      }
+    },
+    "decision": "deny",
+    "rule": "config-dump"
+  }
+}

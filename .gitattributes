@@ -1,2 +1,2 @@
-bin/harness text eol=lf
-bin/*.cmd text eol=crlf
+plugins/*/bin/harness-rs binary
+*.sh text eol=lf

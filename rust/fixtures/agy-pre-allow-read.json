@@ -1,0 +1,27 @@
+{
+  "name": "agy-pre-allow-read",
+  "host": "agy",
+  "event": "PreToolUse",
+  "input": {
+    "conversationId": "golden-test",
+    "workspacePaths": [
+      "/work/hub"
+    ],
+    "toolCall": {
+      "name": "read_file",
+      "args": {
+        "Path": "/work/hub/AGENTS.md"
+      }
+    }
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"decision\":\"allow\"}",
+    "stdout_json": {
+      "decision": "allow"
+    },
+    "decision": "allow",
+    "must_not_emit_empty_object": true,
+    "must_not_emit_updated_input": true
+  }
+}

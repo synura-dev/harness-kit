@@ -2,3 +2,7 @@ data/
 node_modules/
 *.log
 *.tmp
+.harness/
+rust/harness/.src-tree
+docs/superpowers/
+docs/superpowers/

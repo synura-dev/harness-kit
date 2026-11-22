@@ -1,0 +1,16 @@
+{
+  "name": "claude-stop",
+  "host": "claude",
+  "event": "Stop",
+  "input": {
+    "hook_event_name": "Stop",
+    "session_id": "golden-test",
+    "cwd": "/work/hub",
+    "stop_hook_active": false
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{}",
+    "stdout_json": {}
+  }
+}

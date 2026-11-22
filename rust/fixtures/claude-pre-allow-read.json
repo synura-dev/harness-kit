@@ -1,0 +1,21 @@
+{
+  "name": "claude-pre-allow-read",
+  "host": "claude",
+  "event": "PreToolUse",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "golden-test",
+    "cwd": "/work/hub",
+    "tool_name": "Read",
+    "tool_input": {
+      "file_path": "/work/hub/AGENTS.md"
+    },
+    "tool_use_id": "toolu_golden_01"
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{}",
+    "stdout_json": {},
+    "decision": "allow"
+  }
+}

@@ -1,0 +1,21 @@
+{
+  "_doc": "Shared data registry (no project data). Key = first-level physical directory (or `path`). zone: system|knowledge|workspaces|external. class: log|cache|artifact|durable (default retention/caps per class, see src/data.rs). retentionDays overrides class. Only zones the Rust code actually writes are listed; add project zones in a project registry.",
+  "enforce": "warn",
+  "entries": {
+    "audit": {
+      "zone": "system",
+      "class": "log",
+      "owner": "audit",
+      "retentionDays": 90,
+      "note": "events 30d pruned by audit; digest 90d",
+      "target": "system/audit",
+      "path": "system/audit"
+    }
+  },
+  "reserved": [
+    "README.md",
+    "_inbox",
+    ".state",
+    ".harness-writers.json"
+  ]
+}

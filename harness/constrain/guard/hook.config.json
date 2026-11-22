@@ -1,9 +1,0 @@
-{
-  "mode": "enforce",
-  "logFile": "",
-  "maxInputBytes": 1048576,
-  "maxCommandChars": 100000,
-  "remoteHostAliases": [],
-  "allowlist": [],
-  "denyPatterns": []
-}

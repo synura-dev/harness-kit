@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "harness-kit",
-      "source": "./",
+      "source": "./plugins/claude",
       "description": "Lop rang buoc tat dinh cho agent.",
       "license": "Apache-2.0"
     }

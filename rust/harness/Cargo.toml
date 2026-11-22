@@ -1,0 +1,25 @@
+[package]
+name = "harness"
+version = "0.6.0"
+edition = "2021"
+description = "Native deterministic constraint, hook, audit, and MCP server binary for harness-kit"
+license = "Apache-2.0"
+
+[[bin]]
+name = "harness-rs"
+path = "src/main.rs"
+
+[dependencies]
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+clap = { version = "4", features = ["derive"] }
+globset = "0.4"
+regex = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+codegen-units = 1
+strip = true

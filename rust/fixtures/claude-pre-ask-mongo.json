@@ -1,0 +1,28 @@
+{
+  "name": "claude-pre-ask-mongo",
+  "host": "claude",
+  "event": "PreToolUse",
+  "input": {
+    "hook_event_name": "PreToolUse",
+    "session_id": "golden-test",
+    "cwd": "/work/hub",
+    "tool_name": "Bash",
+    "tool_input": {
+      "command": "mongosh --version"
+    },
+    "tool_use_id": "toolu_golden_04"
+  },
+  "expected": {
+    "exit_code": 0,
+    "stdout": "{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"ask\",\"permissionDecisionReason\":\"mongo-guard: cong cu MongoDB mongosh; can nguoi dung duyet\"}}",
+    "stdout_json": {
+      "hookSpecificOutput": {
+        "hookEventName": "PreToolUse",
+        "permissionDecision": "ask",
+        "permissionDecisionReason": "mongo-guard: cong cu MongoDB mongosh; can nguoi dung duyet"
+      }
+    },
+    "decision": "ask",
+    "rule": "mongo-guard"
+  }
+}

@@ -1,5 +1,0 @@
-{
-  "enabled": true,
-  "minAgeSec": 5,
-  "scanCacheTtlSec": 60
-}
