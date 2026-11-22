@@ -147,8 +147,7 @@ pub(super) fn eval_core_guard(
             ));
         }
         let ncmd = collapse_line_continuations(cmd);
-        let audit_txt = audit_root.to_string_lossy().replace('\\', "/");
-        if hit_protected_path(&ncmd, std::slice::from_ref(&audit_txt)) && !is_pure_read_cmd(&ncmd) {
+        if bash_touches_audit(&ncmd, audit_root, tool_cwd, 0) {
             return Some(("audit-protect".to_string(), AUDIT_PROTECT_REASON.to_string()));
         }
         if hit_protected_path(&ncmd, protected_paths) {
@@ -432,9 +431,147 @@ pub(super) fn is_rules_file(np: &str) -> bool {
 /// shortcut: quote-split spellings like '.har''ness' are not caught.
 const RO: &str = r"(?:(?:cat|ls|head|tail|grep|wc|stat)(?:\s[^;&|<>`$()\n]*)?|find(?:\s+(?:[^\s;&|<>`$()\n-][^\s;&|<>`$()\n]*|-(?:name|iname|type|maxdepth|path)\s+\S+))*)";
 
-fn is_pure_read_cmd(cmd: &str) -> bool {
-    let pat = format!(r"^\s*{RO}(?:\|\s*{RO})*\s*$");
-    Regex::new(&pat).is_ok_and(|re| re.is_match(cmd))
+/// Resolve `p`: symlinks of the deepest existing ancestor (fail-open: returns `p` unchanged).
+fn resolve_deep(p: &Path) -> PathBuf {
+    let mut rest: Vec<std::ffi::OsString> = Vec::new();
+    let mut cur = p.to_path_buf();
+    loop {
+        if let Ok(real) = cur.canonicalize() {
+            return rest.iter().rev().fold(real, |a, r| a.join(r));
+        }
+        match (cur.file_name().map(|f| f.to_os_string()), cur.parent()) {
+            (Some(n), Some(par)) => {
+                rest.push(n);
+                cur = par.to_path_buf();
+            }
+            _ => return p.to_path_buf(),
+        }
+    }
+}
+
+const READ_VERBS: &[&str] = &[
+    "cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "jq", "file", "sort", "uniq", "cut", "tr",
+    "diff", "tree", "readlink", "realpath", "sha256sum", "md5sum", "basename", "dirname", "pwd", "echo", "true",
+];
+const DESTRUCTIVE_VERBS: &[&str] = &[
+    "rm", "rmdir", "mv", "truncate", "tee", "chmod", "chown", "cp", "ln", "dd", "shred", "unlink", "install", "rsync",
+];
+
+/// Does one path token (resolved against `cwd`) hit the audit root? Inside always hits; the root
+/// being inside the token (ancestor, or a glob matching root or one of its ancestors) hits only
+/// when `destructive`.
+fn audit_path_hit(tok: &str, cwd: &Path, root: &Path, destructive: bool) -> bool {
+    let tok = tok.trim();
+    // shortcut: variable indirection ($D, `cmd`) and ~ cannot be resolved statically; not caught.
+    if tok.is_empty() || tok.starts_with('~') || tok.contains(['$', '`']) {
+        return false;
+    }
+    let Some(gi) = tok.find(['*', '?', '[', '{']) else {
+        let p = resolve_deep(&crate::config::lexical_path(cwd, tok));
+        // ancestors count only down to the data dir (<data>/system/audit): wider ones (workspace, /)
+        // are the job of rm-recursive-outside, not of this guard.
+        let floor = if root.ends_with("system/audit") { root.ancestors().nth(2).unwrap_or(root) } else { root };
+        return p.starts_with(root) || (destructive && root.starts_with(&p) && p.starts_with(floor));
+    };
+    // glob: resolve the literal directory part, keep the pattern tail
+    let (dir_part, tail) = match tok[..gi].rfind('/') {
+        Some(i) => (&tok[..=i], &tok[i + 1..]),
+        None => ("", tok),
+    };
+    let dir = resolve_deep(&crate::config::lexical_path(cwd, if dir_part.is_empty() { "." } else { dir_part }));
+    if dir.starts_with(root) {
+        return true;
+    }
+    if !destructive {
+        return false;
+    }
+    let pat = format!("{}/{}", dir.to_string_lossy().trim_end_matches('/'), tail);
+    let Ok(g) = globset::GlobBuilder::new(&pat).literal_separator(true).build() else {
+        return false;
+    };
+    let m = g.compile_matcher();
+    let depth = if root.ends_with("system/audit") { 3 } else { 1 };
+    root.ancestors().take(depth).any(|a| m.is_match(a))
+}
+
+/// Segment-wise: tracks `cd X` for the effective cwd; read-only verbs never hit; destructive verbs
+/// hit on the audit root, anything below it, or an ancestor; unknown verbs hit on inside/verbatim mention.
+fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) -> bool {
+    if depth > 4 {
+        return false;
+    }
+    let root = resolve_deep(audit_root);
+    let audit_txt = audit_root.to_string_lossy().replace('\\', "/");
+    let mut cwd = cwd.to_path_buf();
+    for seg in split_shell_segments(cmd) {
+        let raw = shell_tokens(&seg);
+        if raw.is_empty() {
+            continue;
+        }
+        let u = unwrap_shell_prefix(&raw);
+        for s in &u.env_scripts {
+            if bash_touches_audit(s, audit_root, &cwd, depth + 1) {
+                return true;
+            }
+        }
+        let toks = u.rest;
+        let Some(first) = toks.first() else { continue };
+        let verb = basename(first.trim_start_matches('\\'));
+        if matches!(verb, "sh" | "bash" | "zsh" | "dash" | "ksh") {
+            if let Some(k) = toks.iter().skip(1).position(|t| is_shell_c_flag(t)) {
+                if let Some(inner) = toks.get(k + 2) {
+                    if bash_touches_audit(inner, audit_root, &cwd, depth + 1) {
+                        return true;
+                    }
+                }
+            }
+            continue;
+        }
+        if matches!(verb, "cd" | "pushd") {
+            if let Some(t) = toks.get(1).filter(|t| !t.contains(['$', '`']) && !t.starts_with(['~', '-'])) {
+                cwd = crate::config::lexical_path(&cwd, t);
+            }
+            continue;
+        }
+        let find_del = verb == "find"
+            && toks.iter().any(|t| matches!(t.as_str(), "-delete" | "-exec" | "-execdir" | "-ok" | "-okdir" | "-fprint" | "-fls"));
+        let is_dest = DESTRUCTIVE_VERBS.contains(&verb) || find_del;
+        let mut destructive = is_dest;
+        let mut cands: Vec<String> = Vec::new();
+        if let Some(re) = regex_cached(r#">>?\s*([^\s;&|<>]+)"#) {
+            for c in re.captures_iter(&seg) {
+                let t = c[1].trim_matches(['"', '\'']).to_string();
+                if t != "/dev/null" {
+                    destructive = true;
+                    cands.push(t);
+                }
+            }
+        }
+        if !destructive && (READ_VERBS.contains(&verb) || verb == "find") {
+            continue;
+        }
+        // find: only the leading path operands, not -name patterns
+        let args: Vec<&str> = if verb == "find" {
+            toks[1..].iter().map(String::as_str).take_while(|t| !t.starts_with(['-', '(', '!'])).collect()
+        } else {
+            toks[1..].iter().map(String::as_str).filter(|t| !t.starts_with('-')).collect()
+        };
+        if matches!(verb, "cp" | "rsync" | "install") {
+            cands.extend(args.last().map(|s| s.to_string()));
+        } else {
+            cands.extend(args.iter().map(|s| s.to_string()));
+            if is_dest && args.is_empty() {
+                cands.push(".".to_string());
+            }
+        }
+        if cands.iter().any(|t| audit_path_hit(t, &cwd, &root, destructive)) {
+            return true;
+        }
+        if !is_dest && hit_protected_path(&seg, std::slice::from_ref(&audit_txt)) {
+            return true;
+        }
+    }
+    false
 }
 
 const AUDIT_PROTECT_REASON: &str = "guard[audit-protect]: Cam ghi/xoa audit log (<data>/system/audit); chi doc qua harness observe. / The audit log is tamper-protected; read it via harness observe.";
@@ -442,24 +579,8 @@ const AUDIT_PROTECT_REASON: &str = "guard[audit-protect]: Cam ghi/xoa audit log 
 /// True when `np` (absolute or relative to `cwd`) is the audit root or below it, symlinks of the
 /// deepest existing ancestor resolved. Independent of the data_gate opt-in.
 fn in_audit_root(np: &str, audit_root: &Path, cwd: &Path) -> bool {
-    fn resolve(p: &Path) -> PathBuf {
-        let mut rest: Vec<std::ffi::OsString> = Vec::new();
-        let mut cur = p.to_path_buf();
-        loop {
-            if let Ok(real) = cur.canonicalize() {
-                return rest.iter().rev().fold(real, |a, r| a.join(r));
-            }
-            match (cur.file_name().map(|f| f.to_os_string()), cur.parent()) {
-                (Some(n), Some(par)) => {
-                    rest.push(n);
-                    cur = par.to_path_buf();
-                }
-                _ => return p.to_path_buf(),
-            }
-        }
-    }
-    let target = resolve(&crate::config::lexical_path(cwd, np));
-    target.starts_with(resolve(audit_root))
+    let target = resolve_deep(&crate::config::lexical_path(cwd, np));
+    target.starts_with(resolve_deep(audit_root))
 }
 
 pub(super) fn rules_mention_bash_spec(action: RuleAction) -> BashRuleSpec {

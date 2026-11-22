@@ -737,6 +737,58 @@ deny_reason = "r"
     }
 
     #[test]
+    fn audit_protect_bash_bypasses_are_denied() {
+        let eng = RulesEngine::empty();
+        for cmd in [
+            "rm -rf data/system/audit",
+            "cd data && rm -rf system/audit",
+            "rm -rf /work/hub/data/system",
+            "find /work/hub/data/system -delete",
+            "rm -rf /work/hub/data/system/aud*",
+            "mv /work/hub/data/system /tmp/x",
+            "tee /work/hub/data/system/audit/f < /dev/null",
+            "cd /work/hub/data/system/audit && rm -rf .",
+            "cd /work/hub/data/system/audit && rm *",
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_eq!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn audit_protect_resolves_symlinked_data_dir() {
+        let (_g, ws, _home) = t4_env("auditlink");
+        std::fs::create_dir_all(ws.join("real/system/audit")).unwrap();
+        std::os::unix::fs::symlink(ws.join("real"), ws.join("data")).unwrap();
+        let root = ws.join("real/system/audit");
+        let payload = serde_json::json!({"hook_event_name": "PreToolUse", "session_id": "t", "cwd": ws,
+            "tool_name": "Bash", "tool_input": {"command": "rm -rf data/system"}});
+        let input = parse_stdin(Host::Claude, Some("PreToolUse"), payload.to_string().as_bytes()).unwrap();
+        let hit = eval_core_guard(&input, &[], &[], None, &root, &ws);
+        assert_eq!(hit.map(|h| h.0), Some("audit-protect".to_string()));
+    }
+
+    #[test]
+    fn audit_protect_read_only_commands_stay_allowed() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for cmd in [
+            format!("du -sh {a}"),
+            format!("jq . {a}/x.jsonl"),
+            format!("stat {a}"),
+            format!("file {a}/x"),
+            format!("cat {a}/x 2>/dev/null"),
+            format!("cat {a}/x 2>&1"),
+            format!("ls {a} | sort"),
+            format!("cd {a} && ls"),
+            "rm -rf /work/hub/data/other".to_string(),
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_ne!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
     fn core_protects_harness_dir_writes() {
         let (_g, ws, _home) = t4_env("coreprot");
         let eng = RulesEngine::empty();
