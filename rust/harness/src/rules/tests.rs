@@ -823,6 +823,19 @@ deny_reason = "r"
     }
 
     #[test]
+    fn audit_bulk_ask_does_not_shadow_later_deny() {
+        let root = PathBuf::from("/work/hub/data/system/audit");
+        let run = |cmd: &str| {
+            let payload = serde_json::json!({"hook_event_name": "PreToolUse", "session_id": "t", "cwd": "/work/hub",
+                "tool_name": "Bash", "tool_input": {"command": cmd}});
+            let input = parse_stdin(Host::Claude, Some("PreToolUse"), payload.to_string().as_bytes()).unwrap();
+            eval_core_guard(&input, &["secretdir".to_string()], &[], None, &root, Path::new("/work/hub")).map(|h| h.0)
+        };
+        assert_eq!(run("find . -name '*.tmp' -delete").as_deref(), Some("audit-protect-bulk"));
+        assert_eq!(run("find . -name '*.tmp' -delete; ls secretdir/x").as_deref(), Some("protected-path"));
+    }
+
+    #[test]
     fn audit_protect_resolves_symlinked_data_dir() {
         let (_g, ws, _home) = t4_env("auditlink");
         std::fs::create_dir_all(ws.join("real/system/audit")).unwrap();

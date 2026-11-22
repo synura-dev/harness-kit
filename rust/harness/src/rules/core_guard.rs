@@ -147,10 +147,11 @@ pub(super) fn eval_core_guard(
             ));
         }
         let ncmd = collapse_line_continuations(cmd);
+        // the bulk Ask is held back: every later guard is a Deny and must win over it
+        let mut pending_ask = None;
         match bash_touches_audit(&ncmd, audit_root, tool_cwd, 0) {
             2 => return Some(("audit-protect".to_string(), AUDIT_PROTECT_REASON.to_string())),
-            // shortcut: an ask here pre-empts later guards (protected-path); the user still reviews it
-            1 => return Some(("audit-protect-bulk".to_string(), AUDIT_BULK_REASON.to_string())),
+            1 => pending_ask = Some(("audit-protect-bulk".to_string(), AUDIT_BULK_REASON.to_string())),
             _ => {}
         }
         if hit_protected_path(&ncmd, protected_paths) {
@@ -165,6 +166,7 @@ pub(super) fn eval_core_guard(
                 "guard[config-dump]: Cam in noi dung file cau hinh/bi mat (.env, khoa, credential...). Dung sha256sum/wc/grep -n co gioi han. / Config/secret dump blocked; use sha256sum, wc, bounded grep -n.".to_string(),
             ));
         }
+        return pending_ask;
     }
 
     None
