@@ -18,6 +18,11 @@ if [ "$(sha256sum "$C" | cut -d' ' -f1)" != "$(sha256sum "$A" | cut -d' ' -f1)" 
   echo "sha256 differs between plugins" >&2; exit 1
 fi
 
+for p in claude agy; do
+  m="$(git -c safe.directory="*" -C "$ROOT" ls-files -s "plugins/$p/bin/harness-rs" | cut -d" " -f1)"
+  if [ "$m" != "100755" ]; then echo "index mode $m != 100755: plugins/$p/bin/harness-rs" >&2; exit 1; fi
+done
+
 want="$(git -c safe.directory='*' -C "$ROOT" rev-parse HEAD:rust/harness | cut -c1-12)"
 got="$("$C" --version | sed -n 's/.*(src \([0-9a-f]*\)).*/\1/p')"
 if [ "$got" != "$want" ]; then

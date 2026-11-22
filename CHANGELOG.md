@@ -2,6 +2,9 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.6.1
+- Fix: ship harness-rs with executable bit (hooks/MCP failed with Permission denied on 0.6.0).
+
 ## 0.6.0
 ### BREAKING
 - Viet lai core bang Rust: bo toan bo JS, ext, evolve, install. Binary doi ten `harness-rs`, dat o `plugins/claude/bin/harness-rs` va `plugins/agy/bin/harness-rs` (bo cuc `plugins/*`).
