@@ -451,7 +451,7 @@ fn resolve_deep(p: &Path) -> PathBuf {
 
 const READ_VERBS: &[&str] = &[
     "cat", "ls", "head", "tail", "grep", "wc", "stat", "du", "jq", "file", "sort", "uniq", "cut", "tr",
-    "diff", "tree", "readlink", "realpath", "sha256sum", "md5sum", "basename", "dirname", "pwd", "echo", "true",
+    "diff", "tree", "readlink", "realpath", "sha256sum", "md5sum", "basename", "dirname", "pwd", "echo", "true", "rg", "less", "zcat", "zgrep",
 ];
 const DESTRUCTIVE_VERBS: &[&str] = &[
     "rm", "rmdir", "mv", "truncate", "tee", "chmod", "chown", "cp", "ln", "dd", "shred", "unlink", "install", "rsync",
@@ -460,7 +460,7 @@ const DESTRUCTIVE_VERBS: &[&str] = &[
 /// Does one path token (resolved against `cwd`) hit the audit root? Inside always hits; the root
 /// being inside the token (ancestor, or a glob matching root or one of its ancestors) hits only
 /// when `destructive`.
-fn audit_path_hit(tok: &str, cwd: &Path, root: &Path, destructive: bool) -> bool {
+fn audit_path_hit(tok: &str, cwd: &Path, root: &Path, destructive: bool, bulk: bool) -> bool {
     let tok = tok.trim();
     // shortcut: variable indirection ($D, `cmd`) and ~ cannot be resolved statically; not caught.
     if tok.is_empty() || tok.starts_with('~') || tok.contains(['$', '`']) {
@@ -470,7 +470,7 @@ fn audit_path_hit(tok: &str, cwd: &Path, root: &Path, destructive: bool) -> bool
         let p = resolve_deep(&crate::config::lexical_path(cwd, tok));
         // ancestors count only down to the data dir (<data>/system/audit): wider ones (workspace, /)
         // are the job of rm-recursive-outside, not of this guard.
-        let floor = if root.ends_with("system/audit") { root.ancestors().nth(2).unwrap_or(root) } else { root };
+        let floor = if bulk { Path::new("/") } else if root.ends_with("system/audit") { root.ancestors().nth(2).unwrap_or(root) } else { root };
         return p.starts_with(root) || (destructive && root.starts_with(&p) && p.starts_with(floor));
     };
     // glob: resolve the literal directory part, keep the pattern tail
@@ -494,6 +494,53 @@ fn audit_path_hit(tok: &str, cwd: &Path, root: &Path, destructive: bool) -> bool
     root.ancestors().take(depth).any(|a| m.is_match(a))
 }
 
+/// Redirect targets (`>`, `>>`, `&>`, `2>`) outside quotes; fd dups (`>&2`) skipped.
+fn redirect_targets(seg: &str) -> Vec<String> {
+    let c: Vec<char> = seg.chars().collect();
+    let mut out = Vec::new();
+    let (mut q, mut i) = (None::<char>, 0);
+    while i < c.len() {
+        let ch = c[i];
+        if let Some(qq) = q {
+            if ch == qq {
+                q = None;
+            }
+        } else if ch == '\'' || ch == '"' {
+            q = Some(ch);
+        } else if ch == '>' {
+            i += 1;
+            if i < c.len() && c[i] == '>' {
+                i += 1;
+            }
+            while i < c.len() && c[i].is_whitespace() {
+                i += 1;
+            }
+            if i < c.len() && c[i] == '&' {
+                continue;
+            }
+            let mut t = String::new();
+            let mut tq = None::<char>;
+            while i < c.len() {
+                let x = c[i];
+                match tq {
+                    Some(qq) if x == qq => tq = None,
+                    Some(_) => t.push(x),
+                    None if x == '\'' || x == '"' => tq = Some(x),
+                    None if x.is_whitespace() || matches!(x, ';' | '&' | '|' | '<' | '>') => break,
+                    None => t.push(x),
+                }
+                i += 1;
+            }
+            if !t.is_empty() {
+                out.push(t);
+            }
+            continue;
+        }
+        i += 1;
+    }
+    out
+}
+
 /// Segment-wise: tracks `cd X` for the effective cwd; read-only verbs never hit; destructive verbs
 /// hit on the audit root, anything below it, or an ancestor; unknown verbs hit on inside/verbatim mention.
 fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) -> bool {
@@ -504,7 +551,20 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
     let audit_txt = audit_root.to_string_lossy().replace('\\', "/");
     let mut cwd = cwd.to_path_buf();
     for seg in split_shell_segments(cmd) {
-        let raw = shell_tokens(&seg);
+        let mut raw = shell_tokens(&seg);
+        // strip grouping/negation: `(cd d`, `{ cd d`, `! rm`, trailing `}`
+        while let Some(f) = raw.first_mut() {
+            let t = f.trim_start_matches(['(', '{', '!']).to_string();
+            if t.is_empty() {
+                raw.remove(0);
+            } else {
+                *f = t;
+                break;
+            }
+        }
+        while raw.last().is_some_and(|t| t == "}" || t == ")") {
+            raw.pop();
+        }
         if raw.is_empty() {
             continue;
         }
@@ -535,17 +595,24 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         }
         let find_del = verb == "find"
             && toks.iter().any(|t| matches!(t.as_str(), "-delete" | "-exec" | "-execdir" | "-ok" | "-okdir" | "-fprint" | "-fls"));
-        let is_dest = DESTRUCTIVE_VERBS.contains(&verb) || find_del;
-        let mut destructive = is_dest;
+        // conditional bulk deleters: whatever they match under cwd may include the audit log, so ANY
+        // ancestor of the root (workspace, cwd) is a hit
+        let xargs_del = verb == "xargs" && toks[1..].iter().any(|t| DESTRUCTIVE_VERBS.contains(&basename(t)));
+        let git_clean = verb == "git" && toks.get(1).is_some_and(|t| t == "clean") && {
+            let fl: String = toks[2..].iter().filter(|t| t.starts_with('-') && !t.starts_with("--")).flat_map(|t| t.chars().skip(1)).collect();
+            fl.contains(['x', 'X']) || (fl.contains('d') && fl.contains('f'))
+        };
+        // find -exec/-ok only counts as bulk when the executed command is a destructive verb
+        let find_bulk = verb == "find"
+            && (toks.iter().any(|t| t == "-delete")
+                || (find_del && toks.iter().any(|t| DESTRUCTIVE_VERBS.contains(&basename(t)))));
+        let bulk = find_bulk || xargs_del || git_clean;
+        let is_dest = DESTRUCTIVE_VERBS.contains(&verb) || find_del || bulk;
+        let destructive = is_dest;
         let mut cands: Vec<String> = Vec::new();
-        if let Some(re) = regex_cached(r#">>?\s*([^\s;&|<>]+)"#) {
-            for c in re.captures_iter(&seg) {
-                let t = c[1].trim_matches(['"', '\'']).to_string();
-                if t != "/dev/null" {
-                    destructive = true;
-                    cands.push(t);
-                }
-            }
+        // redirects count only outside quotes and only when the TARGET is in the audit root
+        if redirect_targets(&seg).iter().any(|t| t != "/dev/null" && audit_path_hit(t, &cwd, &root, true, false)) {
+            return true;
         }
         if !destructive && (READ_VERBS.contains(&verb) || verb == "find") {
             continue;
@@ -553,6 +620,10 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
         // find: only the leading path operands, not -name patterns
         let args: Vec<&str> = if verb == "find" {
             toks[1..].iter().map(String::as_str).take_while(|t| !t.starts_with(['-', '(', '!'])).collect()
+        } else if xargs_del || git_clean {
+            Vec::new()
+        } else if verb == "dd" {
+            toks[1..].iter().filter_map(|t| t.strip_prefix("of=")).collect()
         } else {
             toks[1..].iter().map(String::as_str).filter(|t| !t.starts_with('-')).collect()
         };
@@ -560,11 +631,11 @@ fn bash_touches_audit(cmd: &str, audit_root: &Path, cwd: &Path, depth: usize) ->
             cands.extend(args.last().map(|s| s.to_string()));
         } else {
             cands.extend(args.iter().map(|s| s.to_string()));
-            if is_dest && args.is_empty() {
+            if is_dest && args.is_empty() && verb != "dd" {
                 cands.push(".".to_string());
             }
         }
-        if cands.iter().any(|t| audit_path_hit(t, &cwd, &root, destructive)) {
+        if cands.iter().any(|t| audit_path_hit(t, &cwd, &root, destructive, bulk)) {
             return true;
         }
         if !is_dest && hit_protected_path(&seg, std::slice::from_ref(&audit_txt)) {
@@ -744,7 +815,20 @@ fn scan_default_bash(cmd: &str, ws: &Path, cwd: &Path, depth: usize) -> Option<&
     }
     let mut cwd = cwd.to_path_buf();
     for seg in split_shell_segments(cmd) {
-        let raw = shell_tokens(&seg);
+        let mut raw = shell_tokens(&seg);
+        // strip grouping/negation: `(cd d`, `{ cd d`, `! rm`, trailing `}`
+        while let Some(f) = raw.first_mut() {
+            let t = f.trim_start_matches(['(', '{', '!']).to_string();
+            if t.is_empty() {
+                raw.remove(0);
+            } else {
+                *f = t;
+                break;
+            }
+        }
+        while raw.last().is_some_and(|t| t == "}" || t == ")") {
+            raw.pop();
+        }
         if raw.is_empty() {
             continue;
         }

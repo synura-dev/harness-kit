@@ -756,6 +756,45 @@ deny_reason = "r"
     }
 
     #[test]
+    fn audit_protect_r2_groupings_and_bulk_deleters_denied() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for cmd in [
+            "(cd /work/hub/data && rm -rf system/audit)".to_string(),
+            "{ cd /work/hub/data; rm -rf system/audit; }".to_string(),
+            "cd /work/hub/data && find . -name '*.jsonl' -delete".to_string(),
+            "cd /work/hub/data && find . -exec rm {} +".to_string(),
+            "cd /work/hub/data && find . -name '*.jsonl' | xargs rm -f".to_string(),
+            "cd /work/hub/data && git clean -fdx".to_string(),
+            "cd /work/hub && find . -name '*.jsonl' -delete".to_string(),
+            format!("dd if=/dev/zero of={a}/x.jsonl"),
+            format!("echo x >{a}/f"),
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_eq!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
+    fn audit_protect_r2_quoted_redirect_and_new_read_verbs_allowed() {
+        let eng = RulesEngine::empty();
+        let a = "/work/hub/data/system/audit";
+        for cmd in [
+            format!("jq 'select(.dur > 1000)' {a}/x.jsonl"),
+            format!("grep '=>' {a}/f"),
+            format!("cat {a}/x.jsonl > /tmp/y"),
+            format!("cd {a} && wc -l * > /tmp/o"),
+            format!("rg foo {a}"),
+            format!("less {a}/x"),
+            format!("zcat {a}/x.gz"),
+            format!("zgrep foo {a}/x.gz"),
+        ] {
+            let r = eval_claude(&eng, "Bash", serde_json::json!({"command": cmd}));
+            assert_ne!(r.decision, Some(Decision::Deny), "{cmd}");
+        }
+    }
+
+    #[test]
     fn audit_protect_resolves_symlinked_data_dir() {
         let (_g, ws, _home) = t4_env("auditlink");
         std::fs::create_dir_all(ws.join("real/system/audit")).unwrap();

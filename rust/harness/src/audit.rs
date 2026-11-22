@@ -320,12 +320,17 @@ pub fn write_envelope(env: &EnvelopeV2, root: &Path, max_file_bytes: u64) {
     if fs::create_dir_all(&dir).is_err() {
         return;
     }
+    append_line(&dir, &env.sid, &line, max_file_bytes);
+    // prune AFTER the event is written (once per new date partition, fail-open) so a slow first
+    // prune can never lose the triggering event
     if new_day {
         prune_old_partitions(root, date_part, crate::data::audit_retention_days(), MAX_PRUNE_DIRS);
     }
+}
 
+fn append_line(dir: &Path, sid: &str, line: &str, max_file_bytes: u64) {
     let len = line.len() as u64;
-    let Some(target) = pick_partition_file(&dir, &env.sid, max_file_bytes, len) else {
+    let Some(target) = pick_partition_file(dir, sid, max_file_bytes, len) else {
         return;
     };
 
