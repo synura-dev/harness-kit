@@ -446,7 +446,12 @@ where
     if !cleaned.is_empty() {
         return finish_sid(cli, &cleaned);
     }
-    for key in ["CLAUDE_SESSION_ID", "AGY_SESSION_ID", "HARNESS_SESSION_ID"] {
+    let env_keys = if cli == "agy" {
+        ["AGY_SESSION_ID", "HARNESS_SESSION_ID", "CLAUDE_SESSION_ID"]
+    } else {
+        ["CLAUDE_SESSION_ID", "HARNESS_SESSION_ID", "AGY_SESSION_ID"]
+    };
+    for key in env_keys {
         if let Some(val) = env_get(key) {
             let from_env = clean_sid(&val);
             if !from_env.is_empty() {
@@ -1665,11 +1670,16 @@ mod tests {
         assert_ne!(a, build_sid_with("agy", None, "/tmp/x", no_env));
 
         let with_env = |k: &str| match k {
+            "CLAUDE_SESSION_ID" => Some("cl_sess".to_string()),
             "AGY_SESSION_ID" => Some("agy/sess#1".to_string()),
             "HARNESS_SESSION_ID" => Some("h_sess".to_string()),
             _ => None,
         };
         assert_eq!(build_sid_with("agy", None, "/tmp/x", with_env), "agy-agysess1");
+        assert_eq!(
+            build_sid_with("claude", None, "/tmp/x", with_env),
+            "claude-cl_sess"
+        );
         assert_eq!(
             build_sid_with("agy", Some("raw_99"), "/tmp/x", with_env),
             "agy-raw_99"
