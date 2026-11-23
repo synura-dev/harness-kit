@@ -427,20 +427,35 @@ pub fn event_type(event: &str) -> &'static str {
     }
 }
 
-pub fn build_sid(cli: &str, raw_sid: Option<&str>, cwd: &str) -> String {
-    let cleaned: String = raw_sid
-        .unwrap_or("")
-        .chars()
+fn clean_sid(raw: &str) -> String {
+    raw.chars()
         .filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-')
         .take(64)
-        .collect();
-    let base = if !cleaned.is_empty() {
-        cleaned
-    } else {
-        // Hook's own pid differs per call; the parent (the CLI) is stable across a session.
-        return finish_sid(cli, &sid_for_pid(cli, cwd, parent_pid()));
-    };
-    finish_sid(cli, &base)
+        .collect()
+}
+
+pub fn build_sid(cli: &str, raw_sid: Option<&str>, cwd: &str) -> String {
+    build_sid_with(cli, raw_sid, cwd, |k| std::env::var(k).ok())
+}
+
+fn build_sid_with<F>(cli: &str, raw_sid: Option<&str>, cwd: &str, env_get: F) -> String
+where
+    F: Fn(&str) -> Option<String>,
+{
+    let cleaned = raw_sid.map(clean_sid).unwrap_or_default();
+    if !cleaned.is_empty() {
+        return finish_sid(cli, &cleaned);
+    }
+    for key in ["CLAUDE_SESSION_ID", "AGY_SESSION_ID", "HARNESS_SESSION_ID"] {
+        if let Some(val) = env_get(key) {
+            let from_env = clean_sid(&val);
+            if !from_env.is_empty() {
+                return finish_sid(cli, &from_env);
+            }
+        }
+    }
+    // Audit files are already partitioned by date; grouping missing-sid calls by (cli, cwd) avoids one file per subshell/pid.
+    finish_sid(cli, &sid_for_cwd(cli, cwd))
 }
 
 const TRANSCRIPT_TAIL_BYTES: u64 = 8 * 1024 * 1024;
@@ -539,19 +554,8 @@ fn read_transcript_usage(path: &Path) -> Option<TranscriptUsage> {
     })
 }
 
-fn parent_pid() -> u32 {
-    #[cfg(unix)]
-    {
-        std::os::unix::process::parent_id()
-    }
-    #[cfg(not(unix))]
-    {
-        std::process::id() // shortcut: no ppid in std on non-unix; sid is per-call there.
-    }
-}
-
-fn sid_for_pid(cli: &str, cwd: &str, pid: u32) -> String {
-    let seed = format!("{cli}|{cwd}|{pid}");
+fn sid_for_cwd(cli: &str, cwd: &str) -> String {
+    let seed = format!("{cli}|{cwd}");
     let mut h: u32 = 5381;
     for b in seed.bytes() {
         h = h.wrapping_mul(33) ^ (b as u32);
@@ -1651,14 +1655,24 @@ mod tests {
     }
 
     #[test]
-    fn sid_fallback_uses_ppid() {
-        let a = build_sid("claude", None, "/tmp/x");
-        let b = build_sid("claude", None, "/tmp/x");
+    fn sid_fallback_uses_env_then_cwd() {
+        let no_env = |_: &str| None;
+        let a = build_sid_with("claude", None, "/tmp/x", no_env);
+        let b = build_sid_with("claude", Some("!!!"), "/tmp/x", no_env);
         assert_eq!(a, b);
-        #[cfg(unix)]
-        {
-            let pp = std::os::unix::process::parent_id();
-            assert_eq!(a, format!("claude-{}", sid_for_pid("claude", "/tmp/x", pp)));
-        }
+        assert_eq!(a, format!("claude-{}", sid_for_cwd("claude", "/tmp/x")));
+        assert_ne!(a, build_sid_with("claude", None, "/tmp/y", no_env));
+        assert_ne!(a, build_sid_with("agy", None, "/tmp/x", no_env));
+
+        let with_env = |k: &str| match k {
+            "AGY_SESSION_ID" => Some("agy/sess#1".to_string()),
+            "HARNESS_SESSION_ID" => Some("h_sess".to_string()),
+            _ => None,
+        };
+        assert_eq!(build_sid_with("agy", None, "/tmp/x", with_env), "agy-agysess1");
+        assert_eq!(
+            build_sid_with("agy", Some("raw_99"), "/tmp/x", with_env),
+            "agy-raw_99"
+        );
     }
 }
