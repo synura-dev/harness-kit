@@ -2,6 +2,10 @@
 
 GitHub releases and commit history are the source of truth going forward. This file preserves the entries that existed before publication.
 
+## 0.6.3
+- Audit `build_sid`: when `session_id` is absent from stdin payload, fall back to session env vars (`AGY_SESSION_ID`/`CLAUDE_SESSION_ID`/`HARNESS_SESSION_ID` prioritized by host `cli`) before grouping missing-sid events per day by `(cli, cwd)` instead of spawning one file per subshell `pid`.
+- Test stability: `observe_streams_without_vec` runs 20k events with a 60s ceiling in debug builds while keeping the 200k / 2s check in release builds.
+
 ## 0.6.2
 - Audit log now lives under the data layout: `<data>/system/audit` (registry `audit` target); `CLAUDE_AUDIT_DIR` removed (use `HUB_DATA_DIR`). New core guard `audit-protect` denies agent writes/deletes there regardless of data_gate; reads via `harness observe`. Existing data: move the old per-project audit partitions into `<data>/system/audit/`.
 - Audit writer now prunes `date=` partitions older than 30 days (registry `retentionDays` 90 -> 30). Migrated old partitions older than 30 days are pruned on the first write of a new day.
